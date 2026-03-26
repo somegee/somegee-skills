@@ -1125,7 +1125,10 @@ async def _ws_handler(websocket):
     task = asyncio.create_task(stream())
     try:
         async for msg in websocket:
-            session.write_stdin(msg, raw=True)
+            # DA 응답(ESC[?1;2c 등) 필터링 — xterm.js가 자동 응답하는 것이 입력으로 들어오는 것 방지
+            filtered = re.sub(r'\x1b\[\?[\d;]*c', '', msg)
+            if filtered:
+                session.write_stdin(filtered, raw=True)
     except Exception:
         pass
     finally:
