@@ -182,20 +182,30 @@ $SWARM wait worker-1 --ready
 $SWARM wait worker-2 --ready
 ```
 
-## BAT 바로가기 생성
+## BAT 바로가기 생성 (필수 규칙)
 
-사용자가 BAT 바로가기를 요청하면, 두 가지를 물어본다:
+**"bat", "배치파일", "바로가기", "런처" 등의 키워드가 포함된 요청은 반드시 이 섹션의 규칙을 따른다.**
+**절대로 자체적으로 bat 파일을 작성하지 마라. 반드시 `create_bat.py`를 사용한다.**
 
-1. **BAT 파일 생성 경로** (예: `C:\Users\me\Desktop\Terminal Swarm.bat`)
-2. **작업 디렉토리** (예: `C:\Users\me\projects`) — 데몬이 이 경로에서 실행됨
+### 절차
 
-경로를 받은 후, 플러그인 캐시의 `create_bat.py`를 실행한다:
+**Step 1: 사용자에게 두 가지를 질문한다 (반드시 물어봐야 함, 추측 금지)**
+
+> 1. BAT 파일을 어디에 만들까요? (예: `C:\Users\me\Desktop\Terminal Swarm.bat`)
+> 2. 작업 디렉토리는 어디로 할까요? (예: `C:\Users\me\projects`) — 데몬이 이 경로에서 실행됩니다.
+
+**Step 2: 사용자가 두 경로를 모두 알려주면, `create_bat.py`를 실행한다**
 
 ```bash
 _create_bat="$(ls ~/.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm/scripts/create_bat.py 2>/dev/null | head -1)"
 [ -z "$_create_bat" ] && _create_bat=".claude/skills/terminal-swarm/scripts/create_bat.py"
 python "$_create_bat" "<bat_path>" "<work_dir>"
 ```
+
+### 금지사항
+- **직접 bat 파일 내용을 작성하지 마라** — 반드시 `create_bat.py`만 사용
+- **경로를 추측하지 마라** — 반드시 사용자에게 물어본다
+- **~/bin, PATH, swarm.bat 등 CLI 래퍼를 만들지 마라** — 이 기능은 데몬 전체 초기화를 포함한 런처 BAT 생성 전용이다
 
 ## Error Handling
 
