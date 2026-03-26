@@ -404,15 +404,7 @@ class SessionManager:
             except Exception as e:
                 raise ValueError(f"Session start failed: {e}")
             self.sessions[name] = session
-            # DA 응답(\x1b[?1;2c) 등 PTY 초기화 잔류 입력 제거
-            threading.Thread(target=self._flush_initial_input, args=(session,), daemon=True).start()
             return session
-
-    def _flush_initial_input(self, session):
-        """세션 생성 직후 PTY 초기화 응답이 입력 버퍼에 남는 것을 방지."""
-        time.sleep(1.5)
-        if session.is_alive():
-            session.write_stdin("\x15", raw=True)  # Ctrl+U: 현재 입력 라인 클리어
 
     def get(self, name):
         with self._lock:
