@@ -970,7 +970,7 @@ class SwarmHandler(BaseHTTPRequestHandler):
             try:
                 p = Path(file_path).resolve()
                 p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_text(content, encoding="utf-8")
+                p.write_bytes(content.encode("utf-8"))
                 self._json(200, {"message": "saved", "path": str(p)})
             except Exception as e:
                 self._json(500, {"error": str(e)})
