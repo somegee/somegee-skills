@@ -1,24 +1,9 @@
 {
   "name": "terminal-swarm",
-  "description": "Agent Swarm을 위한 headless 터미널 세션 관리. 웹 대시보드에서 여러 Claude Code 에이전트를 동시에 모니터링하고 제어합니다.",
   "version": "1.0.0",
+  "description": "Agent Swarm을 위한 headless 터미널 세션 관리. 웹 대시보드에서 여러 Claude Code 에이전트를 동시에 모니터링하고 제어합니다.",
   "author": {
     "name": "somegee",
-    "url": "https://github.com/somegee"
-  },
-  "repository": "https://github.com/somegee/somegee-skills",
-  "license": "MIT",
-  "keywords": [
-    "claude-code",
-    "terminal",
-    "agent-swarm",
-    "multi-session",
-    "dashboard"
-  ],
-  "requirements": {
-    "platform": "win32",
-    "python": ">=3.10",
-    "pip": ["pywinpty", "websockets", "winotify"],
-    "optional": ["git"]
+    "email": "somegee@users.noreply.github.com"
   }
 }

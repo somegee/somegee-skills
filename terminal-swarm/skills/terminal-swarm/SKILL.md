@@ -24,10 +24,13 @@ allowed-tools: Bash
 ### SWARM 변수 설정
 
 ```bash
-SWARM="$(cat ~/.swarm/config.json 2>/dev/null | python -c "import sys,json;print(json.load(sys.stdin).get('python_path','python'))" 2>/dev/null || echo python) .claude/skills/terminal-swarm/scripts/swarm.py"
+# 플러그인 캐시 또는 로컬에서 swarm.py 자동 탐색
+_swarm_py="$(ls ~/.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm/scripts/swarm.py 2>/dev/null | head -1)"
+[ -z "$_swarm_py" ] && _swarm_py=".claude/skills/terminal-swarm/scripts/swarm.py"
+SWARM="$(cat ~/.swarm/config.json 2>/dev/null | python -c "import sys,json;print(json.load(sys.stdin).get('python_path','python'))" 2>/dev/null || echo python) $_swarm_py"
 ```
 
-config가 없으면 `python .claude/skills/terminal-swarm/scripts/swarm.py config init`로 초기화.
+config가 없으면 `$SWARM config init`로 초기화.
 
 ## 명령어 레퍼런스
 
