@@ -10,7 +10,14 @@ Collection of Claude Code skills by [somegee](https://github.com/somegee).
 
 ## Installation
 
-### terminal-swarm
+### Via Claude Code Plugin (recommended)
+
+```bash
+/plugin marketplace add somegee/somegee-skills
+/plugin install terminal-swarm@somegee-skills
+```
+
+### Manual
 
 1. Clone this repository:
 ```bash

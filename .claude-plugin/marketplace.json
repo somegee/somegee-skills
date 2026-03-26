@@ -1,0 +1,16 @@
+{
+  "name": "somegee-skills",
+  "description": "Collection of Claude Code skills by somegee",
+  "version": "1.0.0",
+  "author": {
+    "name": "somegee",
+    "url": "https://github.com/somegee"
+  },
+  "plugins": [
+    {
+      "name": "terminal-swarm",
+      "description": "Agent Swarm을 위한 headless 터미널 세션 관리. 웹 대시보드에서 여러 Claude Code 에이전트를 동시에 모니터링하고 제어합니다.",
+      "source": "./terminal-swarm"
+    }
+  ]
+}
