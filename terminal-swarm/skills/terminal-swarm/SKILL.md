@@ -25,7 +25,7 @@ allowed-tools: Bash
 
 ```bash
 # 플러그인 캐시 또는 로컬에서 swarm.py 자동 탐색
-_swarm_py="$(ls ~/.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm/scripts/swarm.py 2>/dev/null | head -1)"
+_swarm_py="$(ls ~/.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm/scripts/swarm.py 2>/dev/null | tail -1)"
 [ -z "$_swarm_py" ] && _swarm_py=".claude/skills/terminal-swarm/scripts/swarm.py"
 SWARM="$(cat ~/.swarm/config.json 2>/dev/null | python -c "import sys,json;print(json.load(sys.stdin).get('python_path','python'))" 2>/dev/null || echo python) $_swarm_py"
 ```
@@ -197,7 +197,7 @@ $SWARM wait worker-2 --ready
 **Step 2: 사용자가 두 경로를 모두 알려주면, `create_bat.py`를 실행한다**
 
 ```bash
-_create_bat="$(ls ~/.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm/scripts/create_bat.py 2>/dev/null | head -1)"
+_create_bat="$(ls ~/.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm/scripts/create_bat.py 2>/dev/null | tail -1)"
 [ -z "$_create_bat" ] && _create_bat=".claude/skills/terminal-swarm/scripts/create_bat.py"
 python "$_create_bat" "<bat_path>" "<work_dir>"
 ```
