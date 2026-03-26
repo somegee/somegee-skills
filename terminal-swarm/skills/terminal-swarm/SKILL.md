@@ -182,6 +182,21 @@ $SWARM wait worker-1 --ready
 $SWARM wait worker-2 --ready
 ```
 
+## BAT 바로가기 생성
+
+사용자가 BAT 바로가기를 요청하면, 두 가지를 물어본다:
+
+1. **BAT 파일 생성 경로** (예: `C:\Users\me\Desktop\Terminal Swarm.bat`)
+2. **작업 디렉토리** (예: `C:\Users\me\projects`) — 데몬이 이 경로에서 실행됨
+
+경로를 받은 후, 플러그인 캐시의 `create_bat.py`를 실행한다:
+
+```bash
+_create_bat="$(ls ~/.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm/scripts/create_bat.py 2>/dev/null | head -1)"
+[ -z "$_create_bat" ] && _create_bat=".claude/skills/terminal-swarm/scripts/create_bat.py"
+python "$_create_bat" "<bat_path>" "<work_dir>"
+```
+
 ## Error Handling
 
 | 에러 | 조치 |
