@@ -2276,16 +2276,7 @@
       return '';
     }
     function rL() {
-      // 브라우저 활성 + pane 포커스 → 자동 ack (이미 보고 있으므로 알림 불필요)
-      if (!document.hidden && focusId) {
-        const focusNode = findNode(tree, focusId);
-        if (focusNode?.session) {
-          const focusSession = sessions.find(s => s.name === focusNode.session);
-          if (focusSession && focusSession.ui_state === 'ready') {
-            fetch(A + '/sessions/' + E(focusNode.session) + '/ack', { method: 'POST' }).catch(() => {});
-          }
-        }
-      }
+      // ack는 사용자가 pane을 클릭할 때만 (setFocus → ack)
       const sorted = sortSessions([...sessions]);
       document.getElementById('sl').innerHTML = sorted.map(s => `
     <div class="si" data-name="${esc(s.name)}" draggable="true" ondragstart="onDragStart(event,'${s.name}')" onclick="assignSession('${s.name}')">
