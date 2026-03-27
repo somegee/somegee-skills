@@ -1224,15 +1224,26 @@ def _match_session_by_hook_id(hook_session_id):
     depth = 0  # 0=claude 자신, 1=직접 자식, 2+=손자(서브에이전트)
     try:
         for _ in range(10):  # 무한루프 방지
+            parent_pid = None
+            # PowerShell 우선 (Windows 11에서 wmic 제거됨)
             r = subprocess.run(
-                ["wmic", "process", "where", f"ProcessId={cur_pid}", "get", "ParentProcessId", "/value"],
+                ["powershell", "-NoProfile", "-NoLogo", "-c",
+                 f"(Get-CimInstance Win32_Process -Filter 'ProcessId={cur_pid}').ParentProcessId"],
                 capture_output=True, text=True, timeout=5
             )
-            parent_pid = None
-            for line in r.stdout.strip().split("\n"):
-                if "ParentProcessId=" in line:
-                    parent_pid = int(line.split("=")[1].strip())
-                    break
+            val = r.stdout.strip()
+            if val.isdigit():
+                parent_pid = int(val)
+            else:
+                # PowerShell 실패 시 wmic 폴백
+                r2 = subprocess.run(
+                    ["wmic", "process", "where", f"ProcessId={cur_pid}", "get", "ParentProcessId", "/value"],
+                    capture_output=True, text=True, timeout=5
+                )
+                for line in r2.stdout.strip().split("\n"):
+                    if "ParentProcessId=" in line:
+                        parent_pid = int(line.split("=")[1].strip())
+                        break
             if parent_pid is None:
                 break
             depth += 1
