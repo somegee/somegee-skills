@@ -3163,7 +3163,7 @@
           <span class="file-dirty" data-path="${esc(f.path)}" style="color:orange;font-size:10px;${dirty ? '' : 'display:none'}">&#9679;</span>
           ${fg.badge}
           <div class="file-btns">
-            <button class="sk" onclick="event.stopPropagation();copyFilePath('${esc(f.path)}')" title="Copy path">&#x1F4CB;</button>
+            <button class="sk" onmousedown="event.preventDefault()" onclick="event.stopPropagation();copyFilePath('${esc(f.path)}')" title="Copy path">&#x1F4CB;</button>
             <button class="sk sk-kill" onclick="event.stopPropagation();removeFile(${i})">&#10005;</button>
           </div>
         </div>`;
@@ -3171,6 +3171,7 @@
     }
     function copyFilePath(path) {
       navigator.clipboard.writeText(path.replace(/\//g, '\\')).then(() => toast('Path copied', 'ok')).catch(() => toast('Copy failed', 'err'));
+      if (focusId) requestAnimationFrame(() => setFocus(focusId));
     }
 
     // File drag to pane
@@ -3338,7 +3339,7 @@
             + indent + '<span class="tree-toggle">' + toggle + '</span><span class="tree-icon">' + icon + '</span>'
             + '<span class="tree-name" title="' + esc(e.path) + '">' + esc(e.name) + '</span>'
             + dg.badge
-            + '<button class="tree-copy" onclick="event.stopPropagation();copyFilePath(\'' + esc(e.path) + '\')">&#x1F4CB;</button>'
+            + '<button class="tree-copy" onmousedown="event.preventDefault()" onclick="event.stopPropagation();copyFilePath(\'' + esc(e.path) + '\')">&#x1F4CB;</button>'
             + '</div>' + children;
         } else {
           const ext = e.ext || e.name.split('.').pop().toLowerCase();
@@ -3350,7 +3351,7 @@
             + '<span class="tree-name" title="' + esc(e.path) + '"' + (nameStyle ? ' style="' + nameStyle + '"' : '') + '>' + esc(e.name) + '</span>'
             + fg.badge
             + '<button class="tree-copy" onclick="event.stopPropagation();addFile(\'' + esc(e.path) + '\')" title="Pin">&#x1F4CC;</button>'
-            + '<button class="tree-copy" onclick="event.stopPropagation();copyFilePath(\'' + esc(e.path) + '\')" title="Copy path">&#x1F4CB;</button>'
+            + '<button class="tree-copy" onmousedown="event.preventDefault()" onclick="event.stopPropagation();copyFilePath(\'' + esc(e.path) + '\')" title="Copy path">&#x1F4CB;</button>'
             + '</div>';
         }
       }).join('');
@@ -3505,7 +3506,7 @@
               + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + nameStyle + '">' + esc(f.name) + '</span>'
               + fg.badge
               + '<button class="tree-copy" onclick="event.stopPropagation();addFile(\'' + esc(f.path) + '\')" title="Pin">&#x1F4CC;</button>'
-              + '<button class="tree-copy" onclick="event.stopPropagation();copyFilePath(\'' + esc(f.path) + '\')" title="Copy path">&#x1F4CB;</button>'
+              + '<button class="tree-copy" onmousedown="event.preventDefault()" onclick="event.stopPropagation();copyFilePath(\'' + esc(f.path) + '\')" title="Copy path">&#x1F4CB;</button>'
             + '</span>'
             + '<span style="width:100%;font-size:10px;color:var(--tm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:18px">' + esc(f.relPath) + '</span>'
             + '</div>';
