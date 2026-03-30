@@ -3318,7 +3318,27 @@
         return d.entries || [];
       } catch { return [] }
     }
-    function refreshTree() { Object.keys(_treeCache).forEach(k => delete _treeCache[k]); if (_treeCwd) { loadTreeDir(_treeCwd, 0); _fetchGitStatus(); } }
+    async function refreshTree() {
+      const prevExpanded = new Set(_treeExpanded);
+      Object.keys(_treeCache).forEach(k => delete _treeCache[k]);
+      if (!_treeCwd) return;
+      await loadTreeDir(_treeCwd, 0);
+      _fetchGitStatus();
+      // Reload previously expanded dirs in depth order so parents resolve first
+      const sorted = [...prevExpanded].sort((a, b) => a.split('/').length - b.split('/').length);
+      for (const dirPath of sorted) {
+        // Only reload if the dir still exists in parent's cached entries
+        const parent = dirPath.substring(0, dirPath.lastIndexOf('/')) || _treeCwd;
+        const siblings = _treeCache[parent];
+        if (siblings && siblings.some(e => e.path === dirPath && e.type === 'dir')) {
+          _treeExpanded.add(dirPath);
+          await loadTreeDir(dirPath, 1);
+        } else {
+          _treeExpanded.delete(dirPath);
+        }
+      }
+      renderFileTree();
+    }
     function renderFileTree() {
       const container = document.getElementById('files-tree');
       if (!_treeCwd || !_treeCache[_treeCwd]) { container.innerHTML = ''; return }
