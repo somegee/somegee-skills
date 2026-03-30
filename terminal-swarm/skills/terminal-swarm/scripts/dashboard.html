@@ -3304,7 +3304,7 @@
       try {
         const r = await fetch(A + '/health');
         const d = await r.json();
-        _treeCwd = d.cwd || '';
+        _treeCwd = (d.cwd || '').replace(/\\/g, '/');
         if (_treeCwd) { loadTreeDir(_treeCwd, 0); _fetchGitStatus(); }
       } catch {}
     }
