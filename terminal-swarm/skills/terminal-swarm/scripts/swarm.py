@@ -679,7 +679,7 @@ class SwarmHandler(BaseHTTPRequestHandler):
             self._handle_sse(name)
 
         elif path == "/health":
-            self._json(200, {"status": "ok", "sessions": len(manager.sessions), "cwd": os.getcwd()})
+            self._json(200, {"status": "ok", "sessions": len(manager.sessions), "cwd": os.getcwd().replace("\\", "/")})
         elif path == "/sessions":
             global _last_dashboard_poll
             _last_dashboard_poll = time.time()
