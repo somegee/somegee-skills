@@ -2663,10 +2663,16 @@
       hideRename();
     }
     document.getElementById('renameInput').addEventListener('keydown', e => { if (e.key === 'Enter') doRename(); if (e.key === 'Escape') hideRename() });
-    async function doK(n) {
-      await fetch(A + '/sessions/' + E(n), { method: 'DELETE' });
+    function doK(n) {
+      // UI 즉시 반영
       forEachLeaf(tree, node => { if (node.session === n) { detachFromPane(node) } });
-      destroyConn(n); ld()
+      destroyConn(n);
+      sessions = sessions.filter(s => s.name !== n);
+      rL();
+      // 백그라운드에서 kill 처리
+      fetch(A + '/sessions/' + E(n), { method: 'DELETE' })
+        .then(r => r.ok ? toast(n + ' 종료됨', 'ok') : toast(n + ' 종료 실패', 'err'))
+        .catch(() => toast(n + ' 종료 실패', 'err'));
     }
 
     document.addEventListener('keydown', e => { if (e.key === 'Escape') { hideRename(); if (window._saveMode) { window._saveMode = false; document.getElementById('pb-save').classList.remove('active'); toast('저장 취소', 'info') } } });
