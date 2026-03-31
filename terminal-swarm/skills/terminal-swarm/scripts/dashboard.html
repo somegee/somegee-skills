@@ -2052,7 +2052,7 @@
       <button class="save-btn" onclick="saveEditor('${esc(node.filePath)}')" title="Save (Ctrl+S)">&#128190;</button>
       <button class="pane-btn" onclick="toggleEditorSearch(${node.id},'${esc(node.filePath)}')" title="Search (Ctrl+F)">&#8981;</button>
       <button class="pane-btn wrap-btn" id="wb-${node.id}" onclick="toggleWordWrap('${esc(node.filePath)}',${node.id})" title="Word Wrap (Alt+Z)">&#8629;</button>
-      <button class="pane-btn" onclick="splitH(${node.id})" title="Split Right">&#9654;</button>
+      <button class="pane-btn" onclick="splitH(${node.id})" title="Split Right" style="font-size:11px">&#9654;</button>
       <button class="pane-btn" onclick="splitV(${node.id})" title="Split Down">&#9660;</button>
       <button class="pane-btn" onclick="unsplit(${node.id})" title="Close">&times;</button>
     </div><div class="pane-search" id="ps-${node.id}" style="display:none"><input class="pane-search-input" id="psi-${node.id}" placeholder="Search..." oninput="doEditorSearch(${node.id},'${esc(node.filePath)}')" onkeydown="if(event.key==='Enter'){event.preventDefault();doEditorSearchNav(${node.id},'${esc(node.filePath)}',event.shiftKey?'prev':'next')}if(event.key==='Escape')toggleEditorSearch(${node.id},'${esc(node.filePath)}')"><span class="pane-search-count" id="psc-${node.id}"></span><button class="pane-search-btn" onclick="doEditorSearchNav(${node.id},'${esc(node.filePath)}','prev')">&#9650;</button><button class="pane-search-btn" onclick="doEditorSearchNav(${node.id},'${esc(node.filePath)}','next')">&#9660;</button><button class="pane-search-btn" onclick="toggleEditorSearch(${node.id},'${esc(node.filePath)}')">&times;</button></div><div class="pane-editor" id="pt-${node.id}"></div>`;
@@ -2068,7 +2068,7 @@
       <span class="pane-name" id="pn-${node.id}">${node.session ? esc(node.session) : ''}</span>${_cmd ? '<span class="pane-sub" title="' + esc(_cmd) + '">' + esc(_cmd) + '</span>' : ''}<span style="flex:1"></span>
       <button class="pane-btn" onclick="toggleSearch(${node.id})" title="Search (Ctrl+F)">&#8981;</button>
       <button class="pane-btn" onclick="refreshNode(${node.id})" title="Refresh">&#8635;</button>
-      <button class="pane-btn" onclick="splitH(${node.id})" title="Split Right">&#9654;</button>
+      <button class="pane-btn" onclick="splitH(${node.id})" title="Split Right" style="font-size:11px">&#9654;</button>
       <button class="pane-btn" onclick="splitV(${node.id})" title="Split Down">&#9660;</button>
       <button class="pane-btn" onclick="unsplit(${node.id})" title="Close">&times;</button>
     </div><div class="pane-search" id="ps-${node.id}" style="display:none"><input class="pane-search-input" id="psi-${node.id}" placeholder="Search..." oninput="doSearch(${node.id})" onkeydown="if(event.key==='Enter'){event.preventDefault();doSearchNav(${node.id},event.shiftKey?'prev':'next')}if(event.key==='Escape')toggleSearch(${node.id})"><span class="pane-search-count" id="psc-${node.id}"></span><button class="pane-search-btn" onclick="doSearchNav(${node.id},'prev')">&#9650;</button><button class="pane-search-btn" onclick="doSearchNav(${node.id},'next')">&#9660;</button><button class="pane-search-btn" onclick="toggleSearch(${node.id})">&times;</button></div><div class="pane-term" id="pt-${node.id}"></div>`;
@@ -2082,7 +2082,7 @@
         el.innerHTML = `<div class="pane-hd" id="ph-${node.id}">
       <input class="pane-sel" id="pu-${node.id}" value="${esc(node.url || 'http://localhost:3000')}" style="max-width:none;flex:1" placeholder="URL">
       <button class="pane-btn" onclick="refreshNode(${node.id})" title="Refresh">&#8635;</button>
-      <button class="pane-btn" onclick="splitH(${node.id})" title="Split Right">&#9654;</button>
+      <button class="pane-btn" onclick="splitH(${node.id})" title="Split Right" style="font-size:11px">&#9654;</button>
       <button class="pane-btn" onclick="splitV(${node.id})" title="Split Down">&#9660;</button>
       <button class="pane-btn" onclick="unsplit(${node.id})" title="Close">&times;</button>
     </div><iframe id="pf-${node.id}" src="${esc(node.url || 'http://localhost:3000')}" style="flex:1;border:none;background:#fff"></iframe>`;
@@ -2914,7 +2914,7 @@
         el: () => document.querySelector('.preset-bar'), title: 'Presets', body: `<p>현재 Layout + Session 배치를 통째로 저장합니다.</p>
 <p><b>Save</b> 클릭 → 슬롯 번호(1~5) 선택으로 저장<br>
 <b>숫자 버튼</b> 클릭 → 저장된 프리셋 불러오기<br>
-<b>더블클릭</b> → 프리셋 이름 변경 (최대 8자)<br>
+<b>이름 변경</b> → ⚙ UI Settings에서 수정 가능<br>
 <b>Clear</b> → 현재 활성 프리셋 삭제</p>`},
       {
         el: () => document.querySelector('[onclick*="showUISettings"]'), title: 'UI Settings', body: `<p><b>⚙ UI</b> 버튼을 클릭하면 설정 팝업이 열립니다.</p>
