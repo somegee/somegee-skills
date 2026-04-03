@@ -123,6 +123,8 @@ class Session:
         self._boot_time = 0.0           # ❯ 최초 감지 시각
         self._hook_state = None         # Claude Code hook 상태: "active"|"ready"|"attention"|None
         self._hook_state_time = 0.0     # 마지막 hook 상태 변경 시각
+        self._data_events = []          # WebSocket 스트리밍용 asyncio.Event 목록
+        self._data_events_lock = threading.Lock()
 
     def _default_shell(self):
         if os.name == "nt":
@@ -189,6 +191,11 @@ class Session:
 
                     f.write(clean)
                     f.flush()
+
+                    # WebSocket 스트리밍에게 새 데이터 도착 알림
+                    with self._data_events_lock:
+                        for evt in self._data_events:
+                            evt.set()
         except Exception as e:
             with self._lock:
                 msg = f"[swarm] PTY reader error: {e}\n"
@@ -220,6 +227,19 @@ class Session:
             new_count = current - last_seen
             buf_list = list(self.raw_buffer)
             return current, buf_list[-new_count:] if new_count <= len(buf_list) else buf_list
+
+    def register_data_event(self, evt):
+        """WebSocket 스트리밍용 asyncio.Event 등록."""
+        with self._data_events_lock:
+            self._data_events.append(evt)
+
+    def unregister_data_event(self, evt):
+        """WebSocket 스트리밍용 asyncio.Event 해제."""
+        with self._data_events_lock:
+            try:
+                self._data_events.remove(evt)
+            except ValueError:
+                pass
 
     def write_stdin(self, text, raw=False, chunked=False):
         if self.pty:
@@ -1103,11 +1123,29 @@ async def _ws_handler(websocket):
     if history:
         await websocket.send("".join(history))
 
-    # 출력 스트리밍 태스크
+    # 출력 스트리밍 태스크 (이벤트 드리븐 + 최소 배치 간격)
+    data_event = asyncio.Event()
+    # PTY 스레드에서 set()하면 asyncio 이벤트 루프에 안전하게 알림
+    _loop = asyncio.get_event_loop()
+    _thread_event = threading.Event()
+    session.register_data_event(_thread_event)
+
+    async def _bridge_event():
+        """threading.Event → asyncio.Event 브릿지."""
+        while True:
+            await asyncio.to_thread(_thread_event.wait)
+            _thread_event.clear()
+            data_event.set()
+
+    bridge_task = asyncio.create_task(_bridge_event())
+
     async def stream():
         nonlocal last_seen
+        MIN_BATCH_INTERVAL = 0.008  # 8ms (≈120fps)
         while True:
-            await asyncio.sleep(0.04)
+            await data_event.wait()
+            data_event.clear()
+            await asyncio.sleep(MIN_BATCH_INTERVAL)  # 짧은 배치 윈도우
             current, new_lines = session.get_new_raw_lines(last_seen)
             if new_lines:
                 last_seen = current
@@ -1127,6 +1165,8 @@ async def _ws_handler(websocket):
         pass
     finally:
         task.cancel()
+        bridge_task.cancel()
+        session.unregister_data_event(_thread_event)
 
 
 def _run_ws_server():
