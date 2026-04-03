@@ -164,6 +164,9 @@ class Session:
         # pyte 가상 터미널 (TUI 앱의 현재 화면 상태 추적)
         self._vt_screen = VTermScreen(DEFAULT_SCREEN_COLS, DEFAULT_SCREEN_ROWS, history=MAX_BUFFER_LINES)
         self._vt_stream = pyte.Stream(self._vt_screen)
+        self._vt_history = deque(maxlen=MAX_BUFFER_LINES)  # alt screen 스냅샷 히스토리
+        self._vt_last_snapshot_time = 0.0
+        self._vt_last_snapshot_hash = None
 
     def _default_shell(self):
         if os.name == "nt":
@@ -227,9 +230,20 @@ class Session:
                         if self._hook_state == "attention" and (time.time() - self._hook_state_time > 3):
                             self._hook_state = None  # idle로 복귀
                             self._hook_state_time = time.time()
-                        # pyte 가상 터미널에 feed
+                        # pyte 가상 터미널에 feed + alt screen 스냅샷
                         try:
                             self._vt_stream.feed(data)
+                            if self._vt_screen._in_alt_screen:
+                                now = time.time()
+                                if now - self._vt_last_snapshot_time >= 0.2:
+                                    display = self._vt_screen.display
+                                    snap_lines = [l.rstrip() for l in display if l.strip()]
+                                    snap_hash = hash(tuple(snap_lines))
+                                    if snap_hash != self._vt_last_snapshot_hash and snap_lines:
+                                        self._vt_history.extend(snap_lines)
+                                        self._vt_history.append("---")
+                                        self._vt_last_snapshot_hash = snap_hash
+                                    self._vt_last_snapshot_time = now
                         except Exception:
                             pass
 
@@ -304,9 +318,10 @@ class Session:
     def read_output(self, lines=None, grep=None):
         with self._lock:
             if self._vt_screen._in_alt_screen:
-                # TUI/alt screen 모드: pyte 가상 터미널에서 현재 화면 추출
-                display = self._vt_screen.display
-                output = [l.rstrip() for l in display if l.strip()]
+                # TUI/alt screen 모드: 스냅샷 히스토리 + 현재 화면
+                current = [l.rstrip() for l in self._vt_screen.display if l.strip()]
+                history = list(self._vt_history)
+                output = history + ["---"] + current if history else current
             else:
                 # 일반 모드: 기존 deque 버퍼 (순차 출력, -n으로 원하는 만큼 읽기 가능)
                 if lines and lines > 0 and not grep:
