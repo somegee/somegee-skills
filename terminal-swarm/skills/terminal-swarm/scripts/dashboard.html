@@ -38,6 +38,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-search@0.15.0/lib/addon-search.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.18.0/lib/addon-webgl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/search/searchcursor.min.js"></script>
   <style>
@@ -2000,6 +2001,7 @@
       const f = new FitAddon.FitAddon(); t.loadAddon(f);
       const sa = new SearchAddon.SearchAddon(); t.loadAddon(sa);
       t.open(wrap);
+      try { t.loadAddon(new WebglAddon.WebglAddon()); } catch(e) { console.warn('WebGL addon failed, using DOM renderer:', e); }
       // Ctrl+C: 선택 있으면 복사, 없으면 SIGINT 전송
       t.attachCustomKeyEventHandler(e => {
         if (e.type === 'keydown' && e.ctrlKey && e.key === 'c' && t.hasSelection()) { navigator.clipboard.writeText(t.getSelection()); t.clearSelection(); return false }

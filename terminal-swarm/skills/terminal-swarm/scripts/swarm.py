@@ -1105,7 +1105,7 @@ async def _ws_handler(websocket):
     async def stream():
         nonlocal last_seen
         while True:
-            await asyncio.sleep(0.08)
+            await asyncio.sleep(0.04)
             current, new_lines = session.get_new_raw_lines(last_seen)
             if new_lines:
                 last_seen = current
