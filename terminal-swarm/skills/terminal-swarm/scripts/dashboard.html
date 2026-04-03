@@ -1996,7 +1996,8 @@
       const savedFontSize = parseInt(localStorage.getItem('swarm_font_size')) || 14;
       const t = new Terminal({
         cursorBlink: true, fontSize: savedFontSize, fontFamily: savedFont,
-        theme: curTheme, scrollback: 2500, convertEol: true
+        theme: curTheme, scrollback: 2500, convertEol: true,
+        scrollSensitivity: 3, fastScrollSensitivity: 10
       });
       const f = new FitAddon.FitAddon(); t.loadAddon(f);
       const sa = new SearchAddon.SearchAddon(); t.loadAddon(sa);
