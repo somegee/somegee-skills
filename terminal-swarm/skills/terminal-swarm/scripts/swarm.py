@@ -301,32 +301,27 @@ class Session:
                 return False
         return False
 
-    def read_output(self, lines=None, grep=None, raw_mode=False):
+    def read_output(self, lines=None, grep=None):
         with self._lock:
-            if raw_mode:
-                # raw 모드: 기존 deque 버퍼 반환 (하위 호환)
+            if self._vt_screen._in_alt_screen:
+                # TUI/alt screen 모드: pyte 가상 터미널에서 현재 화면 추출
+                display = self._vt_screen.display
+                output = [l.rstrip() for l in display if l.strip()]
+            else:
+                # 일반 모드: 기존 deque 버퍼 (순차 출력, -n으로 원하는 만큼 읽기 가능)
                 if lines and lines > 0 and not grep:
                     n = min(lines, len(self.buffer))
                     output = [self.buffer[len(self.buffer) - n + i] for i in range(n)]
                 else:
                     output = list(self.buffer)
-            else:
-                # pyte 가상 터미널에서 현재 화면 추출
-                display = self._vt_screen.display
-                output = [l.rstrip() for l in display if l.strip()]
-                if not output:
-                    # 화면이 비어있으면 deque 폴백
-                    buf_len = len(self.buffer)
-                    n = min(lines or 20, buf_len)
-                    output = [self.buffer[buf_len - n + i] for i in range(n)]
         if grep:
             try:
                 pattern = re.compile(grep, re.IGNORECASE)
                 output = [l for l in output if pattern.search(l)]
             except re.error:
                 output = [l for l in output if grep.lower() in l.lower()]
-        if lines and lines > 0:
-            output = output[-lines:]
+            if lines and lines > 0:
+                output = output[-lines:]
         return output
 
     def is_alive(self):
