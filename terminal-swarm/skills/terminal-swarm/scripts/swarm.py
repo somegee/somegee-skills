@@ -22,9 +22,11 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 from urllib.parse import quote, unquote, parse_qs
+from copy import deepcopy
 from collections import deque
 from pathlib import Path
 from datetime import datetime
+import pyte
 
 # Pre-compiled regex for ANSI stripping (hot path)
 _RE_ANSI_CSI = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
@@ -41,6 +43,40 @@ DEFAULT_PORT = 7890
 WS_PORT = 7891
 DEFAULT_HOST = "127.0.0.1"
 MAX_BUFFER_LINES = 3000
+DEFAULT_SCREEN_COLS = 120
+DEFAULT_SCREEN_ROWS = 40
+
+
+class VTermScreen(pyte.HistoryScreen):
+    """Alternate screen buffer(DEC 1049)를 지원하는 pyte Screen."""
+
+    def __init__(self, columns, lines, history=1000):
+        super().__init__(columns, lines, history=history)
+        self._saved_main_buffer = None
+        self._saved_main_cursor = None
+        self._in_alt_screen = False
+
+    def set_mode(self, *modes, **kwargs):
+        if kwargs.get('private') and 1049 in modes:
+            self._saved_main_buffer = deepcopy(self.buffer)
+            self._saved_main_cursor = self.cursor.x, self.cursor.y
+            self.reset()
+            self._in_alt_screen = True
+            modes = tuple(m for m in modes if m != 1049)
+            if not modes:
+                return
+        super().set_mode(*modes, **kwargs)
+
+    def reset_mode(self, *modes, **kwargs):
+        if kwargs.get('private') and 1049 in modes:
+            if self._in_alt_screen and self._saved_main_buffer is not None:
+                self.buffer = self._saved_main_buffer
+                self.cursor.x, self.cursor.y = self._saved_main_cursor
+                self._in_alt_screen = False
+            modes = tuple(m for m in modes if m != 1049)
+            if not modes:
+                return
+        super().reset_mode(*modes, **kwargs)
 
 
 def ensure_dirs():
@@ -125,6 +161,9 @@ class Session:
         self._hook_state_time = 0.0     # 마지막 hook 상태 변경 시각
         self._data_events = []          # WebSocket 스트리밍용 asyncio.Event 목록
         self._data_events_lock = threading.Lock()
+        # pyte 가상 터미널 (TUI 앱의 현재 화면 상태 추적)
+        self._vt_screen = VTermScreen(DEFAULT_SCREEN_COLS, DEFAULT_SCREEN_ROWS, history=MAX_BUFFER_LINES)
+        self._vt_stream = pyte.Stream(self._vt_screen)
 
     def _default_shell(self):
         if os.name == "nt":
@@ -188,6 +227,11 @@ class Session:
                         if self._hook_state == "attention" and (time.time() - self._hook_state_time > 3):
                             self._hook_state = None  # idle로 복귀
                             self._hook_state_time = time.time()
+                        # pyte 가상 터미널에 feed
+                        try:
+                            self._vt_stream.feed(data)
+                        except Exception:
+                            pass
 
                     f.write(clean)
                     f.flush()
@@ -257,21 +301,32 @@ class Session:
                 return False
         return False
 
-    def read_output(self, lines=None, grep=None):
+    def read_output(self, lines=None, grep=None, raw_mode=False):
         with self._lock:
-            if lines and lines > 0 and not grep:
-                n = min(lines, len(self.buffer))
-                output = [self.buffer[len(self.buffer) - n + i] for i in range(n)]
+            if raw_mode:
+                # raw 모드: 기존 deque 버퍼 반환 (하위 호환)
+                if lines and lines > 0 and not grep:
+                    n = min(lines, len(self.buffer))
+                    output = [self.buffer[len(self.buffer) - n + i] for i in range(n)]
+                else:
+                    output = list(self.buffer)
             else:
-                output = list(self.buffer)
+                # pyte 가상 터미널에서 현재 화면 추출
+                display = self._vt_screen.display
+                output = [l.rstrip() for l in display if l.strip()]
+                if not output:
+                    # 화면이 비어있으면 deque 폴백
+                    buf_len = len(self.buffer)
+                    n = min(lines or 20, buf_len)
+                    output = [self.buffer[buf_len - n + i] for i in range(n)]
         if grep:
             try:
                 pattern = re.compile(grep, re.IGNORECASE)
                 output = [l for l in output if pattern.search(l)]
             except re.error:
                 output = [l for l in output if grep.lower() in l.lower()]
-            if lines and lines > 0:
-                output = output[-lines:]
+        if lines and lines > 0:
+            output = output[-lines:]
         return output
 
     def is_alive(self):
@@ -286,6 +341,8 @@ class Session:
         if self.pty:
             try:
                 self.pty.setwinsize(rows, cols)
+                with self._lock:
+                    self._vt_screen.resize(rows, cols)
                 return True
             except Exception:
                 return False
