@@ -973,11 +973,11 @@
     }
     .files-pinned { flex-shrink: 0; max-height: 150px; overflow-y: auto; border-bottom: 1px dashed var(--bd); margin-bottom: 2px; padding-bottom: 2px }
     .files-pinned:empty { display: none }
-    .files-tree { flex: 1; overflow-y: auto; font-size: 12px; padding: 2px 0; min-height: 100px }
-    .tree-row { display: flex; align-items: center; padding: 1px 4px; cursor: pointer; white-space: nowrap; user-select: none }
+    .files-tree { flex: 1; overflow: auto; font-size: 12px; padding: 2px 0; min-height: 100px }
+    .tree-row { display: flex; align-items: center; padding: 1px 4px; cursor: pointer; white-space: nowrap; user-select: none; min-width: max-content }
     .tree-row:hover { background: var(--bgh) }
     .tree-row[data-type="file"] { cursor: grab }
-    .tree-indent { width: 14px; flex-shrink: 0 }
+    .tree-indent { width: 10px; flex-shrink: 0 }
     .tree-toggle { width: 14px; text-align: center; flex-shrink: 0; font-size: 10px; opacity: .6 }
     .tree-icon { width: 16px; text-align: center; flex-shrink: 0; font-size: 11px }
     .tree-name { flex: 1; overflow: hidden; text-overflow: ellipsis; padding-left: 2px; color: color-mix(in srgb, var(--t1) 75%, transparent) }
@@ -3224,6 +3224,11 @@
     (function() {
       const dz = document.getElementById('files-tree');
       if (!dz) return;
+      // 클릭된 row가 가로 스크롤 viewport 안으로 들어오도록 자동 맞춤
+      dz.addEventListener('click', e => {
+        const row = e.target.closest('.tree-row');
+        if (row) row.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+      });
       dz.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) { e.preventDefault() } });
       dz.addEventListener('drop', async e => {
         if (!e.dataTransfer.types.includes('Files') && !e.dataTransfer.types.includes('text/uri-list') && !e.dataTransfer.getData('text/plain')) return;
