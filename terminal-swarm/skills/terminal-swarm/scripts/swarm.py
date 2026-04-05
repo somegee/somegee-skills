@@ -180,8 +180,6 @@ class Session:
         # 자식 프로세스용 환경변수 (SWARM_SESSION 포함)
         child_env = os.environ.copy()
         child_env["SWARM_SESSION"] = self.name
-        # no-flicker 모드는 xterm.js와 충돌 (alternate screen buffer → 한글 복사 깨짐)
-        child_env.pop("CLAUDE_CODE_NO_FLICKER", None)
 
         # 셸에 따라 명령어 구성
         if "bash" in self.shell.lower():
