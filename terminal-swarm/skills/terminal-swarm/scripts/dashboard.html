@@ -1999,7 +1999,9 @@
       const t = new Terminal({
         cursorBlink: true, fontSize: savedFontSize, fontFamily: savedFont,
         theme: curTheme, scrollback: 2500, convertEol: true,
-        scrollSensitivity: 3, fastScrollSensitivity: 10
+        scrollSensitivity: 3, fastScrollSensitivity: 10,
+        fontWeight: '400', fontWeightBold: '900', drawBoldTextInBrightColors: true,
+        minimumContrastRatio: 4.5
       });
       const f = new FitAddon.FitAddon(); t.loadAddon(f);
       const sa = new SearchAddon.SearchAddon(); t.loadAddon(sa);
