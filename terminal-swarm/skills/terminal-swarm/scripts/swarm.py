@@ -1745,6 +1745,55 @@ def cmd_fav(a):
         r = api("POST", "/sessions", body)
         print(f"Launched '{r['name']}' (PID: {r['pid']})")
 
+def _find_hook_relay():
+    """hook_relay.py 경로를 찾는다 (플러그인 캐시 또는 로컬)."""
+    # 1) 같은 디렉터리
+    here = Path(__file__).resolve().parent / "hook_relay.py"
+    if here.exists():
+        return str(here)
+    # 2) 플러그인 캐시에서 탐색
+    cache_root = Path.home() / ".claude" / "plugins" / "cache"
+    if cache_root.is_dir():
+        for p in sorted(cache_root.glob("**/terminal-swarm/*/skills/terminal-swarm/scripts/hook_relay.py"), reverse=True):
+            return str(p)
+    return None
+
+
+def _build_swarm_hook_command(python_path="python"):
+    """command 타입 hook 명령어 생성. 데몬 미실행 시에도 에러 없이 동작."""
+    relay = _find_hook_relay()
+    if relay:
+        return f'{python_path} "{relay}"'
+    # relay 스크립트를 못 찾으면 인라인 Python 폴백
+    return (
+        f'{python_path} -c "'
+        "import sys,urllib.request,urllib.error;"
+        "d=sys.stdin.buffer.read();"
+        "urllib.request.urlopen(urllib.request.Request("
+        f"'http://localhost:{DEFAULT_PORT}/hooks/claude-state',"
+        "data=d,headers={'Content-Type':'application/json'}),"
+        "timeout=3)"
+        '" 2>nul || exit 0'
+    )
+
+
+def _is_swarm_hook(hook_entry):
+    """설정 항목이 swarm 훅인지 판별 (HTTP/command 모두 지원)."""
+    if not isinstance(hook_entry, dict):
+        return False
+    swarm_url = f"http://localhost:{DEFAULT_PORT}/hooks/claude-state"
+    # 기존 HTTP 타입
+    for h in hook_entry.get("hooks", []):
+        if h.get("url", "") == swarm_url:
+            return True
+    # 새 command 타입
+    for h in hook_entry.get("hooks", []):
+        cmd = h.get("command", "")
+        if "hook_relay" in cmd or swarm_url in cmd:
+            return True
+    return False
+
+
 def cmd_hooks(a):
     settings_path = Path.home() / ".claude" / "settings.json"
     if a.action == "setup":
@@ -1754,32 +1803,35 @@ def cmd_hooks(a):
                 settings = json.loads(settings_path.read_text(encoding="utf-8"))
             except Exception:
                 pass
+        # Python 경로 읽기
+        python_path = "python"
+        try:
+            cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            python_path = cfg.get("python_path", "python")
+        except Exception:
+            pass
+        hook_cmd = _build_swarm_hook_command(python_path)
         swarm_hook = {
             "hooks": [{
-                "type": "http",
-                "url": f"http://localhost:{DEFAULT_PORT}/hooks/claude-state",
-                "timeout": 3
+                "type": "command",
+                "command": hook_cmd,
+                "timeout": 5
             }]
         }
-        swarm_url = f"http://localhost:{DEFAULT_PORT}/hooks/claude-state"
         if "hooks" not in settings:
             settings["hooks"] = {}
         for event in ("Stop", "PermissionRequest", "UserPromptSubmit"):
             existing = settings["hooks"].get(event, [])
-            # 이미 swarm 훅이 있으면 스킵
-            already = any(
-                h.get("hooks", [{}])[0].get("url", "") == swarm_url
-                if isinstance(h, dict) and h.get("hooks") else False
-                for h in existing
-            )
-            if not already:
-                existing.append(swarm_hook)
+            # 기존 swarm 훅(HTTP든 command든) 제거 후 새로 추가
+            existing = [h for h in existing if not _is_swarm_hook(h)]
+            existing.append(swarm_hook)
             settings["hooks"][event] = existing
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"Hooks configured in {settings_path}")
         print("  Events: Stop, PermissionRequest, UserPromptSubmit")
-        print(f"  Endpoint: http://localhost:{DEFAULT_PORT}/hooks/claude-state")
+        print(f"  Type: command (silent on daemon offline)")
+        print(f"  Relay: {hook_cmd}")
     elif a.action == "status":
         if not settings_path.exists():
             print("No settings.json found. Run 'swarm hooks setup' first.")
@@ -1795,19 +1847,12 @@ def cmd_hooks(a):
             return
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
         hooks = settings.get("hooks", {})
-        swarm_url = f"http://localhost:{DEFAULT_PORT}/hooks/claude-state"
         removed = 0
         for event in ("Stop", "PermissionRequest", "UserPromptSubmit"):
             if event not in hooks:
                 continue
             before = len(hooks[event])
-            hooks[event] = [
-                h for h in hooks[event]
-                if not (isinstance(h, dict) and any(
-                    hh.get("url", "") == swarm_url
-                    for hh in h.get("hooks", [])
-                ))
-            ]
+            hooks[event] = [h for h in hooks[event] if not _is_swarm_hook(h)]
             if len(hooks[event]) < before:
                 removed += 1
             # 훅 배열이 비었으면 이벤트 키 자체 제거
