@@ -27,12 +27,13 @@ Agent Swarm을 위한 headless 터미널 세션 관리 스킬.
 ## 의존성
 
 ```bash
-pip install pywinpty websockets winotify
+pip install pywinpty websockets winotify pyte
 ```
 
 | 패키지 | 용도 | 필수 |
 |--------|------|------|
 | `pywinpty` | Windows PTY — 인터랙티브 터미널 세션 생성 | Yes |
+| `pyte` | 가상 터미널 — TUI 앱 화면 상태 추적 (alt screen 스냅샷) | Yes |
 | `websockets` | 대시보드 실시간 통신 (없으면 HTTP 폴링으로 폴백) | No |
 | `winotify` | Windows 토스트 알림 — 작업 완료/승인 요청 시 데스크톱 알림 | Yes |
 | `git` (CLI) | 파일 트리 Git 상태 표시 (M/U/A/D 뱃지, 파일명 색상) | No — 없으면 Git 표시만 비활성화 |

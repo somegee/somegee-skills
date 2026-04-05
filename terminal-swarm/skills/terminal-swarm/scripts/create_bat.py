@@ -10,7 +10,34 @@ Examples:
 """
 import sys
 import os
+import re
 import pathlib
+
+
+# 알려진 서드파티 의존성: import 이름 -> pip 패키지 이름
+# swarm.py에서 실제로 import된 것만 배치 파일에 포함된다.
+KNOWN_DEPS = {
+    "winpty": "pywinpty",
+    "winotify": "winotify",
+    "websockets": "websockets",
+    "pyte": "pyte",
+}
+
+
+def detect_deps(script_path: pathlib.Path) -> list[str]:
+    """swarm.py를 스캔하여 실제 import된 KNOWN_DEPS 키 목록을 반환."""
+    try:
+        content = script_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        # 스캔 실패 시 전체 목록을 반환 (안전 기본값)
+        return list(KNOWN_DEPS.keys())
+
+    found = []
+    for imp_name in KNOWN_DEPS:
+        pattern = rf"^\s*(?:import|from)\s+{re.escape(imp_name)}\b"
+        if re.search(pattern, content, re.MULTILINE):
+            found.append(imp_name)
+    return found or list(KNOWN_DEPS.keys())
 
 
 BAT_TEMPLATE = r"""@echo off
@@ -38,10 +65,10 @@ echo [Swarm] Python: %PYTHON%
 echo [Swarm] Script: %SCRIPT%
 
 :: 3. Check dependencies
-"%PYTHON%" -c "import winpty,winotify,websockets" >nul 2>&1
+"%PYTHON%" -c "import {import_csv}" >nul 2>&1
 if errorlevel 1 (
     echo [Swarm] Installing dependencies...
-    "%PYTHON%" -m pip install pywinpty winotify websockets
+    "%PYTHON%" -m pip install {pip_list}
 ) else (
     echo [Swarm] Dependencies OK
 )
@@ -94,7 +121,17 @@ def create_bat(bat_path: str, work_dir: str) -> None:
         print(f"Error: work_dir does not exist: {work_dir}")
         sys.exit(1)
 
-    content = BAT_TEMPLATE.format(work_dir=str(work_dir))
+    # swarm.py를 스캔하여 실제 의존성 자동 파악
+    swarm_py = pathlib.Path(__file__).parent / "swarm.py"
+    imports = detect_deps(swarm_py)
+    pip_pkgs = [KNOWN_DEPS[name] for name in imports]
+    print(f"Detected dependencies: {', '.join(pip_pkgs)}")
+
+    content = BAT_TEMPLATE.format(
+        work_dir=str(work_dir),
+        import_csv=",".join(imports),
+        pip_list=" ".join(pip_pkgs),
+    )
     # Write raw bytes: no BOM, CRLF line endings
     bat_path.write_bytes(content.strip().encode("utf-8").replace(b"\n", b"\r\n") + b"\r\n")
     print(f"Created: {bat_path}")
