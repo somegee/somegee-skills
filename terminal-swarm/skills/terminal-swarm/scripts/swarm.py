@@ -1760,20 +1760,27 @@ def _find_hook_relay():
 
 
 def _build_swarm_hook_command(python_path="python"):
-    """command 타입 hook 명령어 생성. 데몬 미실행 시에도 에러 없이 동작."""
+    """command 타입 hook 명령어 생성. 데몬 미실행 시에도 에러 없이 동작.
+
+    Note: Claude Code hooks는 /usr/bin/bash로 실행되므로 Windows 절대 경로
+    (C:\\Users\\...\\python.exe)를 사용하면 백슬래시가 이스케이프되어 실패한다.
+    따라서 python_path 대신 항상 'python3' 을 사용하고, 폴백으로 'python'을 시도한다.
+    """
     relay = _find_hook_relay()
     if relay:
-        return f'{python_path} "{relay}"'
+        # bash에서 실행되므로 Windows 경로를 bash 호환 형식으로 변환
+        relay_bash = relay.replace("\\", "/")
+        return f'python3 "{relay_bash}" 2>/dev/null || python "{relay_bash}" 2>/dev/null; exit 0'
     # relay 스크립트를 못 찾으면 인라인 Python 폴백
     return (
-        f'{python_path} -c "'
-        "import sys,urllib.request,urllib.error;"
+        'python3 -c "'
+        "import sys,urllib.request;"
         "d=sys.stdin.buffer.read();"
         "urllib.request.urlopen(urllib.request.Request("
         f"'http://localhost:{DEFAULT_PORT}/hooks/claude-state',"
         "data=d,headers={'Content-Type':'application/json'}),"
         "timeout=3)"
-        '" 2>nul || exit 0'
+        '" 2>/dev/null || exit 0'
     )
 
 
@@ -1803,14 +1810,8 @@ def cmd_hooks(a):
                 settings = json.loads(settings_path.read_text(encoding="utf-8"))
             except Exception:
                 pass
-        # Python 경로 읽기
-        python_path = "python"
-        try:
-            cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-            python_path = cfg.get("python_path", "python")
-        except Exception:
-            pass
-        hook_cmd = _build_swarm_hook_command(python_path)
+        # hooks는 bash로 실행되므로 Windows python 경로를 쓰지 않는다
+        hook_cmd = _build_swarm_hook_command()
         swarm_hook = {
             "hooks": [{
                 "type": "command",
