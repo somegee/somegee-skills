@@ -11,7 +11,7 @@ allowed-tools: Bash
 사용자가 이 스킬을 호출하면, 아래 순서를 **자동으로** 수행한다:
 
 1. **Python 경로 확인**: `~/.swarm/config.json`에서 `python_path` 읽기. 없으면 `python`을 사용
-1-1. **의존성 확인**: `python -c "import winpty, winotify, websockets"` 로 필수 패키지 설치 여부 확인. 미설치 시 `pip install pywinpty winotify websockets` 실행
+1-1. **의존성 확인**: `python -c "import winpty, winotify, websockets, pyte"` 로 필수 패키지 설치 여부 확인. 미설치 시 `pip install pywinpty winotify websockets pyte` 실행
 2. **SWARM 변수 설정**: 위에서 확인한 python 경로로 `SWARM` 변수 설정
 3. **Hooks 설정 확인**: `$SWARM hooks status`로 Claude Code hooks 설정 여부 확인. 미설정 시 `$SWARM hooks setup` 실행. **반드시 데몬 시작 전에 실행하여, 프리셋 복원으로 생성되는 세션에도 hooks가 적용되도록 한다.**
 4. **데몬 상태 점검**: `$SWARM status`로 데몬 실행 여부 확인
