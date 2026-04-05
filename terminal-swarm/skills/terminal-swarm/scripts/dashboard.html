@@ -984,6 +984,8 @@
     .tree-copy { opacity: 0; background: none; border: none; cursor: pointer; font-size: 10px; padding: 0 2px; flex-shrink: 0 }
     .tree-row:hover .tree-copy { opacity: .6 }
     .tree-copy:hover { opacity: 1 !important }
+    .tree-actions { position: sticky; right: 0; display: flex; align-items: center; margin-left: auto; flex-shrink: 0; z-index: 2; padding-left: 4px }
+    .tree-row:hover .tree-actions { background: var(--bgh) }
     .sb-resize {
       height: 4px; cursor: row-resize; flex-shrink: 0;
       background: transparent; position: relative; z-index: 5;
@@ -3304,14 +3306,14 @@
     function _gitInfo(absPath, isDir) {
       if (!_gitStatus.is_git) return { color: '', badge: '' };
       if (isDir) {
-        if (_gitStatus.dirs && _gitStatus.dirs[absPath]) return { color: '', badge: '<span style="margin-left:auto;font-size:10px;font-weight:600;color:#e2b93d;flex-shrink:0;padding:0 4px">\u25CF</span>' };
+        if (_gitStatus.dirs && _gitStatus.dirs[absPath]) return { color: '', badge: '<span style="font-size:10px;font-weight:600;color:#e2b93d;flex-shrink:0;padding:0 4px">\u25CF</span>' };
         return { color: '', badge: '' };
       }
       const st = _gitStatus.files && _gitStatus.files[absPath];
       if (!st) return { color: '', badge: '' };
       const c = _GIT_COLORS[st] || '#888';
       const l = _GIT_LABELS[st] || st.charAt(0);
-      return { color: c, badge: '<span style="margin-left:auto;font-size:10px;font-weight:700;color:' + c + ';flex-shrink:0;padding:0 4px;letter-spacing:.5px">' + l + '</span>' };
+      return { color: c, badge: '<span style="font-size:10px;font-weight:700;color:' + c + ';flex-shrink:0;padding:0 4px;letter-spacing:.5px">' + l + '</span>' };
     }
 
     async function initTree() {
@@ -3372,8 +3374,10 @@
           return '<div class="tree-row" data-type="dir" data-path="' + esc(e.path) + '" onclick="toggleTreeDir(\'' + esc(e.path) + '\')">'
             + indent + '<span class="tree-toggle">' + toggle + '</span><span class="tree-icon">' + icon + '</span>'
             + '<span class="tree-name" title="' + esc(e.path) + '">' + esc(e.name) + '</span>'
+            + '<span class="tree-actions">'
             + dg.badge
             + '<button class="tree-copy" onmousedown="event.preventDefault()" onclick="event.stopPropagation();copyFilePath(\'' + esc(e.path) + '\')">&#x1F4CB;</button>'
+            + '</span>'
             + '</div>' + children;
         } else {
           const ext = e.ext || e.name.split('.').pop().toLowerCase();
@@ -3383,9 +3387,11 @@
           return '<div class="tree-row" data-type="file" data-path="' + esc(e.path) + '" draggable="true" ondragstart="onFileDragStart(event,\'' + esc(e.path) + '\')" onclick="openEditor(\'' + esc(e.path) + '\')">'
             + indent + '<span class="tree-indent"></span><span class="tree-icon">' + icon + '</span>'
             + '<span class="tree-name" title="' + esc(e.path) + '"' + (nameStyle ? ' style="' + nameStyle + '"' : '') + '>' + esc(e.name) + '</span>'
+            + '<span class="tree-actions">'
             + fg.badge
             + '<button class="tree-copy" onclick="event.stopPropagation();addFile(\'' + esc(e.path) + '\')" title="Pin">&#x1F4CC;</button>'
             + '<button class="tree-copy" onmousedown="event.preventDefault()" onclick="event.stopPropagation();copyFilePath(\'' + esc(e.path) + '\')" title="Copy path">&#x1F4CB;</button>'
+            + '</span>'
             + '</div>';
         }
       }).join('');
