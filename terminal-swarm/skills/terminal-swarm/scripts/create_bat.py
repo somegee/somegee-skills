@@ -45,9 +45,9 @@ chcp 65001 >nul 2>&1
 
 cd /d "{work_dir}"
 
-:: 1. Find swarm.py from plugin cache
+:: 1. Find swarm.py from plugin cache (semantic version sort)
 set "SCRIPT="
-for /f "delims=" %%f in ('dir /s /b "%USERPROFILE%\.claude\plugins\cache\*swarm.py" 2^>nul ^| findstr /i "terminal-swarm"') do set "SCRIPT=%%f"
+for /f "delims=" %%f in ('python -c "from pathlib import Path;import re;ps=list(Path.home().glob('.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm/scripts/swarm.py'));print(max(ps,key=lambda p:[int(x) for x in re.findall(r'\d+',p.parts[len(Path.home().parts)+4])])if ps else '')" 2^>nul') do set "SCRIPT=%%f"
 
 if not defined SCRIPT (
     echo [Swarm] plugin not found. Run: claude plugin install terminal-swarm@somegee-skills
