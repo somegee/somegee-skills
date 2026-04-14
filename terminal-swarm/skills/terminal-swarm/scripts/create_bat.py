@@ -135,7 +135,7 @@ echo [Swarm] Dashboard opened as standalone app.
 :: 9. Show sessions
 "%PYTHON%" "%SCRIPT%" list
 
-echo.
+echo(
 pause
 """
 

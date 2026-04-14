@@ -197,8 +197,9 @@ class Session:
             safe_cmd = self.command.replace('`', '``').replace('"', '`"')
             spawn_cmd = f'"{self.shell}" -Command "{safe_cmd}"'
         else:
-            safe_cmd = self.command.replace('"', '""')
-            spawn_cmd = f'"{self.shell}" /c "{safe_cmd}"'
+            # cmd.exe: pywinpty가 shell 경로의 따옴표를 처리하지 못해
+            # 원래 포맷 유지. cmd는 shell 특성상 메타문자 차단이 과함.
+            spawn_cmd = f'{self.shell} /c {self.command}'
 
         try:
             self.pty = PtyProcess.spawn(spawn_cmd, cwd=self.cwd, env=child_env)
