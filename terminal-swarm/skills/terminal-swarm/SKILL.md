@@ -11,7 +11,8 @@ allowed-tools: Bash
 사용자가 이 스킬을 호출하면, 아래 순서를 **자동으로** 수행한다:
 
 1. **Python 경로 확인**: `~/.swarm/config.json`에서 `python_path` 읽기. 없으면 `python`을 사용
-1-1. **의존성 확인**: `python -c "import winpty, winotify, websockets, pyte"` 로 필수 패키지 설치 여부 확인. 미설치 시 `pip install pywinpty winotify websockets pyte` 실행
+1-1. **의존성 확인**: `python -c "import winpty, winotify, websockets, pyte, watchdog"` 로 필수 패키지 설치 여부 확인. 미설치 시 `pip install pywinpty winotify websockets pyte watchdog` 실행
+    - `watchdog`는 Files 탭 실시간 워처(OS 네이티브 `ReadDirectoryChangesW`)에 사용된다. 없으면 데몬은 정상 실행되지만 `/files/watch` SSE가 503을 반환하고 Files 탭은 수동 ↻ 새로고침에만 의존한다.
 2. **SWARM 변수 설정**: 위에서 확인한 python 경로로 `SWARM` 변수 설정
 3. **Hooks 설정 확인**: `$SWARM hooks status`로 Claude Code hooks 설정 여부 확인. 미설정 시 `$SWARM hooks setup` 실행. **반드시 데몬 시작 전에 실행하여, 프리셋 복원으로 생성되는 세션에도 hooks가 적용되도록 한다.**
 4. **데몬 상태 점검**: `$SWARM status`로 데몬 실행 여부 확인
@@ -31,6 +32,36 @@ SWARM="$(cat ~/.swarm/config.json 2>/dev/null | python -c "import sys,json;print
 ```
 
 config가 없으면 `$SWARM config init`로 초기화.
+
+## 주요 기능
+
+### Files 탭 실시간 워처 (1.6.0+)
+
+OS 네이티브 파일시스템 이벤트(`ReadDirectoryChangesW`)를 `watchdog`로 구독하여
+Files 탭이 `/files/watch` SSE를 통해 **수동 새로고침 없이 자동 갱신**된다.
+
+- 200ms 서버측 디바운스 + 300ms 클라이언트 코얼레싱으로 `git pull` 같은 대량 변경도 안전하게 처리
+- 이벤트는 캐시된(화면에 표시된) 디렉토리만 재조회 → 보이지 않는 경로는 CPU/네트워크 소모 없음
+- `.git/index`, `.git/HEAD`, `.git/refs/*` 변경은 git status 갱신 트리거
+- 무시 대상: `.git`, `node_modules`, `__pycache__`, `venv`, `.venv`, `dist`, `build`, `.next`, `.cache`, `.turbo`, `.parcel-cache` + `config.json`의 `tree_ignore`
+- SSE 연결이 끊기면 3초 후 자동 재연결, 15초 heartbeat(`: ping`)로 프록시 타임아웃 방지
+- watchdog 미설치 시 `/files/watch`는 503 반환, 대시보드는 수동 새로고침으로 fallback
+
+### Standalone 앱 윈도우 실행 (1.6.0+)
+
+`create_bat.py`가 생성한 배치파일은 대시보드를 기본 브라우저 대신
+**Edge/Chrome의 `--app=` 모드**로 띄워 chromeless 윈도우처럼 보이게 한다.
+
+- 탐지 순서: Edge(64/86) → Chrome(64/86) → 기본 브라우저 fallback
+- 자체 user-data-dir(`%LOCALAPPDATA%\TerminalSwarm\WebApp`)를 지정하여
+  작업표시줄 아이콘과 쿠키/세션을 일반 브라우저 프로필과 분리
+- 창 크기 기본값: 1400x900
+
+### 세션 삭제 flicker 방지 (1.6.0+)
+
+✕ 버튼 클릭 시 프론트엔드가 세션을 즉시 숨기면서 백그라운드 DELETE를 보내는데,
+DELETE 응답 전에 폴링(`/sessions`)이 끼어들면 세션이 잠깐 되살아나는 race가 있었다.
+`_pendingDelete` Set으로 가드를 추가하여 DELETE 응답 후 1.5초까지 폴링을 필터링한다.
 
 ## 명령어 레퍼런스
 

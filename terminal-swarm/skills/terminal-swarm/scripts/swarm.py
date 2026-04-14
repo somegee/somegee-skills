@@ -26,7 +26,15 @@ from copy import deepcopy
 from collections import deque
 from pathlib import Path
 from datetime import datetime
+import queue as _queue_mod
 import pyte
+
+try:
+    from watchdog.observers import Observer as _WDObserver
+    from watchdog.events import FileSystemEventHandler as _WDHandler
+    _WATCHDOG_OK = True
+except ImportError:
+    _WATCHDOG_OK = False
 
 # Pre-compiled regex for ANSI stripping (hot path)
 _RE_ANSI_CSI = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
@@ -551,6 +559,138 @@ def get_dashboard_html():
     return DASHBOARD_HTML_CACHE
 
 
+# ─── Filesystem Watcher (watchdog) ───────────────────────────────────────────
+#
+# OS 네이티브 파일 워처(ReadDirectoryChangesW / FSEvents / inotify)로 변경
+# 이벤트를 받아 200ms 디바운스 후 SSE 구독자들에게 푸시한다.
+# Files 탭이 새로고침 없이 실시간 갱신되도록 하는 핵심 컴포넌트.
+
+# 워치 대상에서 항상 제외할 디렉토리 이름. tree_ignore 설정과 합쳐서 사용.
+_WATCH_HARD_IGNORE = {".git", "node_modules", "__pycache__", "venv", ".venv",
+                      "dist", "build", ".next", ".cache", ".turbo", ".parcel-cache"}
+# .git 내부에서 git status 변경의 신호로 간주할 파일 이름들
+_GIT_SIGNAL_NAMES = {"index", "HEAD", "ORIG_HEAD", "MERGE_HEAD", "FETCH_HEAD"}
+
+class FilesWatcher:
+    """디렉토리 트리 재귀 워처. SSE 채널로 변경 이벤트를 푸시한다."""
+
+    def __init__(self):
+        self._observer = None
+        self._root = None
+        self._lock = threading.Lock()
+        self._subscribers = []  # list of queue.Queue
+        self._pending_dirs = set()
+        self._pending_git = False
+        self._flush_timer = None
+        self._ignore_names = set(_WATCH_HARD_IGNORE)
+
+    def is_available(self):
+        return _WATCHDOG_OK
+
+    def start(self, root_path):
+        """루트 경로에 대한 재귀 워처 시작. 이미 같은 루트면 noop."""
+        if not _WATCHDOG_OK:
+            return False
+        try:
+            root_abs = str(Path(root_path).resolve()).replace("\\", "/")
+        except Exception:
+            return False
+        with self._lock:
+            if self._observer is not None and self._root == root_abs:
+                return True
+            if self._observer is not None:
+                try: self._observer.stop()
+                except Exception: pass
+                self._observer = None
+        try:
+            cfg = load_config()
+            self._ignore_names = set(_WATCH_HARD_IGNORE) | set(cfg.get("tree_ignore", []))
+        except Exception:
+            self._ignore_names = set(_WATCH_HARD_IGNORE)
+
+        watcher = self
+        class _Handler(_WDHandler):
+            def on_any_event(self, event):
+                try:
+                    p = Path(event.src_path)
+                    parts = p.parts
+                    # .git 내부: git status 신호로만 사용
+                    if ".git" in parts:
+                        idx = parts.index(".git")
+                        sub = parts[idx + 1] if idx + 1 < len(parts) else ""
+                        # refs/* 변경(브랜치 이동, 커밋)도 git signal
+                        if sub in _GIT_SIGNAL_NAMES or sub == "refs":
+                            watcher._enqueue(None, git=True)
+                        return
+                    # 기타 무시 디렉토리는 통째로 건너뜀
+                    for part in parts:
+                        if part in watcher._ignore_names:
+                            return
+                    parent = str(p.parent).replace("\\", "/")
+                    watcher._enqueue(parent, git=False)
+                except Exception:
+                    pass
+
+        try:
+            obs = _WDObserver()
+            obs.schedule(_Handler(), root_abs, recursive=True)
+            obs.daemon = True
+            obs.start()
+        except Exception as e:
+            try:
+                with open(SWARM_DIR / "error.log", "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now().isoformat()}] FilesWatcher start failed: {e}\n")
+            except Exception:
+                pass
+            return False
+        with self._lock:
+            self._observer = obs
+            self._root = root_abs
+        return True
+
+    def _enqueue(self, dir_path, git=False):
+        with self._lock:
+            if dir_path:
+                self._pending_dirs.add(dir_path)
+            if git:
+                self._pending_git = True
+            if self._flush_timer is None and (self._pending_dirs or self._pending_git):
+                t = threading.Timer(0.2, self._flush)
+                t.daemon = True
+                self._flush_timer = t
+                t.start()
+
+    def _flush(self):
+        with self._lock:
+            dirs = list(self._pending_dirs)
+            git = self._pending_git
+            self._pending_dirs.clear()
+            self._pending_git = False
+            self._flush_timer = None
+            subs = list(self._subscribers)
+        if not dirs and not git:
+            return
+        payload = {"dirs": dirs, "git": git, "ts": time.time()}
+        for q in subs:
+            try:
+                q.put_nowait(payload)
+            except Exception:
+                pass  # drop on full queue
+
+    def subscribe(self):
+        q = _queue_mod.Queue(maxsize=200)
+        with self._lock:
+            self._subscribers.append(q)
+        return q
+
+    def unsubscribe(self, q):
+        with self._lock:
+            try:
+                self._subscribers.remove(q)
+            except ValueError:
+                pass
+
+_files_watcher = FilesWatcher()
 
 
 # ─── System Fonts ────────────────────────────────────────────────────────────
@@ -703,6 +843,48 @@ class SwarmHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(html.encode("utf-8"))
 
+    def _handle_files_watch(self):
+        """SSE 스트리밍: 파일시스템 변경 이벤트를 실시간으로 브라우저에 전송."""
+        if not _files_watcher.is_available():
+            self._json(503, {"error": "watchdog not installed"})
+            return
+        # 현재 cwd에 대한 워처 보장
+        _files_watcher.start(os.getcwd())
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        q = _files_watcher.subscribe()
+        try:
+            hello = json.dumps({"type": "hello", "root": os.getcwd().replace("\\", "/")})
+            try:
+                self.wfile.write(f"data: {hello}\n\n".encode("utf-8"))
+                self.wfile.flush()
+            except Exception:
+                return
+            while True:
+                try:
+                    payload = q.get(timeout=15)
+                except _queue_mod.Empty:
+                    try:
+                        self.wfile.write(b": ping\n\n")
+                        self.wfile.flush()
+                        continue
+                    except Exception:
+                        break
+                try:
+                    msg = json.dumps({"type": "change", **payload})
+                    self.wfile.write(f"data: {msg}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                except Exception:
+                    break
+        finally:
+            _files_watcher.unsubscribe(q)
+
     def _handle_sse(self, name):
         """SSE 스트리밍: 세션 출력을 실시간으로 브라우저에 전송."""
         session = manager.get(name)
@@ -764,6 +946,10 @@ class SwarmHandler(BaseHTTPRequestHandler):
         elif path.startswith("/sessions/") and path.endswith("/stream"):
             name = self._session_name(path)
             self._handle_sse(name)
+
+        # Files 실시간 워치 SSE
+        elif path == "/files/watch":
+            self._handle_files_watch()
 
         elif path == "/health":
             self._json(200, {"status": "ok", "sessions": len(manager.sessions), "cwd": os.getcwd().replace("\\", "/")})
@@ -1482,6 +1668,13 @@ def start_daemon(port=DEFAULT_PORT):
     # WebSocket 서버를 별도 스레드로
     ws_thread = threading.Thread(target=_run_ws_server, daemon=True)
     ws_thread.start()
+
+    # Filesystem watcher: cwd 기준 재귀 워치 (watchdog 설치 시에만)
+    try:
+        if _files_watcher.is_available():
+            _files_watcher.start(os.getcwd())
+    except Exception:
+        pass
 
     # Desktop notification: hooks 기반으로 전환됨 (별도 모니터 스레드 불필요)
 

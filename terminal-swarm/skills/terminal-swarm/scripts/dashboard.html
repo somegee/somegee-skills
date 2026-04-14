@@ -3332,8 +3332,56 @@
         const r = await fetch(A + '/health');
         const d = await r.json();
         _treeCwd = (d.cwd || '').replace(/\\/g, '/');
-        if (_treeCwd) { loadTreeDir(_treeCwd, 0); _fetchGitStatus(); }
+        if (_treeCwd) { loadTreeDir(_treeCwd, 0); _fetchGitStatus(); initFilesWatch(); }
       } catch {}
+    }
+
+    // ── Files 실시간 워처 (SSE) ──
+    // 서버측 watchdog이 푸시하는 변경 이벤트를 받아 해당 dir만 재조회한다.
+    let _filesEvtSource = null;
+    let _filesChangeTimer = null;
+    const _filesChangePending = { dirs: new Set(), git: false };
+    function initFilesWatch() {
+      if (_filesEvtSource) return;
+      try {
+        const es = new EventSource(A + '/files/watch');
+        _filesEvtSource = es;
+        es.onmessage = (ev) => {
+          try {
+            const d = JSON.parse(ev.data);
+            if (d.type === 'change') _handleFilesChange(d);
+          } catch {}
+        };
+        es.onerror = () => {
+          try { es.close(); } catch {}
+          if (_filesEvtSource === es) _filesEvtSource = null;
+          setTimeout(initFilesWatch, 3000); // 자동 재연결
+        };
+      } catch {}
+    }
+    function _handleFilesChange(d) {
+      (d.dirs || []).forEach(x => _filesChangePending.dirs.add(x));
+      if (d.git) _filesChangePending.git = true;
+      if (_filesChangeTimer) return;
+      // 연달아 오는 이벤트를 300ms 윈도우로 한 번 더 묶음 (git pull 등 대량 변경 대비)
+      _filesChangeTimer = setTimeout(async () => {
+        _filesChangeTimer = null;
+        const dirs = [..._filesChangePending.dirs];
+        const git = _filesChangePending.git;
+        _filesChangePending.dirs.clear();
+        _filesChangePending.git = false;
+        // 캐시된 dir만 재조회 (보이지 않는 경로는 skip)
+        const toRefetch = dirs.filter(p => _treeCache[p] !== undefined);
+        await Promise.all(toRefetch.map(async p => {
+          try {
+            const r = await fetch(A + '/files/tree?path=' + encodeURIComponent(p));
+            const j = await r.json();
+            _treeCache[p] = j.entries || [];
+          } catch {}
+        }));
+        if (toRefetch.length > 0) renderFileTree();
+        if (git) _fetchGitStatus();
+      }, 300);
     }
     async function loadTreeDir(dirPath, depth) {
       if (_treeCache[dirPath] && depth > 0) return _treeCache[dirPath];

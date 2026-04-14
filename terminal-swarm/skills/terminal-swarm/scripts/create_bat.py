@@ -21,6 +21,7 @@ KNOWN_DEPS = {
     "winotify": "winotify",
     "websockets": "websockets",
     "pyte": "pyte",
+    "watchdog": "watchdog",
 }
 
 
