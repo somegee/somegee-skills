@@ -35,6 +35,15 @@ config가 없으면 `$SWARM config init`로 초기화.
 
 ## 주요 기능
 
+### 보안 강화 (1.6.1+)
+
+- **DNS rebinding 방어**: 모든 HTTP/WebSocket 엔드포인트가 `Host` 헤더 화이트리스트(`localhost:7890`, `127.0.0.1:7890`, `[::1]:7890`)를 검증. 미일치 시 403/1008 응답.
+- **CORS origin 제한**: `Access-Control-Allow-Origin: *` → `http://localhost:7890`.
+- **경로 화이트리스트**: `/files/tree`, `/files/read`, `/files/write`는 `os.getcwd()` 하위 경로만 허용. 위반 시 403.
+- **Command 이스케이프**: `Session.start()`의 bash/powershell/cmd 셸 경로 전부 command injection 방지 이스케이프 적용.
+- **SSE 안정성**: `_handle_sse`에 15초 heartbeat(`: ping`) 추가로 스레드풀 고갈 방지. `/files/watch` 구독자 수 상한(32) 적용.
+- **클라이언트 exponential backoff**: Files 탭 EventSource 재연결이 고정 3초 → 3/6/12/24/48/60s로 증가. 성공 수신 시 리셋. `beforeunload`에서 cleanup.
+
 ### Files 탭 실시간 워처 (1.6.0+)
 
 OS 네이티브 파일시스템 이벤트(`ReadDirectoryChangesW`)를 `watchdog`로 구독하여

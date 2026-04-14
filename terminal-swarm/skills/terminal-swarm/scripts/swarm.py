@@ -189,13 +189,16 @@ class Session:
         child_env = os.environ.copy()
         child_env["SWARM_SESSION"] = self.name
 
-        # 셸에 따라 명령어 구성
+        # 셸에 따라 명령어 구성 (command 이스케이프 적용)
         if "bash" in self.shell.lower():
-            spawn_cmd = f'"{self.shell}" -c "{self.command}"'
+            safe_cmd = self.command.replace('\\', '\\\\').replace('"', '\\"')
+            spawn_cmd = f'"{self.shell}" -c "{safe_cmd}"'
         elif "powershell" in self.shell.lower() or "pwsh" in self.shell.lower():
-            spawn_cmd = f'"{self.shell}" -Command "{self.command}"'
+            safe_cmd = self.command.replace('`', '``').replace('"', '`"')
+            spawn_cmd = f'"{self.shell}" -Command "{safe_cmd}"'
         else:
-            spawn_cmd = f'{self.shell} /c {self.command}'
+            safe_cmd = self.command.replace('"', '""')
+            spawn_cmd = f'"{self.shell}" /c "{safe_cmd}"'
 
         try:
             self.pty = PtyProcess.spawn(spawn_cmd, cwd=self.cwd, env=child_env)
@@ -574,6 +577,8 @@ _GIT_SIGNAL_NAMES = {"index", "HEAD", "ORIG_HEAD", "MERGE_HEAD", "FETCH_HEAD"}
 class FilesWatcher:
     """디렉토리 트리 재귀 워처. SSE 채널로 변경 이벤트를 푸시한다."""
 
+    _MAX_SUBS = 32
+
     def __init__(self):
         self._observer = None
         self._root = None
@@ -678,8 +683,10 @@ class FilesWatcher:
                 pass  # drop on full queue
 
     def subscribe(self):
-        q = _queue_mod.Queue(maxsize=200)
         with self._lock:
+            if len(self._subscribers) >= self._MAX_SUBS:
+                return None
+            q = _queue_mod.Queue(maxsize=200)
             self._subscribers.append(q)
         return q
 
@@ -811,9 +818,45 @@ class PooledHTTPServer(TCPServer):
 
 _last_dashboard_poll = 0.0  # 대시보드 /sessions 폴링 시각 (토스트 중복 방지)
 
+# DNS rebinding 방어: 허용 Host 헤더 화이트리스트
+_ALLOWED_HOSTS = frozenset([
+    f"localhost:{DEFAULT_PORT}", f"127.0.0.1:{DEFAULT_PORT}", f"[::1]:{DEFAULT_PORT}",
+    "localhost", "127.0.0.1", "[::1]",
+])
+_CORS_ORIGIN = f"http://localhost:{DEFAULT_PORT}"
+
+
 class SwarmHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
+
+    def _check_host(self) -> bool:
+        """Host 헤더 화이트리스트 검증. 위반 시 403 응답 후 False 반환."""
+        host = (self.headers.get("Host") or "").strip().lower()
+        if host in _ALLOWED_HOSTS:
+            return True
+        self._json(403, {"error": "forbidden: invalid Host header"})
+        return False
+
+    def _cors_origin(self) -> str:
+        return _CORS_ORIGIN
+
+    def _safe_path(self, raw: str):
+        """cwd 하위 경로만 허용. 위반 시 None 반환 (호출자가 403 응답 처리)."""
+        try:
+            root = Path(os.getcwd()).resolve()
+            p = Path(raw).resolve()
+            if hasattr(p, "is_relative_to"):
+                if not p.is_relative_to(root):
+                    return None
+            else:
+                try:
+                    p.relative_to(root)
+                except ValueError:
+                    return None
+            return p
+        except Exception:
+            return None
 
     def handle_one_request(self):
         """에러가 발생해도 데몬이 죽지 않도록 보호."""
@@ -833,7 +876,7 @@ class SwarmHandler(BaseHTTPRequestHandler):
     def _json(self, code, data):
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
 
@@ -851,14 +894,18 @@ class SwarmHandler(BaseHTTPRequestHandler):
         # 현재 cwd에 대한 워처 보장
         _files_watcher.start(os.getcwd())
 
+        q = _files_watcher.subscribe()
+        if q is None:
+            self._json(503, {"error": "too many subscribers"})
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "keep-alive")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.end_headers()
 
-        q = _files_watcher.subscribe()
         try:
             hello = json.dumps({"type": "hello", "root": os.getcwd().replace("\\", "/")})
             try:
@@ -896,7 +943,7 @@ class SwarmHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "keep-alive")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.end_headers()
 
         # 기존 히스토리 전송
@@ -911,7 +958,9 @@ class SwarmHandler(BaseHTTPRequestHandler):
             except Exception:
                 return
 
-        # 실시간 스트리밍 루프
+        # 실시간 스트리밍 루프 (15초마다 heartbeat로 연결 상태 확인)
+        last_ping = time.time()
+        HEARTBEAT_INTERVAL = 15.0
         while True:
             time.sleep(0.15)
             current, new_lines = session.get_new_raw_lines(last_seen)
@@ -922,13 +971,23 @@ class SwarmHandler(BaseHTTPRequestHandler):
                 try:
                     self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
                     self.wfile.flush()
+                    last_ping = time.time()
                 except Exception:
                     break  # 클라이언트 연결 끊김
+            elif time.time() - last_ping >= HEARTBEAT_INTERVAL:
+                try:
+                    self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+                    last_ping = time.time()
+                except Exception:
+                    break
 
     def _session_name(self, path):
         return unquote(path.split("/")[2])
 
     def do_GET(self):
+        if not self._check_host():
+            return
         path = self.path.split("?")[0]
         params = {}
         if "?" in self.path:
@@ -1050,9 +1109,12 @@ class SwarmHandler(BaseHTTPRequestHandler):
                 self._json(500, {"error": str(e)})
         elif path == "/files/tree":
             tree_path = params.get("path", [os.getcwd()])[0]
+            root = self._safe_path(tree_path)
+            if root is None:
+                self._json(403, {"error": "path outside workspace root"})
+                return
             cfg = load_config()
             ignore = set(cfg.get("tree_ignore", [])) | {".git", "node_modules", "__pycache__", "venv", ".venv", "dist", "build", ".next", ".cache"}
-            root = Path(tree_path).resolve()
             entries = []
             try:
                 for item in sorted(root.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
@@ -1077,8 +1139,11 @@ class SwarmHandler(BaseHTTPRequestHandler):
             if not file_path:
                 self._json(400, {"error": "path required"})
                 return
+            p = self._safe_path(file_path)
+            if p is None:
+                self._json(403, {"error": "path outside workspace root"})
+                return
             try:
-                p = Path(file_path).resolve()
                 if not p.is_file():
                     self._json(404, {"error": "File not found"})
                     return
@@ -1108,6 +1173,8 @@ class SwarmHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "Not found"})
 
     def do_POST(self):
+        if not self._check_host():
+            return
         path = self.path.split("?")[0]
         body = self._body()
         if path == "/sessions":
@@ -1146,13 +1213,13 @@ class SwarmHandler(BaseHTTPRequestHandler):
                 time.sleep(0.2)
                 session.write_stdin("\r", raw=True)
                 self.send_response(204)
-                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Origin", self._cors_origin())
                 self.end_headers()
                 return
             chunked = len(text) > 512
             if session.write_stdin(text, raw=raw, chunked=chunked):
                 self.send_response(204)
-                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Origin", self._cors_origin())
                 self.end_headers()
             else:
                 self._json(500, {"error": "Failed to send"})
@@ -1240,8 +1307,11 @@ class SwarmHandler(BaseHTTPRequestHandler):
             if not file_path or content is None:
                 self._json(400, {"error": "path and content required"})
                 return
+            p = self._safe_path(file_path)
+            if p is None:
+                self._json(403, {"error": "path outside workspace root"})
+                return
             try:
-                p = Path(file_path).resolve()
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_bytes(content.encode("utf-8"))
                 self._json(200, {"message": "saved", "path": str(p)})
@@ -1304,6 +1374,8 @@ class SwarmHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "Not found"})
 
     def do_DELETE(self):
+        if not self._check_host():
+            return
         try:
             path = self.path.split("?")[0]
             if path == "/sessions":
@@ -1339,8 +1411,10 @@ class SwarmHandler(BaseHTTPRequestHandler):
             except Exception: pass
 
     def do_OPTIONS(self):
+        if not self._check_host():
+            return
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Swarm-Session")
         self.end_headers()
@@ -1356,6 +1430,18 @@ def is_daemon_running(port=DEFAULT_PORT):
 
 async def _ws_handler(websocket):
     """WebSocket 핸들러: 세션 I/O 양방향 통신."""
+    # DNS rebinding 방어: Host 헤더 화이트리스트 검증
+    try:
+        req_headers = websocket.request.headers
+    except Exception:
+        req_headers = getattr(websocket, 'request_headers', {})
+    try:
+        host_hdr = (req_headers.get("Host") or "").strip().lower()
+    except Exception:
+        host_hdr = ""
+    if host_hdr not in _ALLOWED_HOSTS:
+        await websocket.close(code=1008, reason="invalid Host header")
+        return
     try:
         path = websocket.request.path
     except Exception:

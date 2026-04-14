@@ -3340,13 +3340,19 @@
     // 서버측 watchdog이 푸시하는 변경 이벤트를 받아 해당 dir만 재조회한다.
     let _filesEvtSource = null;
     let _filesChangeTimer = null;
+    let _filesReconnectTimer = null;
+    let _filesBackoffMs = 3000;
+    const _FILES_BACKOFF_MIN = 3000;
+    const _FILES_BACKOFF_MAX = 60000;
     const _filesChangePending = { dirs: new Set(), git: false };
     function initFilesWatch() {
-      if (_filesEvtSource) return;
+      if (_filesEvtSource || _filesReconnectTimer) return;
       try {
         const es = new EventSource(A + '/files/watch');
         _filesEvtSource = es;
+        let gotMessage = false;
         es.onmessage = (ev) => {
+          if (!gotMessage) { gotMessage = true; _filesBackoffMs = _FILES_BACKOFF_MIN; }
           try {
             const d = JSON.parse(ev.data);
             if (d.type === 'change') _handleFilesChange(d);
@@ -3355,10 +3361,22 @@
         es.onerror = () => {
           try { es.close(); } catch {}
           if (_filesEvtSource === es) _filesEvtSource = null;
-          setTimeout(initFilesWatch, 3000); // 자동 재연결
+          if (_filesReconnectTimer) return; // 중복 타이머 방지
+          const delay = _filesBackoffMs;
+          _filesBackoffMs = Math.min(_filesBackoffMs * 2, _FILES_BACKOFF_MAX);
+          _filesReconnectTimer = setTimeout(() => {
+            _filesReconnectTimer = null;
+            initFilesWatch();
+          }, delay);
         };
       } catch {}
     }
+    window.addEventListener('beforeunload', () => {
+      try { _filesEvtSource?.close(); } catch {}
+      _filesEvtSource = null;
+      if (_filesChangeTimer) { clearTimeout(_filesChangeTimer); _filesChangeTimer = null; }
+      if (_filesReconnectTimer) { clearTimeout(_filesReconnectTimer); _filesReconnectTimer = null; }
+    });
     function _handleFilesChange(d) {
       (d.dirs || []).forEach(x => _filesChangePending.dirs.add(x));
       if (d.git) _filesChangePending.git = true;
