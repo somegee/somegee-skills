@@ -2267,9 +2267,12 @@
     function forEachLeaf(n, fn) { if (!n) return; if (!n.children) { fn(n); return } n.children.forEach(c => forEachLeaf(c, fn)) }
 
     // ── Sessions list ───────────────────────────────────────────────────────────
+    // 삭제 진행 중인 세션 (폴링이 다시 살리지 않도록 필터)
+    const _pendingDelete = new Set();
     async function ld() {
       try {
-        const r = await fetch(A + '/sessions'); const d = await r.json(); sessions = d.sessions;
+        const r = await fetch(A + '/sessions'); const d = await r.json();
+        sessions = (d.sessions || []).filter(s => !_pendingDelete.has(s.name));
         // 각 세션의 command를 conns에 캐시 (pane 부제목용)
         for (const s of sessions) { if (conns[s.name]) conns[s.name]._command = s.command || '' }
         rL()
@@ -2672,14 +2675,20 @@
     document.getElementById('renameInput').addEventListener('keydown', e => { if (e.key === 'Enter') doRename(); if (e.key === 'Escape') hideRename() });
     function doK(n) {
       // UI 즉시 반영
+      _pendingDelete.add(n);
       forEachLeaf(tree, node => { if (node.session === n) { detachFromPane(node) } });
       destroyConn(n);
       sessions = sessions.filter(s => s.name !== n);
       rL();
-      // 백그라운드에서 kill 처리
+      // 백그라운드에서 kill 처리 — 응답 후에도 짧게 가드 유지
+      // (서버가 200을 반환했어도 list 캐시가 갱신되기 전 폴링이 끼어들 수 있어 200ms 여유)
       fetch(A + '/sessions/' + E(n), { method: 'DELETE' })
-        .then(r => r.ok ? toast(n + ' 종료됨', 'ok') : toast(n + ' 종료 실패', 'err'))
-        .catch(() => toast(n + ' 종료 실패', 'err'));
+        .then(r => {
+          if (r.ok) toast(n + ' 종료됨', 'ok');
+          else { _pendingDelete.delete(n); toast(n + ' 종료 실패', 'err'); ld(); }
+        })
+        .catch(() => { _pendingDelete.delete(n); toast(n + ' 종료 실패', 'err'); ld(); })
+        .finally(() => { setTimeout(() => _pendingDelete.delete(n), 1500); });
     }
 
     document.addEventListener('keydown', e => { if (e.key === 'Escape') { hideRename(); if (window._saveMode) { window._saveMode = false; document.getElementById('pb-save').classList.remove('active'); toast('저장 취소', 'info') } } });

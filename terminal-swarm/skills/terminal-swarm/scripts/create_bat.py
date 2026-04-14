@@ -96,14 +96,38 @@ echo [Swarm] Starting daemon...
 start /b "" "%PYTHON%" "%SCRIPT%" start >nul 2>&1
 ping -n 3 127.0.0.1 >nul
 
-:: 8. Verify and open dashboard
+:: 8. Verify and open dashboard (standalone app window via --app=)
 "%PYTHON%" "%SCRIPT%" status
-if errorlevel 1 (
-    echo [Swarm] ERROR: Daemon failed to start!
-) else (
-    start "" "http://localhost:7890/"
-    echo [Swarm] Dashboard opened.
-)
+if errorlevel 1 goto :swarm_dash_err
+goto :swarm_dash_ok
+
+:swarm_dash_err
+echo [Swarm] ERROR: Daemon failed to start!
+goto :swarm_dash_done
+
+:swarm_dash_ok
+set "DASH_URL=http://localhost:7890/"
+set "APP_PROFILE=%LOCALAPPDATA%\TerminalSwarm\WebApp"
+set "APP_FLAGS=--app=%DASH_URL% --user-data-dir=%APP_PROFILE% --window-size=1400,900 --no-first-run --no-default-browser-check"
+set "EDGE1=%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
+set "EDGE2=%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"
+set "CHROME1=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
+set "CHROME2=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
+set "BROWSER="
+if exist "%EDGE1%" set "BROWSER=%EDGE1%"
+if not defined BROWSER if exist "%EDGE2%" set "BROWSER=%EDGE2%"
+if not defined BROWSER if exist "%CHROME1%" set "BROWSER=%CHROME1%"
+if not defined BROWSER if exist "%CHROME2%" set "BROWSER=%CHROME2%"
+if defined BROWSER goto :swarm_dash_app
+start "" "%DASH_URL%"
+echo [Swarm] Dashboard opened in default browser (Edge/Chrome not found).
+goto :swarm_dash_done
+
+:swarm_dash_app
+start "" "%BROWSER%" %APP_FLAGS%
+echo [Swarm] Dashboard opened as standalone app.
+
+:swarm_dash_done
 
 :: 9. Show sessions
 "%PYTHON%" "%SCRIPT%" list
