@@ -819,9 +819,10 @@ class PooledHTTPServer(TCPServer):
 
 _last_dashboard_poll = 0.0  # 대시보드 /sessions 폴링 시각 (토스트 중복 방지)
 
-# DNS rebinding 방어: 허용 Host 헤더 화이트리스트
+# DNS rebinding 방어: 허용 Host 헤더 화이트리스트 (HTTP + WS 포트)
 _ALLOWED_HOSTS = frozenset([
     f"localhost:{DEFAULT_PORT}", f"127.0.0.1:{DEFAULT_PORT}", f"[::1]:{DEFAULT_PORT}",
+    f"localhost:{WS_PORT}", f"127.0.0.1:{WS_PORT}", f"[::1]:{WS_PORT}",
     "localhost", "127.0.0.1", "[::1]",
 ])
 _CORS_ORIGIN = f"http://localhost:{DEFAULT_PORT}"
