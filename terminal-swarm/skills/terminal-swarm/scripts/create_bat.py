@@ -43,6 +43,8 @@ def detect_deps(script_path: pathlib.Path) -> list[str]:
 
 BAT_TEMPLATE = r"""@echo off
 chcp 65001 >nul 2>&1
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
 
 cd /d "{work_dir}"
 
