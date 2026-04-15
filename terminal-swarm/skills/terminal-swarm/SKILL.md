@@ -35,6 +35,23 @@ config가 없으면 `$SWARM config init`로 초기화.
 
 ## 주요 기능
 
+### Hook stale path 복구 (1.6.6+)
+
+플러그인 업데이트(예: 1.5.9 → 1.6.6) 후 `~/.claude/settings.json`에 박혀 있던
+`terminal-swarm/<old-version>/.../hook_relay.py` 절대 경로가 stale 상태가 되어
+hook이 조용히 실패하던 문제를 수정.
+
+- **`_build_swarm_hook_command`가 더 이상 절대 경로를 settings.json에 박지 않는다.**
+  hook_relay.py와 동일한 동작을 수행하는 한 줄 Python을 인라인으로 임베드한다.
+  플러그인 버전과 무관하게 영구 동작.
+- **`python3` 우선, `python` fallback**: bash에서 PATH 기반으로 해석 (Windows
+  python.exe 절대 경로의 백슬래시 이스케이프 문제도 동시에 회피).
+- **`hooks status`가 stale을 자동 감지**: 등록된 swarm hook command가 현재 기대
+  형식과 다르면 exit 1을 반환. BAT 런처의 `hooks status → hooks setup` 흐름이
+  outdated 인스톨을 자동 재설정한다.
+- 부수적으로 `_find_hook_relay()`의 lexical sort 버그(`"1.5.9" > "1.5.12"`)도
+  사라졌다 — 함수 자체를 삭제했기 때문.
+
 ### WebSocket 연결 안정성 (1.6.5+)
 
 장시간 작업/대량 출력 도중 web UI pane의 키보드 입력이 멎는 zombie 연결 문제를 해결.
