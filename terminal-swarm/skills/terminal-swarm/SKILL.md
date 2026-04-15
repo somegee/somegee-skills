@@ -35,6 +35,34 @@ config가 없으면 `$SWARM config init`로 초기화.
 
 ## 주요 기능
 
+### Editor pane dirty-dot 누락 수정 (1.6.8+)
+
+여러 editor pane 사용 중 노란색 dirty-dot 아이콘과 저장 버튼이 아예 뜨지 않거나,
+편집 후 한참 지나 사라지던 문제를 수정.
+
+원인 3가지:
+1. **`updateEditorDirty`가 마지막 매칭 pane만 갱신**: `forEachLeaf` 콜백에서
+   `node = n`로 덮어쓰기만 해, 같은 파일이 2개 pane에 열려 있거나 프리셋 복원
+   중 transient하게 중복된 상태에서 엉뚱한 pane의 dirty-dot이 갱신됐다.
+2. **rebuildUI 후 dirty 상태가 새 DOM에 재동기화 안 됨**: `rebuildUI`로 pane
+   HTML이 재생성되면 `.dirty-dot`의 `show` 클래스가 날아가는데, `attachEditorToPane`
+   이 `ec.dirty` 상태를 새 DOM에 다시 반영하지 않아 사용자가 이미 편집한 상태에도
+   dot이 안 보였다.
+3. **`attachEditorToPane`의 동시성 race**: `await fetch(...)` 중 `rebuildUI`가
+   재진입하면 `!ec.cm` 체크를 둘 다 통과해 같은 wrap 안에 CM 인스턴스 2개가
+   생성되고, 두 번째가 첫 번째를 덮어써 orphan CM의 `on('changes')`는 영영
+   발화 안 했다.
+
+해결:
+- `updateEditorDirty`가 `forEachLeaf`로 **모든** 매칭 pane을 순회하며 갱신.
+  `node.el` null safety 추가.
+- `attachEditorToPane`이 attach 직후 `updateEditorDirty(node.filePath)`를 한 번
+  호출해 현재 `ec.dirty` 상태를 새 DOM에 재동기화.
+- `ec._loading` 플래그로 동시 진입을 차단. 두 번째 `attachEditorToPane` 호출은
+  fetch/CM 생성 블록을 건너뛰고 dirty 재동기화만 수행.
+- `on('changes')` 콜백이 `node.filePath` 대신 `ec.filePath`를 사용 — closure로
+  캡처된 node 객체가 rebuild로 무효화돼도 안전.
+
 ### Hook Microsoft Store Python 스텁 회피 (1.6.7+)
 
 Windows Git Bash 환경에서 1.6.6 hook 명령어가 조용히 실패하던 회귀 수정.
