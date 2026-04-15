@@ -2018,18 +2018,57 @@
       // 키 입력 → WebSocket 직접 전송 (지연 없음)
       t.onData(d => { if (c.ws && c.ws.readyState === 1) c.ws.send(d) });
       t.onResize(({ cols, rows }) => { fetch(A + '/sessions/' + E(name) + '/resize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows, cols }) }).catch(() => { }) });
-      const c = { term: t, fit: f, search: sa, wrap, ws: null, rt: null };
+      const c = { term: t, fit: f, search: sa, wrap, ws: null, rt: null, hb: null, lastAct: 0 };
       // WebSocket 연결 (양방향 — 입력+출력 모두)
+      // 좀비 연결 감지: 서버가 15초마다 NUL 하트비트를 보낸다.
+      // 40초간 메시지가 없으면 연결을 강제 종료하고 reconnect 한다.
+      const STALE_THRESHOLD_MS = 40000;
       function connectWS() {
+        // 기존 hb 인터벌은 새 연결 전 반드시 정리 (이전 ws에 대한 stale 검사가 새 ws를 망가뜨리지 않도록)
+        if (c.hb) { clearInterval(c.hb); c.hb = null; }
         const ws = new WebSocket(WS_URL + '/ws/sessions/' + E(name)); c.ws = ws;
+        c.lastAct = Date.now();
+        // onclose/onerror가 race로 두 번 발화해도 reconnect를 1회만 트리거하도록 가드
+        let closedHandled = false;
+        const handleClose = () => {
+          if (closedHandled) return;
+          closedHandled = true;
+          // 이 핸들러가 발화한 시점에 c.ws가 이미 다른 ws로 교체되었다면 무시 (force-reconnect race)
+          if (c.ws !== ws) return;
+          if (c.hb) { clearInterval(c.hb); c.hb = null; }
+          showReconOverlay(name, true);
+          if (c.rt) clearTimeout(c.rt);
+          c.rt = setTimeout(() => { if (conns[name]) connectWS() }, 2000);
+        };
         ws.onmessage = e => {
+          c.lastAct = Date.now();
           t.write(e.data);
         };
-        ws.onclose = () => {
-          showReconOverlay(name, true);
-          c.rt = setTimeout(() => { if (conns[name]) connectWS() }, 2000)
+        ws.onclose = handleClose;
+        ws.onerror = () => {
+          // 일부 zombie 케이스에서 onerror만 발화하고 onclose가 지연되는 경우가 있다.
+          // 명시적으로 close()를 호출하면 onclose가 곧이어 발화한다.
+          try { ws.close() } catch (e) {}
         };
-        ws.onopen = () => { showReconOverlay(name, false) };
+        ws.onopen = () => {
+          c.lastAct = Date.now();
+          showReconOverlay(name, false);
+        };
+        // 5초 주기로 stale 연결 검사 → 강제 close 트리거 (서버 하트비트가 끊긴 경우)
+        c.hb = setInterval(() => {
+          if (c.ws !== ws) { clearInterval(c.hb); c.hb = null; return; }
+          if (ws.readyState !== 1) return;  // OPEN이 아니면 close 핸들러가 처리
+          if (Date.now() - c.lastAct > STALE_THRESHOLD_MS) {
+            try { ws.close() } catch (e) {}
+            // onclose가 영영 안 오는 진성 zombie 대비: 5초 뒤 직접 reconnect.
+            // (handleClose가 먼저 발화하면 ws !== c.ws 가드로 noop이 된다)
+            setTimeout(() => {
+              if (c.ws === ws && !closedHandled) {
+                handleClose();
+              }
+            }, 5000);
+          }
+        }, 5000);
       }
       connectWS();
       conns[name] = c;
@@ -2038,6 +2077,7 @@
     function destroyConn(name) {
       const c = conns[name]; if (!c) return;
       if (c.ws) c.ws.close(); if (c.rt) clearTimeout(c.rt);
+      if (c.hb) { clearInterval(c.hb); c.hb = null; }
       c.term.dispose(); delete conns[name]; delete sessionState[name];
     }
 

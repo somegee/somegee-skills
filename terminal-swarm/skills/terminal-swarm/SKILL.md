@@ -35,6 +35,16 @@ config가 없으면 `$SWARM config init`로 초기화.
 
 ## 주요 기능
 
+### WebSocket 연결 안정성 (1.6.5+)
+
+장시간 작업/대량 출력 도중 web UI pane의 키보드 입력이 멎는 zombie 연결 문제를 해결.
+
+- **서버 → 클라이언트 application-level 하트비트**: 15초마다 NUL 바이트(`\x00`) 전송. xterm.js가 NUL을 무시하므로 시각적 영향 없음. 클라이언트가 `lastActivity`를 갱신하여 stale 감지 기준으로 사용한다.
+- **클라이언트 stale 감지**: 5초 주기로 `lastActivity` 검사. 40초간 메시지가 없으면 강제 `ws.close()` → onclose → reconnect. onclose가 영영 안 오는 진성 zombie를 위해 5초 fallback 타이머도 둔다.
+- **bridge 스레드 누수 제거**: `_ws_handler`가 `asyncio.to_thread(threading.Event.wait)` 대신 PTY 리더 스레드에서 `loop.call_soon_threadsafe(data_event.set)`로 직접 통신. 기존에는 disconnect마다 1개 스레드가 누수되어 ~32회 reconnect 후 default ThreadPoolExecutor가 고갈되었다.
+- **`pty.write` 이벤트 루프 블로킹 방지**: `session.write_stdin()`을 `asyncio.to_thread`로 위임하여, 한 pane의 PTY 블로킹이 다른 모든 pane의 WebSocket을 멎게 하지 않게 한다.
+- **reconnect race 가드**: `handleClose`가 두 번 발화하거나 force-close와 자연 close가 race할 때 reconnect가 중복 트리거되지 않도록 `c.ws !== ws` 식별자 가드 추가.
+
 ### 보안 강화 (1.6.1+)
 
 - **DNS rebinding 방어**: 모든 HTTP/WebSocket 엔드포인트가 `Host` 헤더 화이트리스트(`localhost:7890`, `127.0.0.1:7890`, `[::1]:7890`)를 검증. 미일치 시 403/1008 응답.
