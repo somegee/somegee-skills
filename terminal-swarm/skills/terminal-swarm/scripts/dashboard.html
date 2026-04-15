@@ -3772,47 +3772,63 @@
       const ec = getEditorConn(node.filePath);
       const termEl = node.el?.querySelector('.pane-editor'); if (!termEl) return;
       termEl.innerHTML = ''; termEl.appendChild(ec.wrap);
-      if (!ec.cm) {
-        // load file content
+      if (!ec.cm && !ec._loading) {
+        // race 가드: await 중에 rebuildUI가 재진입해도 같은 wrap 안에 두 번째 CM이
+        // 생성되지 않도록 loading 플래그로 막는다. 두 번째 CM이 생기면 on('changes')
+        // 핸들러가 중복 등록되고 orphan CM이 남아 사용자 입력이 유실된다.
+        ec._loading = true;
         try {
-          const r = await fetch(A + '/files/read?path=' + encodeURIComponent(node.filePath));
-          const d = await r.json();
-          if (d.error) { toast(d.error, 'err'); return }
-          ec.originalContent = d.content;
-        } catch (e) { toast('File read failed', 'err'); return }
-        const ext = node.filePath.split('.').pop().toLowerCase();
-        const mode = await loadCMMode(ext);
-        ec.cm = CodeMirror(ec.wrap, {
-          value: ec.originalContent,
-          mode: mode || '',
-          theme: 'swarm',
-          lineNumbers: true,
-          lineWrapping: false,
-          indentUnit: 2,
-          tabSize: 2,
-          indentWithTabs: false,
-          dragDrop: false,
-          extraKeys: { 'Ctrl-S': () => saveEditor(node.filePath), 'Ctrl-F': false, 'Ctrl-G': false, 'Shift-Ctrl-F': false, 'Shift-Ctrl-R': false, 'Ctrl-H': false }
-        });
-        ec.cm.on('changes', () => {
-          const dirty = ec.cm.getValue() !== ec.originalContent;
-          ec.dirty = dirty;
-          updateEditorDirty(node.filePath);
-        });
+          // load file content
+          try {
+            const r = await fetch(A + '/files/read?path=' + encodeURIComponent(node.filePath));
+            const d = await r.json();
+            if (d.error) { toast(d.error, 'err'); return }
+            ec.originalContent = d.content;
+          } catch (e) { toast('File read failed', 'err'); return }
+          const ext = node.filePath.split('.').pop().toLowerCase();
+          const mode = await loadCMMode(ext);
+          ec.cm = CodeMirror(ec.wrap, {
+            value: ec.originalContent,
+            mode: mode || '',
+            theme: 'swarm',
+            lineNumbers: true,
+            lineWrapping: false,
+            indentUnit: 2,
+            tabSize: 2,
+            indentWithTabs: false,
+            dragDrop: false,
+            extraKeys: { 'Ctrl-S': () => saveEditor(node.filePath), 'Ctrl-F': false, 'Ctrl-G': false, 'Shift-Ctrl-F': false, 'Shift-Ctrl-R': false, 'Ctrl-H': false }
+          });
+          ec.cm.on('changes', () => {
+            const dirty = ec.cm.getValue() !== ec.originalContent;
+            ec.dirty = dirty;
+            // node 캡처 대신 filePath 기준으로 갱신 (노드가 rebuild 되어도 안전)
+            updateEditorDirty(ec.filePath);
+          });
+        } finally {
+          ec._loading = false;
+        }
       }
+      // 이미 편집된 상태(ec.dirty=true)를 가진 에디터가 rebuildUI 후 새 pane에
+      // 다시 붙으면, 새 DOM에는 `show` 클래스가 없어서 dirty-dot이 사라진다.
+      // attach 직후 현재 ec.dirty 상태를 새 DOM에 즉시 재동기화한다.
+      updateEditorDirty(node.filePath);
       setTimeout(() => { if (ec.cm) ec.cm.refresh() }, 30);
     }
 
     function updateEditorDirty(filePath) {
       const ec = editors[filePath]; if (!ec) return;
-      // 현재 tree에서 해당 파일이 열린 pane을 찾아서 UI 갱신
-      let node = null;
-      forEachLeaf(tree, n => { if (n.type === 'editor' && n.filePath === filePath) node = n });
-      if (!node) return;
-      const dot = node.el?.querySelector('.dirty-dot');
-      const btn = node.el?.querySelector('.save-btn');
-      if (dot) dot.classList.toggle('show', ec.dirty);
-      if (btn) btn.classList.toggle('show', ec.dirty);
+      // 현재 tree에서 해당 파일이 열린 **모든** pane의 UI를 갱신한다.
+      // 기존 구현은 forEachLeaf 콜백에서 `node = n`으로 덮어써 마지막 매칭 pane만
+      // 갱신했다 — 같은 파일이 2개 pane에 열려 있거나(프리셋 복원 중 transient
+      // 상태 포함) 순서에 따라 dirty-dot이 엉뚱한 pane에 표시되는 버그가 있었다.
+      forEachLeaf(tree, n => {
+        if (n.type !== 'editor' || n.filePath !== filePath || !n.el) return;
+        const dot = n.el.querySelector('.dirty-dot');
+        const btn = n.el.querySelector('.save-btn');
+        if (dot) dot.classList.toggle('show', ec.dirty);
+        if (btn) btn.classList.toggle('show', ec.dirty);
+      });
       // Files 탭의 dirty 표시도 갱신
       const fileDot = document.querySelector(`.file-dirty[data-path="${CSS.escape(filePath)}"]`);
       if (fileDot) fileDot.style.display = ec.dirty ? '' : 'none';
