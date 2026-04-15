@@ -35,6 +35,25 @@ config가 없으면 `$SWARM config init`로 초기화.
 
 ## 주요 기능
 
+### Hook Microsoft Store Python 스텁 회피 (1.6.7+)
+
+Windows Git Bash 환경에서 1.6.6 hook 명령어가 조용히 실패하던 회귀 수정.
+
+**원인**: Windows 11이 기본 설치하는 `C:\Users\<u>\AppData\Local\Microsoft\WindowsApps\python3.exe`는
+Microsoft Store 런처 스텁이며, `command -v python3`이 이 경로를 "성공" 반환한다.
+이 스텁은 `-c ""` 같은 trivial 호출에도 GUI를 띄우려다 `exit 49`로 죽는다.
+1.6.6의 단순 fallback 체인(`python3 || python`)은 첫 번째가 "성공"이라 두 번째 후보가
+실행되지 않아 hook이 조용히 실패했다.
+
+**수정**: 두 가드 조합으로 후보 검증:
+- (A) `case "$P" in *WindowsApps*) continue;; esac` — Store 스텁 경로 즉시 차단
+- (B) `"$P" -c "" 2>/dev/null || continue` — 이름은 정상이지만 실제론 깨진 인터프리터 방어
+- 후보 순서: `python3` → `python` → `py` (Windows Python Launcher)
+- 셋 다 실패해도 `exit 0`으로 silent (hook 실패가 Claude Code 동작을 막지 않게).
+
+`hooks status`의 stale 감지가 자동으로 1.6.6 → 1.6.7 마이그레이션을 트리거한다 —
+사용자는 BAT 런처를 다시 클릭하기만 하면 settings.json이 새 형식으로 갱신된다.
+
 ### Hook stale path 복구 (1.6.6+)
 
 플러그인 업데이트(예: 1.5.9 → 1.6.6) 후 `~/.claude/settings.json`에 박혀 있던

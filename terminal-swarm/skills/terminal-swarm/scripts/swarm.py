@@ -2059,10 +2059,19 @@ def _build_swarm_hook_command():
       hook이 조용히 실패한다. 사용자는 알림이 끊긴 사실조차 알 수 없게 된다.
     - 따라서 hook_relay.py 파일과 동일한 동작을 수행하는 한 줄짜리 Python을
       인라인으로 임베드한다. 플러그인 버전과 무관하게 동작한다.
+    - **Microsoft Store Python 스텁 우회 (1.6.7+)**: Windows에서
+      `command -v python3`은 `C:\\...\\WindowsApps\\python3.exe`(Store 런처 스텁)을
+      "성공" 반환하는데, 이 스텁은 `-c ""` 같은 trivial 호출에도 GUI를 띄우려다
+      `exit 49`로 죽는다. 단순 fallback 체인(`python3 || python`)은 첫 번째가
+      "성공"이라 두 번째가 발화하지 않아 hook이 조용히 실패한다.
+      두 가지 가드를 조합한다:
+        (A) 경로명에 `WindowsApps`가 들어가면 즉시 스킵 (Store 스텁 차단)
+        (B) `"$P" -c ""`로 trivially 실행 가능한지 검증 (이름은 정상이지만 실제론
+            깨진 인터프리터에 대한 방어)
+      후보 순서: python3 → python → py (Windows Python Launcher).
     - Claude Code hooks는 bash로 실행되므로 Windows 절대 경로/python.exe 경로를
-      넣으면 백슬래시가 이스케이프되어 실패한다. python3/python을 PATH 기반으로
-      해석한다.
-    - 둘 다 없으면 조용히 무시 (`exit 0`)하여 hook 실패가 Claude Code 동작을
+      넣으면 백슬래시가 이스케이프되어 실패한다. 후보 검색은 PATH 기반으로 한다.
+    - 셋 다 사용 불가면 조용히 무시 (`exit 0`)하여 hook 실패가 Claude Code 동작을
       방해하지 않게 한다.
     """
     inline_py = (
@@ -2074,7 +2083,13 @@ def _build_swarm_hook_command():
         'timeout=3)'
     )
     return (
-        'PY=$(command -v python3 || command -v python || echo); '
+        'PY=; '
+        'for c in python3 python py; do '
+        'P=$(command -v "$c" 2>/dev/null) || continue; '
+        'case "$P" in *WindowsApps*) continue;; esac; '
+        '"$P" -c "" 2>/dev/null || continue; '
+        'PY="$P"; break; '
+        'done; '
         f'[ -n "$PY" ] && "$PY" -c \'{inline_py}\' 2>/dev/null; '
         'exit 0'
     )
