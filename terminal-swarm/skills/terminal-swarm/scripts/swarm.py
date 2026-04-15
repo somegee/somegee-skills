@@ -167,7 +167,7 @@ class Session:
         self._boot_time = 0.0           # ❯ 최초 감지 시각
         self._hook_state = None         # Claude Code hook 상태: "active"|"ready"|"attention"|None
         self._hook_state_time = 0.0     # 마지막 hook 상태 변경 시각
-        self._data_events = []          # WebSocket 스트리밍용 asyncio.Event 목록
+        self._data_callbacks = []       # WebSocket 스트리밍용 콜백 목록 (PTY 리더 스레드에서 호출)
         self._data_events_lock = threading.Lock()
         # pyte 가상 터미널 (TUI 앱의 현재 화면 상태 추적)
         self._vt_screen = VTermScreen(DEFAULT_SCREEN_COLS, DEFAULT_SCREEN_ROWS, history=MAX_BUFFER_LINES)
@@ -261,9 +261,14 @@ class Session:
                     f.flush()
 
                     # WebSocket 스트리밍에게 새 데이터 도착 알림
+                    # 콜백 사본을 lock 안에서 만들고, 호출은 lock 밖에서 (콜백이 길어져도 PTY 리더가 멎지 않음)
                     with self._data_events_lock:
-                        for evt in self._data_events:
-                            evt.set()
+                        callbacks_snapshot = list(self._data_callbacks)
+                    for cb in callbacks_snapshot:
+                        try:
+                            cb()
+                        except Exception:
+                            pass
         except Exception as e:
             with self._lock:
                 msg = f"[swarm] PTY reader error: {e}\n"
@@ -296,16 +301,20 @@ class Session:
             buf_list = list(self.raw_buffer)
             return current, buf_list[-new_count:] if new_count <= len(buf_list) else buf_list
 
-    def register_data_event(self, evt):
-        """WebSocket 스트리밍용 asyncio.Event 등록."""
-        with self._data_events_lock:
-            self._data_events.append(evt)
+    def register_data_callback(self, callback):
+        """WebSocket 스트리밍용 콜백 등록.
 
-    def unregister_data_event(self, evt):
-        """WebSocket 스트리밍용 asyncio.Event 해제."""
+        콜백은 PTY 리더 스레드에서 호출되므로 반드시 빠르게 반환해야 하며,
+        asyncio 이벤트 루프와 통신해야 한다면 `loop.call_soon_threadsafe`를 사용해야 한다.
+        """
+        with self._data_events_lock:
+            self._data_callbacks.append(callback)
+
+    def unregister_data_callback(self, callback):
+        """WebSocket 스트리밍용 콜백 해제."""
         with self._data_events_lock:
             try:
-                self._data_events.remove(evt)
+                self._data_callbacks.remove(callback)
             except ValueError:
                 pass
 
@@ -1464,32 +1473,42 @@ async def _ws_handler(websocket):
 
     # 출력 스트리밍 태스크 (이벤트 드리븐 + 최소 배치 간격)
     data_event = asyncio.Event()
-    # PTY 스레드에서 set()하면 asyncio 이벤트 루프에 안전하게 알림
-    _loop = asyncio.get_event_loop()
-    _thread_event = threading.Event()
-    session.register_data_event(_thread_event)
+    loop = asyncio.get_running_loop()
 
-    async def _bridge_event():
-        """threading.Event → asyncio.Event 브릿지."""
-        while True:
-            await asyncio.to_thread(_thread_event.wait)
-            _thread_event.clear()
-            data_event.set()
+    # PTY 리더 스레드 → asyncio 이벤트 루프 (call_soon_threadsafe로 직접 통신)
+    # 별도 bridge 스레드를 두지 않으므로 disconnect 시 thread leak이 없다.
+    def _on_data():
+        try:
+            loop.call_soon_threadsafe(data_event.set)
+        except RuntimeError:
+            pass  # loop가 닫혔거나 종료 중인 경우
 
-    bridge_task = asyncio.create_task(_bridge_event())
+    session.register_data_callback(_on_data)
+
+    HEARTBEAT_INTERVAL = 15  # seconds — 무음 zombie WebSocket 방지
 
     async def stream():
         nonlocal last_seen
         MIN_BATCH_INTERVAL = 0.008  # 8ms (≈120fps)
         while True:
-            await data_event.wait()
-            data_event.clear()
-            await asyncio.sleep(MIN_BATCH_INTERVAL)  # 짧은 배치 윈도우
-            current, new_lines = session.get_new_raw_lines(last_seen)
-            if new_lines:
-                last_seen = current
+            try:
+                # 새 데이터 또는 heartbeat 만료까지 대기
+                await asyncio.wait_for(data_event.wait(), timeout=HEARTBEAT_INTERVAL)
+                data_event.clear()
+                await asyncio.sleep(MIN_BATCH_INTERVAL)  # 짧은 배치 윈도우
+                current, new_lines = session.get_new_raw_lines(last_seen)
+                if new_lines:
+                    last_seen = current
+                    try:
+                        await websocket.send("".join(new_lines))
+                    except Exception:
+                        break
+            except asyncio.TimeoutError:
+                # Application-level heartbeat: NUL 바이트 전송
+                # xterm.js는 NUL을 무시하므로 시각적 영향 없음.
+                # 클라이언트가 lastActivity를 갱신하여 zombie 연결을 감지할 수 있게 한다.
                 try:
-                    await websocket.send("".join(new_lines))
+                    await websocket.send("\x00")
                 except Exception:
                     break
 
@@ -1499,13 +1518,18 @@ async def _ws_handler(websocket):
             # DA 응답(ESC[?1;2c 등) 필터링 — xterm.js가 자동 응답하는 것이 입력으로 들어오는 것 방지
             filtered = re.sub(r'\x1b\[\?[\d;]*c', '', msg)
             if filtered:
-                session.write_stdin(filtered, raw=True)
+                # 동기 PTY write를 to_thread로 위임하여 이벤트 루프 블로킹 방지.
+                # 이렇게 하지 않으면 한 pane의 write가 멎으면 모든 pane의
+                # WebSocket이 멎는다 (멀티에이전트 부하 시 발생 가능).
+                try:
+                    await asyncio.to_thread(session.write_stdin, filtered, True)
+                except Exception:
+                    pass
     except Exception:
         pass
     finally:
         task.cancel()
-        bridge_task.cancel()
-        session.unregister_data_event(_thread_event)
+        session.unregister_data_callback(_on_data)
 
 
 def _run_ws_server():
