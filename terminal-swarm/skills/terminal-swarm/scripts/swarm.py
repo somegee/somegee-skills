@@ -2050,42 +2050,33 @@ def cmd_fav(a):
         r = api("POST", "/sessions", body)
         print(f"Launched '{r['name']}' (PID: {r['pid']})")
 
-def _find_hook_relay():
-    """hook_relay.py 경로를 찾는다 (플러그인 캐시 또는 로컬)."""
-    # 1) 같은 디렉터리
-    here = Path(__file__).resolve().parent / "hook_relay.py"
-    if here.exists():
-        return str(here)
-    # 2) 플러그인 캐시에서 탐색
-    cache_root = Path.home() / ".claude" / "plugins" / "cache"
-    if cache_root.is_dir():
-        for p in sorted(cache_root.glob("**/terminal-swarm/*/skills/terminal-swarm/scripts/hook_relay.py"), reverse=True):
-            return str(p)
-    return None
+def _build_swarm_hook_command():
+    """command 타입 hook bash 명령어 생성. 데몬 미실행 시에도 에러 없이 동작.
 
-
-def _build_swarm_hook_command(python_path="python"):
-    """command 타입 hook 명령어 생성. 데몬 미실행 시에도 에러 없이 동작.
-
-    Note: Claude Code hooks는 /usr/bin/bash로 실행되므로 Windows 절대 경로
-    (C:\\Users\\...\\python.exe)를 사용하면 백슬래시가 이스케이프되어 실패한다.
-    따라서 python_path 대신 항상 'python3' 을 사용하고, 폴백으로 'python'을 시도한다.
+    설계 메모:
+    - **절대 경로(플러그인 캐시 안 hook_relay.py 등)를 settings.json에 박지 않는다.**
+      플러그인이 업데이트되면 캐시 디렉터리 이름(버전)이 바뀌어 stale path가 생기고
+      hook이 조용히 실패한다. 사용자는 알림이 끊긴 사실조차 알 수 없게 된다.
+    - 따라서 hook_relay.py 파일과 동일한 동작을 수행하는 한 줄짜리 Python을
+      인라인으로 임베드한다. 플러그인 버전과 무관하게 동작한다.
+    - Claude Code hooks는 bash로 실행되므로 Windows 절대 경로/python.exe 경로를
+      넣으면 백슬래시가 이스케이프되어 실패한다. python3/python을 PATH 기반으로
+      해석한다.
+    - 둘 다 없으면 조용히 무시 (`exit 0`)하여 hook 실패가 Claude Code 동작을
+      방해하지 않게 한다.
     """
-    relay = _find_hook_relay()
-    if relay:
-        # bash에서 실행되므로 Windows 경로를 bash 호환 형식으로 변환
-        relay_bash = relay.replace("\\", "/")
-        return f'python3 "{relay_bash}" 2>/dev/null || python "{relay_bash}" 2>/dev/null; exit 0'
-    # relay 스크립트를 못 찾으면 인라인 Python 폴백
+    inline_py = (
+        'import sys,urllib.request;'
+        'd=sys.stdin.buffer.read();'
+        'urllib.request.urlopen(urllib.request.Request('
+        f'"http://localhost:{DEFAULT_PORT}/hooks/claude-state",'
+        'data=d,headers={"Content-Type":"application/json"}),'
+        'timeout=3)'
+    )
     return (
-        'python3 -c "'
-        "import sys,urllib.request;"
-        "d=sys.stdin.buffer.read();"
-        "urllib.request.urlopen(urllib.request.Request("
-        f"'http://localhost:{DEFAULT_PORT}/hooks/claude-state',"
-        "data=d,headers={'Content-Type':'application/json'}),"
-        "timeout=3)"
-        '" 2>/dev/null || exit 0'
+        'PY=$(command -v python3 || command -v python || echo); '
+        f'[ -n "$PY" ] && "$PY" -c \'{inline_py}\' 2>/dev/null; '
+        'exit 0'
     )
 
 
@@ -2141,12 +2132,39 @@ def cmd_hooks(a):
     elif a.action == "status":
         if not settings_path.exists():
             print("No settings.json found. Run 'swarm hooks setup' first.")
-            return
+            sys.exit(1)
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
         hooks = settings.get("hooks", {})
+        # 현재 기대하는 hook command와 정확히 일치하는지 검사한다.
+        # 다르면 (오래된 인스톨, 절대 경로 stale, 등) 재설정이 필요하므로 exit 1.
+        # BAT 런처는 `hooks status` 실패 시 자동으로 `hooks setup`을 호출하여 복구한다.
+        expected_cmd = _build_swarm_hook_command()
+        all_ok = True
         for event in ("Stop", "PermissionRequest", "UserPromptSubmit"):
-            status = "configured" if event in hooks else "not configured"
-            print(f"  {event}: {status}")
+            if event not in hooks:
+                print(f"  {event}: not configured")
+                all_ok = False
+                continue
+            swarm_entries = [h for h in hooks[event] if _is_swarm_hook(h)]
+            if not swarm_entries:
+                print(f"  {event}: not configured (no swarm hook)")
+                all_ok = False
+                continue
+            is_current = False
+            for entry in swarm_entries:
+                for h in entry.get("hooks", []):
+                    if h.get("command") == expected_cmd:
+                        is_current = True
+                        break
+                if is_current:
+                    break
+            if is_current:
+                print(f"  {event}: configured (current)")
+            else:
+                print(f"  {event}: configured (outdated — re-run 'swarm hooks setup')")
+                all_ok = False
+        if not all_ok:
+            sys.exit(1)
     elif a.action == "remove":
         if not settings_path.exists():
             print("No settings.json found.")
