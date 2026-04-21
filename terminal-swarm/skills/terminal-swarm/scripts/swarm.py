@@ -406,24 +406,46 @@ class Session:
         self.register_data_callback(_on_data)
 
         try:
-            # ready 모드: ui_state 기반 대기
+            # ready 모드: ui_state(hook_state) + buffer idle fallback 이중 경로.
+            # 1.6.11+: hook 배달이 실패하거나 대시보드가 ack로 이미 ready를 해제한
+            # 경우를 대비해 "한 번이라도 새 출력이 쌓인 뒤 N초 침묵" 조건을
+            # fallback으로 둔다. 반환값의 source 필드로 어느 경로로 ready를
+            # 판정했는지 식별할 수 있다.
             if ready:
                 state = self._effective_ui_state()
                 if state == "ready":
                     return {"event": "ready", "message": f"Session '{self.name}' is ready"}
+                FALLBACK_IDLE_SEC = 2.5
+                with self._lock:
+                    baseline_lines = self._total_lines
+                had_output = False
+                last_line_count = baseline_lines
+                last_output_time = time.time()
                 while time.time() < deadline:
                     if not self.is_alive():
                         return {"event": "exit", "message": f"Session '{self.name}' exited"}
                     state = self._effective_ui_state()
                     if state == "ready":
-                        return {"event": "ready", "message": f"Session '{self.name}' is ready"}
+                        return {"event": "ready", "message": f"Session '{self.name}' is ready", "source": "hook"}
                     if state == "attention":
                         return {"event": "attention", "message": f"Session '{self.name}' needs input (permission prompt)"}
+                    with self._lock:
+                        cur_lines = self._total_lines
+                    if cur_lines > last_line_count:
+                        had_output = True
+                        last_line_count = cur_lines
+                        last_output_time = time.time()
+                    elif had_output and (time.time() - last_output_time) >= FALLBACK_IDLE_SEC:
+                        return {
+                            "event": "ready",
+                            "message": f"Session '{self.name}' is ready (buffer idle {FALLBACK_IDLE_SEC}s)",
+                            "source": "buffer-fallback",
+                        }
                     remaining = deadline - time.time()
                     if remaining <= 0:
                         break
-                    # hook state 변경은 Event로 signal되지 않으므로 0.5s 단위 wakeup.
-                    # 데이터가 오면 즉시 깨어나 state 재검사.
+                    # hook state 변경은 Event로 signal되지 않고 fallback은 시간 기반이므로
+                    # 0.5s 단위 wakeup. 데이터가 오면 즉시 깨어나 state/buffer 재검사.
                     data_event.wait(timeout=min(0.5, remaining))
                     data_event.clear()
                 return {"event": "timeout", "message": f"Timeout after {timeout}s"}

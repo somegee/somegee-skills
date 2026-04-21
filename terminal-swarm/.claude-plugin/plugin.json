@@ -1,6 +1,6 @@
 {
   "name": "terminal-swarm",
-  "version": "1.6.10",
+  "version": "1.6.11",
   "description": "Agent Swarm을 위한 headless 터미널 세션 관리. 웹 대시보드에서 여러 Claude Code 에이전트를 동시에 모니터링하고 제어합니다.",
   "author": {
     "name": "somegee",

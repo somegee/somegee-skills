@@ -45,6 +45,23 @@ config가 없으면 `$SWARM config init`로 초기화.
 
 ## 주요 기능
 
+### wait --ready 버퍼 idle fallback (1.6.11+)
+
+`wait --ready`가 hook 도달에만 의존하던 구조를 이중화. Stop hook이 세션 매핑에
+실패하거나 대시보드가 ack로 ready 상태를 이미 해제한 경우에도 hang 없이 복귀.
+
+- **경로 1 (기존)**: hook이 `ui_state="ready"`로 세팅 → 즉시 반환
+  (`source: "hook"`)
+- **경로 2 (신규 fallback)**: wait 시작 후 버퍼에 한 번이라도 새 출력이 쌓였고,
+  마지막 출력 이후 **2.5초** 동안 조용하면 ready로 간주
+  (`source: "buffer-fallback"`)
+- `attention` 상태(permission 프롬프트)는 경로 1과 동일하게 즉시 반환
+- 반환 JSON의 `source` 필드로 어느 경로였는지 식별 가능
+
+주의: fallback은 "출력이 2.5초 멈추면 응답 종료"라는 heuristic이라, 토큰
+스트리밍이 길게 쉬어가는 케이스는 조기 ready로 판정될 수 있다. Claude Code는
+스트리밍이 빠르므로 실사용에서 2.5초 공백은 거의 항상 응답 완료 지점이다.
+
 ### PTY/wait_for 동시성 최적화 (1.6.9+)
 
 다중 세션·대량 출력 환경에서 세션 reader와 `wait_for`가 서로를 블로킹하던 두 경로를
