@@ -170,11 +170,16 @@ class Session:
         self._data_callbacks = []       # WebSocket 스트리밍용 콜백 목록 (PTY 리더 스레드에서 호출)
         self._data_events_lock = threading.Lock()
         # pyte 가상 터미널 (TUI 앱의 현재 화면 상태 추적)
+        # _vt_lock은 버퍼 lock(_lock)과 분리되어 있다. pyte.Stream.feed()는
+        # 큰 ANSI 청크에서 CPU 시간이 들 수 있는데, 동일 lock을 공유하면
+        # WebSocket bridge의 get_new_raw_lines, HTTP read, wait_for가 전부
+        # TUI redraw 시간만큼 블록된다. 1.6.9에서 분리됨.
         self._vt_screen = VTermScreen(DEFAULT_SCREEN_COLS, DEFAULT_SCREEN_ROWS, history=MAX_BUFFER_LINES)
         self._vt_stream = pyte.Stream(self._vt_screen)
         self._vt_history = deque(maxlen=MAX_BUFFER_LINES)  # alt screen 스냅샷 히스토리
         self._vt_last_snapshot_time = 0.0
         self._vt_last_snapshot_hash = None
+        self._vt_lock = threading.Lock()
 
     def _default_shell(self):
         if os.name == "nt":
@@ -240,7 +245,10 @@ class Session:
                         if self._hook_state == "attention" and (time.time() - self._hook_state_time > 3):
                             self._hook_state = None  # idle로 복귀
                             self._hook_state_time = time.time()
-                        # pyte 가상 터미널에 feed + alt screen 스냅샷
+
+                    # pyte feed + alt-screen 스냅샷은 별도 lock으로 분리.
+                    # 큰 ANSI redraw가 와도 _lock을 잡고 있는 reader들을 블록하지 않는다.
+                    with self._vt_lock:
                         try:
                             self._vt_stream.feed(data)
                             if self._vt_screen._in_alt_screen:
@@ -335,14 +343,17 @@ class Session:
         return False
 
     def read_output(self, lines=None, grep=None):
-        with self._lock:
-            if self._vt_screen._in_alt_screen:
+        # alt-screen 상태와 pyte 화면은 _vt_lock 아래.
+        with self._vt_lock:
+            in_alt = self._vt_screen._in_alt_screen
+            if in_alt:
                 # TUI/alt screen 모드: 스냅샷 히스토리 + 현재 화면
                 current = [l.rstrip() for l in self._vt_screen.display if l.strip()]
                 history = list(self._vt_history)
                 output = history + ["---"] + current if history else current
-            else:
-                # 일반 모드: 기존 deque 버퍼 (순차 출력, -n으로 원하는 만큼 읽기 가능)
+        if not in_alt:
+            # 일반 모드: 기존 deque 버퍼 (순차 출력, -n으로 원하는 만큼 읽기 가능)
+            with self._lock:
                 if lines and lines > 0 and not grep:
                     n = min(lines, len(self.buffer))
                     output = [self.buffer[len(self.buffer) - n + i] for i in range(n)]
@@ -370,7 +381,7 @@ class Session:
         if self.pty:
             try:
                 self.pty.setwinsize(rows, cols)
-                with self._lock:
+                with self._vt_lock:
                     self._vt_screen.resize(rows, cols)
                 return True
             except Exception:
@@ -378,56 +389,88 @@ class Session:
         return False
 
     def wait_for(self, grep=None, exit=False, timeout=300, idle=0, lookback=50, ready=False):
-        """Block until pattern found, process exits, output idle, or ui_state ready."""
+        """Block until pattern found, process exits, output idle, or ui_state ready.
+
+        1.6.9+: PTY 리더 스레드가 새 데이터를 append할 때마다 set되는 Event를
+        register_data_callback으로 등록해 이벤트 드리븐으로 대기한다 (WebSocket bridge와
+        동일 메커니즘). 기존 0.3/0.5s 폴링이 제거되어 다중 waiter 환경에서 CPU가 거의
+        0이 되고, 데이터 도착 → 깨어남 latency가 폴링 주기에 종속되지 않는다. idle 및
+        exit 감지 정확도를 위해 최대 대기는 짧게 제한한다.
+        """
         deadline = time.time() + timeout
         grep_nospace = re.sub(r'\s+', '', grep).lower() if grep else None
 
-        # ready 모드: ui_state 기반 대기
-        if ready:
-            state = self._effective_ui_state()
-            if state == "ready":
-                return {"event": "ready", "message": f"Session '{self.name}' is ready"}
-            while time.time() < deadline:
-                if not self.is_alive():
-                    return {"event": "exit", "message": f"Session '{self.name}' exited"}
+        data_event = threading.Event()
+        def _on_data():
+            data_event.set()
+        self.register_data_callback(_on_data)
+
+        try:
+            # ready 모드: ui_state 기반 대기
+            if ready:
                 state = self._effective_ui_state()
                 if state == "ready":
                     return {"event": "ready", "message": f"Session '{self.name}' is ready"}
-                if state == "attention":
-                    return {"event": "attention", "message": f"Session '{self.name}' needs input (permission prompt)"}
-                time.sleep(0.5)
+                while time.time() < deadline:
+                    if not self.is_alive():
+                        return {"event": "exit", "message": f"Session '{self.name}' exited"}
+                    state = self._effective_ui_state()
+                    if state == "ready":
+                        return {"event": "ready", "message": f"Session '{self.name}' is ready"}
+                    if state == "attention":
+                        return {"event": "attention", "message": f"Session '{self.name}' needs input (permission prompt)"}
+                    remaining = deadline - time.time()
+                    if remaining <= 0:
+                        break
+                    # hook state 변경은 Event로 signal되지 않으므로 0.5s 단위 wakeup.
+                    # 데이터가 오면 즉시 깨어나 state 재검사.
+                    data_event.wait(timeout=min(0.5, remaining))
+                    data_event.clear()
+                return {"event": "timeout", "message": f"Timeout after {timeout}s"}
+
+            # 기존 출력에서 패턴 먼저 검사 (lookback)
+            if grep_nospace and lookback > 0:
+                with self._lock:
+                    recent = self._recent_lines(lookback)
+                for line in recent:
+                    line_nospace = re.sub(r'\s+', '', line).lower()
+                    if grep_nospace in line_nospace:
+                        return {"event": "match", "pattern": grep, "line": line.strip(), "source": "lookback"}
+
+            with self._lock:
+                seen = len(self.buffer)
+            last_change = time.time()
+            while time.time() < deadline:
+                if exit and not self.is_alive():
+                    return {"event": "exit", "message": f"Session '{self.name}' exited"}
+                with self._lock:
+                    current = len(self.buffer)
+                if current > seen:
+                    if grep_nospace:
+                        with self._lock:
+                            new_lines = list(self.buffer)[seen:current]
+                        for line in new_lines:
+                            line_nospace = re.sub(r'\s+', '', line).lower()
+                            if grep_nospace in line_nospace:
+                                return {"event": "match", "pattern": grep, "line": line.strip()}
+                    seen = current
+                    last_change = time.time()
+                elif idle > 0 and (time.time() - last_change) >= idle:
+                    return {"event": "idle", "message": f"No new output for {idle}s", "idle_seconds": idle}
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    break
+                # idle 정확도 + exit 반응성을 위해 최대 대기 제한.
+                # idle 모드: idle/2 이하로 wakeup. 일반: 최대 1s.
+                if idle > 0:
+                    wait_max = max(0.1, min(idle / 2.0, 1.0))
+                else:
+                    wait_max = 1.0
+                data_event.wait(timeout=min(wait_max, remaining))
+                data_event.clear()
             return {"event": "timeout", "message": f"Timeout after {timeout}s"}
-
-        # 기존 출력에서 패턴 먼저 검사 (lookback)
-        if grep_nospace and lookback > 0:
-            with self._lock:
-                recent = self._recent_lines(lookback)
-            for line in recent:
-                line_nospace = re.sub(r'\s+', '', line).lower()
-                if grep_nospace in line_nospace:
-                    return {"event": "match", "pattern": grep, "line": line.strip(), "source": "lookback"}
-
-        with self._lock:
-            seen = len(self.buffer)
-        last_change = time.time()
-        while time.time() < deadline:
-            if exit and not self.is_alive():
-                return {"event": "exit", "message": f"Session '{self.name}' exited"}
-            with self._lock:
-                current = len(self.buffer)
-            if current > seen:
-                if grep_nospace:
-                    new_lines = list(self.buffer)[seen:current]
-                    for line in new_lines:
-                        line_nospace = re.sub(r'\s+', '', line).lower()
-                        if grep_nospace in line_nospace:
-                            return {"event": "match", "pattern": grep, "line": line.strip()}
-                seen = current
-                last_change = time.time()
-            elif idle > 0 and (time.time() - last_change) >= idle:
-                return {"event": "idle", "message": f"No new output for {idle}s", "idle_seconds": idle}
-            time.sleep(0.3)
-        return {"event": "timeout", "message": f"Timeout after {timeout}s"}
+        finally:
+            self.unregister_data_callback(_on_data)
 
     def kill(self):
         if self.pty:

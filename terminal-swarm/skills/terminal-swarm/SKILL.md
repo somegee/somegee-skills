@@ -35,6 +35,29 @@ config가 없으면 `$SWARM config init`로 초기화.
 
 ## 주요 기능
 
+### PTY/wait_for 동시성 최적화 (1.6.9+)
+
+다중 세션·대량 출력 환경에서 세션 reader와 `wait_for`가 서로를 블로킹하던 두 경로를
+개선.
+
+**1) `pyte.Stream.feed`를 별도 lock으로 분리**
+- 기존: PTY 리더 스레드가 `_lock`을 잡은 채 `_vt_stream.feed(data)`와 alt-screen
+  스냅샷까지 처리. Claude Code TUI의 전체 redraw처럼 수 KB ANSI 덩어리가 오면
+  pyte 상태 머신 비용만큼 같은 lock을 대기하는 `get_new_raw_lines` /
+  `read_output` / `wait_for`가 전부 멈춤.
+- 수정: `Session._vt_lock`을 추가해 pyte 관련 상태(`_vt_stream`, `_vt_screen`,
+  `_vt_history`)를 버퍼 lock과 분리. `read_output`의 alt-screen 분기와 `resize`도
+  `_vt_lock` 아래로 이동. WS bridge와 HTTP reader가 TUI redraw에 물리지 않는다.
+
+**2) `wait_for`가 이벤트 드리븐으로 전환**
+- 기존: `ready` 모드 500ms, 일반 모드 300ms `time.sleep()` 폴링 루프. 오케스트
+  레이터가 N개 세션에 `wait --ready`를 동시에 걸면 N개 스레드가 계속 폴링.
+- 수정: `register_data_callback`으로 `threading.Event`를 등록해 PTY 리더가 새
+  데이터를 append할 때마다 즉시 깨어남 (WebSocket bridge와 동일 메커니즘).
+  polling CPU가 거의 0이 되고 데이터 도착 → 깨어남 latency가 폴링 주기에 종속
+  되지 않는다. idle/exit 감지 정확도를 위해 최대 대기는 ready 모드 0.5s, idle
+  모드 `idle/2`, 일반 모드 1s로 제한.
+
 ### Editor pane dirty-dot 누락 수정 (1.6.8+)
 
 여러 editor pane 사용 중 노란색 dirty-dot 아이콘과 저장 버튼이 아예 뜨지 않거나,
