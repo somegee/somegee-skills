@@ -33,6 +33,16 @@ SWARM="$(cat ~/.swarm/config.json 2>/dev/null | python -c "import sys,json;print
 
 config가 없으면 `$SWARM config init`로 초기화.
 
+> ⚠️ **매 Bash 호출마다 새 쉘이 생성되므로 `$SWARM`은 휘발된다.** `$SWARM`을
+> 쓰는 모든 Bash 호출의 **첫 줄에 위 3줄 선언 블록을 다시 포함**하거나,
+> 여러 swarm 명령을 `&&` / 줄바꿈으로 **한 호출 안에 묶어서** 실행한다.
+>
+> 실패 징후: `read: '-n': not a valid identifier` 또는
+> `create: command not found` — 이는 `$SWARM`이 빈 문자열로 치환되어
+> 뒤 토큰(`read`, `create` 등)이 bash 내장/외부 명령어로 해석된 결과다.
+> SWARM 재선언이 빠졌다는 뜻이므로 해당 Bash 호출 맨 앞에 선언 블록을
+> 추가해 재실행한다.
+
 ## 주요 기능
 
 ### PTY/wait_for 동시성 최적화 (1.6.9+)
@@ -170,6 +180,10 @@ DELETE 응답 전에 폴링(`/sessions`)이 끼어들면 세션이 잠깐 되살
 `_pendingDelete` Set으로 가드를 추가하여 DELETE 응답 후 1.5초까지 폴링을 필터링한다.
 
 ## 명령어 레퍼런스
+
+> 아래 모든 예제는 `$SWARM`이 선언된 쉘에서 실행된다고 가정한다.
+> **실제 Bash 호출마다** 위 [SWARM 변수 설정](#swarm-변수-설정) 3줄을
+> 맨 앞에 다시 포함하거나, 여러 명령을 한 호출로 묶어라.
 
 ```bash
 # 데몬 제어
