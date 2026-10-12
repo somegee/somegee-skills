@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
-import { focusMovesUp } from '../hooks/register'
+import { firstBodyKey, focusMovesUp } from '../hooks/register'
+import type { NoteTab } from '../types'
 
 // 노트 파일을 메모리에 둔다. 쓴 횟수를 돌려준다.
 function fakeFiles(on: On) {
@@ -186,16 +187,28 @@ test('처음에는 [▲ 위로] 없이 탭 줄 다음에 본문이 처음부터 
   expect(await ui.find({ key: 'remove' })).toBeDefined()
 })
 
-test('본문이 내려가 있을 때 초점이 위로 가려 하면 위로 가는 것으로 판단한다', async () => {
-  expect(focusMovesUp('chk-3', 'chk-2')).toBe(true)
-  expect(focusMovesUp('chk-0', 'scroll-up')).toBe(true)
-  expect(focusMovesUp('chk-0', 'tab-대시보드')).toBe(true)
-  expect(focusMovesUp('edit', 'chk-5')).toBe(true)
-  expect(focusMovesUp('undo', 'remove')).toBe(true)
-  expect(focusMovesUp(undefined, 'tab-대시보드')).toBe(true)
+test('본문이 내려가 있을 때 초점이 위로 가려 하면 위로 가는 것으로 판단한다', () => {
+  expect(focusMovesUp('chk-3', 'chk-2', 'chk-0')).toBe(true)
+  expect(focusMovesUp('chk-4', 'scroll-up', 'chk-4')).toBe(true)
+  expect(focusMovesUp('chk-4', 'tab-대시보드', 'chk-4')).toBe(true)
+  expect(focusMovesUp('edit', 'chk-5', 'chk-0')).toBe(true)
+  expect(focusMovesUp('undo', 'remove', 'chk-0')).toBe(true)
 
-  expect(focusMovesUp('chk-2', 'chk-3')).toBe(false)
-  expect(focusMovesUp('chk-5', 'edit')).toBe(false)
-  expect(focusMovesUp(undefined, 'chk-0')).toBe(false)
-  expect(focusMovesUp('tab-대시보드', 'tab-크론')).toBe(false)
+  expect(focusMovesUp('chk-2', 'chk-3', 'chk-0')).toBe(false)
+  expect(focusMovesUp('chk-5', 'edit', 'chk-0')).toBe(false)
+  expect(focusMovesUp(undefined, 'tab-대시보드', 'chk-0')).toBe(false)
+  expect(focusMovesUp('tab-대시보드', 'tab-크론', 'chk-0')).toBe(false)
+})
+
+test('맨 아래에서 ↓로 한 바퀴 돌아 탭 줄로 가는 건 위로 보지 않는다 (화면 왕복 방지)', () => {
+  expect(focusMovesUp('undo', 'tab-스크롤 시험', 'chk-60')).toBe(false)
+  expect(focusMovesUp('remove', 'scroll-up', 'chk-60')).toBe(false)
+  expect(focusMovesUp('chk-69', 'tab-스크롤 시험', 'chk-60')).toBe(false)
+})
+
+test('보이는 첫 요소는 제목·목표·종료 조건 묶음을 건너뛰고 센다', () => {
+  const tab: NoteTab = { title: 't', goal: 'g', doneWhen: 'd', items: [{ text: 'a', isDone: false }, { text: 'b', isDone: false }], updatedAt: '' }
+  expect(firstBodyKey(tab, 1)).toBe('chk-0')
+  expect(firstBodyKey(tab, 4)).toBe('chk-1')
+  expect(firstBodyKey(tab, 5)).toBe('edit')
 })

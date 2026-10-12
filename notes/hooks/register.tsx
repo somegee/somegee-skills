@@ -123,14 +123,30 @@ const focusRank = (key: string | undefined) => {
   const n = BODY_BUTTONS.indexOf(key)
   return n < 0 ? undefined : 100000 + n
 }
-// last 에서 target 으로 초점이 옮겨 갈 때 위쪽으로 가는지. 모르는 요소가 끼면 아니라고 본다.
-// 초점이 아직 없으면(last 없음) 탭 줄 쪽으로 갈 때만 위로 본다.
-export const focusMovesUp = (last: string | undefined, target: string | undefined) => {
+// 본문에서 지금 보이는 첫 요소. 제목·목표·종료 조건 묶음 뒤에 단계가 이어지고, 단계가 다 지나가면 버튼 줄이다.
+export const firstBodyKey = (tab: NoteTab, start: number) => {
+  const lead = 1 + (tab.goal ? 1 : 0) + (tab.doneWhen ? 1 : 0)
+  const i = Math.max(0, start - lead)
+  return i < tab.items.length ? `chk-${i}` : 'edit'
+}
+// last 에서 target 으로 초점이 옮겨 갈 때 위쪽으로 가는지. 모르는 요소가 끼거나 초점이 아직 없으면 아니라고 본다.
+// 탭 줄 쪽으로 가는 건 본문 첫 요소(first)에서 올라갈 때만 위로 본다. 맨 아래에서 ↓로 한 바퀴 돌아 탭 줄로 가는 건 위가 아니다.
+export const focusMovesUp = (last: string | undefined, target: string | undefined, first: string) => {
   const to = focusRank(target)
-  const from = last === undefined ? 0 : focusRank(last)
-  return to !== undefined && from !== undefined && to < from
+  const from = focusRank(last)
+  if (last === undefined || to === undefined || from === undefined) return false
+  return to === -1 ? last === first : to < from
 }
 let lastFocus: string | undefined
+
+// 본문이 내려가 있고, 사용자의 초점이 위로 가려 하는지.
+async function isScrolledUpMove($: EngineInterface, target: string | undefined) {
+  const start = await read($, scroll)
+  if (start <= 0) return false
+  const b = await read($, book)
+  const tab = findTab(b, b.active) ?? b.tabs.at(-1)
+  return tab !== undefined && focusMovesUp(lastFocus, target, firstBodyKey(tab, start))
+}
 
 const ok = (text: string) => ({ result: text })
 const failed = () => ({ deny: 'notes 모드 처리 중 오류가 났습니다.' })
@@ -323,7 +339,7 @@ export const register: Register = on => {
   // 창을 맨 위에 묶어 두므로 엔진은 ↑ 를 스크롤로 못 쓰고 초점 이동으로 넘긴다.
   // 본문이 내려가 있을 때 사용자의 초점이 위로 움직이려 하면, 대신 본문을 한 묶음 올리고 초점은 그 자리에 둔다.
   on('ui.focus', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
-    if (e.origin.kind === 'person' && (await read($, draft)) === null && (await read($, scroll)) > 0 && focusMovesUp(lastFocus, e.element)) {
+    if (e.origin.kind === 'person' && (await read($, draft)) === null && (await isScrolledUpMove($, e.element))) {
       await update($, scroll, s => Math.max(0, s - 1))
       return {}
     }
