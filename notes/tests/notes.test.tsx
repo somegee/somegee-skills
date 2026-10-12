@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
+import { focusMovesUp } from '../hooks/register'
 
 // 노트 파일을 메모리에 둔다. 쓴 횟수를 돌려준다.
 function fakeFiles(on: On) {
@@ -183,4 +184,18 @@ test('처음에는 [▲ 위로] 없이 탭 줄 다음에 본문이 처음부터 
   expect(await ui.find({ key: 'scroll-up' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^긴 탭 \(0\/20\)$/ })).toBeDefined()
   expect(await ui.find({ key: 'remove' })).toBeDefined()
+})
+
+test('본문이 내려가 있을 때 초점이 위로 가려 하면 위로 가는 것으로 판단한다', async () => {
+  expect(focusMovesUp('chk-3', 'chk-2')).toBe(true)
+  expect(focusMovesUp('chk-0', 'scroll-up')).toBe(true)
+  expect(focusMovesUp('chk-0', 'tab-대시보드')).toBe(true)
+  expect(focusMovesUp('edit', 'chk-5')).toBe(true)
+  expect(focusMovesUp('undo', 'remove')).toBe(true)
+  expect(focusMovesUp(undefined, 'tab-대시보드')).toBe(true)
+
+  expect(focusMovesUp('chk-2', 'chk-3')).toBe(false)
+  expect(focusMovesUp('chk-5', 'edit')).toBe(false)
+  expect(focusMovesUp(undefined, 'chk-0')).toBe(false)
+  expect(focusMovesUp('tab-대시보드', 'tab-크론')).toBe(false)
 })

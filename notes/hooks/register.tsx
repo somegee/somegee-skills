@@ -115,6 +115,23 @@ const buttonBar = (Box: ElementConstructor<BoxProps>, buttons: RenderChildren[])
   </Box>
 )
 
+// 창 안 요소의 위아래 순서. 탭 줄·[▲ 위로]·엔진 자체 요소(element 없음)는 본문 위쪽이다.
+const BODY_BUTTONS = ['edit', 'remove', 'undo']
+const focusRank = (key: string | undefined) => {
+  if (key === undefined || key === 'scroll-up' || key.startsWith('tab-')) return -1
+  if (key.startsWith('chk-')) return Number(key.slice(4))
+  const n = BODY_BUTTONS.indexOf(key)
+  return n < 0 ? undefined : 100000 + n
+}
+// last 에서 target 으로 초점이 옮겨 갈 때 위쪽으로 가는지. 모르는 요소가 끼면 아니라고 본다.
+// 초점이 아직 없으면(last 없음) 탭 줄 쪽으로 갈 때만 위로 본다.
+export const focusMovesUp = (last: string | undefined, target: string | undefined) => {
+  const to = focusRank(target)
+  const from = last === undefined ? 0 : focusRank(last)
+  return to !== undefined && from !== undefined && to < from
+}
+let lastFocus: string | undefined
+
 const ok = (text: string) => ({ result: text })
 const failed = () => ({ deny: 'notes 모드 처리 중 오류가 났습니다.' })
 
@@ -301,6 +318,18 @@ export const register: Register = on => {
     await update($, scroll, s => Math.min(Math.max(0, s + (Number.isFinite(step) ? step : 0)), most))
     // 창은 맨 위에 둔다: 탭 줄이 항상 보이게.
     return next({ ...e, offset: 0 })
+  })
+
+  // 창을 맨 위에 묶어 두므로 엔진은 ↑ 를 스크롤로 못 쓰고 초점 이동으로 넘긴다.
+  // 본문이 내려가 있을 때 사용자의 초점이 위로 움직이려 하면, 대신 본문을 한 묶음 올리고 초점은 그 자리에 둔다.
+  on('ui.focus', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    if (e.origin.kind === 'person' && (await read($, draft)) === null && (await read($, scroll)) > 0 && focusMovesUp(lastFocus, e.element)) {
+      await update($, scroll, s => Math.max(0, s - 1))
+      return {}
+    }
+    const result = await next(e)
+    if (result.deny === undefined) lastFocus = e.element
+    return result
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
