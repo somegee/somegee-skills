@@ -40,7 +40,7 @@ test('에이전트가 만든 탭이 옆 창에 보이고, 체크하면 취소선
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ plugin: 'notes', surface, component: 'Pane', requestId: 'notes', props: PANE })
-    expect(await ui.find({ type: 'Text', text: /^종료 조건$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^▾ 종료 조건$/ })).toBeDefined()
     if (surface === 'terminal') expect(await ui.find({ type: 'Text', text: /^QA 합계 일치$/ })).toBeDefined()
     else expect((await ui.find({ key: 'doneWhen-md' }))?.props.text).toBe('QA 합계 일치')
     expect((await ui.find({ type: 'Text', text: /원인 쿼리 찾기/ }))?.props.strikethrough).toBe(true)
@@ -167,7 +167,7 @@ test('목표·종료 조건·할 일·메모가 구역 제목으로 나뉘고, �
 
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   for (const label of ['목표', '종료 조건', '할 일', '메모']) {
-    expect(await ui.find({ type: 'Text', text: new RegExp(`^${label}$`) })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: new RegExp(`^▾ ${label}$`) })).toBeDefined()
   }
   expect(await ui.find({ type: 'Text', text: /^- 첫 줄$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^- 둘째 줄$/ })).toBeDefined()
@@ -262,7 +262,7 @@ test('막힘·대기 사유와 풀린 뒤 처리 내역이 그 단계 바로 아
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   expect(await ui.find({ type: 'Text', text: /⛔ 막힘: 권한 없음/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /⏳ 대기: 지윤님 확인/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^결과물$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^▾ 결과물$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^- 커밋 abc123$/ })).toBeDefined()
 
   await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '막힘', item: 1, status: 'clear', note: '지윤님이 권한 부여' } as never)
@@ -339,4 +339,24 @@ test('rename 한 이름은 세션 폴더의 custom-title.json 에서 읽는다(�
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '이름2', items: ['가'] } as never)
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   expect(await ui.find({ type: 'Text', text: /^mod · / })).toBeDefined()
+})
+
+test('구역 제목을 누르면 접히고 요약만 남으며, 다시 누르면 펴진다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '접기', items: ['가', '나'], memo: '첫\n둘' } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '접기', items: [1] } as never)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+
+  await ui.press({ key: 'fold-items' })
+  expect(await ui.find({ key: 'chk-0' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^▸ 할 일$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /\(1\/2\)/ })).toBeDefined()
+
+  await ui.press({ key: 'fold-memo' })
+  expect(await ui.find({ type: 'Text', text: /^- 첫$/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\(2줄\)/ })).toBeDefined()
+
+  await ui.press({ key: 'fold-items' })
+  expect(await ui.find({ key: 'chk-0' })).toBeDefined()
 })

@@ -9,6 +9,8 @@ const MAX_HISTORY = 20
 const book = atom({ plugin: 'notes', key: 'book' } as const, { root: '', tabs: [], history: [], future: [] } as NotesBook)
 const scroll = atom({ plugin: 'notes', key: 'scroll' } as const, 0)
 const tick = atom({ plugin: 'notes', key: 'tick' } as const, 0)
+// 접어 둔 구역. 키 = '<탭 이름>|<구역>'. 이 세션에서만 유지된다(다른 세션·파일과 공유하지 않음).
+const folded = atom({ plugin: 'notes', key: 'folded' } as const, {} as Record<string, boolean>)
 
 const SYNC_MS = 3000
 // 'N분 전 갱신' 이 흐르도록 다시 그리는 간격.
@@ -64,13 +66,14 @@ async function listedName($: EngineInterface, claudeDir: string) {
   return undefined
 }
 // 기록 파일 위치: classic 훅이 준 경로, 없으면 <.claude>/projects/<작업 폴더를 - 로 바꾼 이름>/<세션 id>.jsonl
-async function refreshTitle($: EngineInterface) {
+// isQuick: 3초마다 부를 때는 작은 파일(①②)만 본다. 큰 기록 파일(③)은 시작·프롬프트·30초마다.
+async function refreshTitle($: EngineInterface, isQuick = false) {
   const claudeDir = $.plugin.root.match(/^(.*?[\\/]\.claude)[\\/]/)?.[1]
   const transcript =
     transcriptPath ?? (claudeDir && sessionId ? `${claudeDir}/projects/${(await $.session.root()).replace(/[^A-Za-z0-9]/g, '-')}/${sessionId}.jsonl` : undefined)
   let title = transcript === undefined ? undefined : await customTitle($, transcript)
   if (title === undefined && claudeDir && sessionId) title = await listedName($, claudeDir)
-  if (title === undefined && transcript !== undefined) {
+  if (title === undefined && transcript !== undefined && !isQuick) {
     // ③ 기록이 4MB 를 넘으면 읽지 못한다(그때는 세션 번호로 보인다).
     const text = await readText($, transcript)
     if (text !== undefined) title = lastTitle(text, 'customTitle') ?? lastTitle(text, 'aiTitle')
@@ -273,7 +276,8 @@ export const register: Register = (on, options) => {
     sessionId = await $.session.id()
     const saved = await loadFile($, root)
     await update($, book, () => ({ root, ...saved, active: saved.tabs.at(-1)?.title }))
-    $.clock.every(SYNC_MS, () => void sync($))
+    // 3초마다: 다른 세션이 고친 노트 반영 + /rename 한 이름 반영.
+    $.clock.every(SYNC_MS, () => void sync($).then(() => refreshTitle($, true)))
     $.clock.every(TICK_MS, () => void update($, tick, n => (n + 1) % 100000).then(() => refreshTitle($)))
     void refreshTitle($)
     // 기본은 세션을 열면 창도 연다. /config 의 notes.autoOpen 을 끄면 /notes 로만 연다.
@@ -531,16 +535,34 @@ export const register: Register = (on, options) => {
 
     // 구역마다 제목 줄을 두고 빈 줄로 나눈다: 목표·종료 조건 / 할 일 / 결과물 / 메모. 메모는 체크 칸 없이 흐린 글자로 단계와 구별한다.
     const cols = Math.max(10, e.props.bodyColumns - 2)
-    const section = (key: string, label: string, color: string, body: RenderChildren) => (
-      <Box key={key} flexDirection="column" marginTop={1}>
+    // 구역 제목을 누르면 접고 편다. 접으면 제목 줄에 요약(개수 등)만 남는다.
+    const foldMap = await read($, folded)
+    const isFolded = (id: string) => foldMap[`${tab.title}|${id}`] === true
+    const toggleFold = (id: string) => () =>
+      void update($, folded, m => ({ ...m, [`${tab.title}|${id}`]: !m[`${tab.title}|${id}`] }))
+    const header = (id: string, label: string, color: string, summary = '') => (
+      <Button key={`fold-${id}`} label={`${isFolded(id) ? '▸' : '▾'} ${label}${summary ? ` ${summary}` : ''}`} plain onPress={toggleFold(id)}>
         <Text bold color={color}>
-          {label}
+          {`${isFolded(id) ? '▸' : '▾'} ${label}`}
         </Text>
-        <Box flexDirection="column" paddingLeft={2}>
-          {body}
-        </Box>
-      </Box>
+        {summary !== '' && <Text dimColor>{` ${summary}`}</Text>}
+      </Button>
     )
+    const section = (key: string, label: string, color: string, body: RenderChildren, summary = '') => {
+      const id = key.replace(/^b-/, '')
+      return (
+        <Box key={key} flexDirection="column" marginTop={1}>
+          {header(id, label, color, summary)}
+          {!isFolded(id) && (
+            <Box flexDirection="column" paddingLeft={2}>
+              {body}
+            </Box>
+          )}
+        </Box>
+      )
+    }
+    // 접힌 구역은 제목 줄(빈 줄 포함 2줄)만 차지한다.
+    const sectionRows = (key: string, bodyRows: number) => 2 + (isFolded(key.replace(/^b-/, '')) ? 0 : bodyRows)
     const memoLines = tab.memo?.split('\n') ?? []
     // 묶음마다 그릴 것과 차지할 줄 수(대략)를 함께 둔다.
     const blocks: { el: RenderChildren; rows: number }[] = [
@@ -561,21 +583,19 @@ export const register: Register = (on, options) => {
         ),
         rows: textRows(`${sessionLabel(tab.session) ?? '세션 기록 없음'} · 59분 전 갱신`, cols),
       },
-      tab.goal ? { el: section('b-goal', '목표', 'cyan', isRich ? md('goal-md', tab.goal) : <Text>{tab.goal}</Text>), rows: 2 + textRows(tab.goal, cols - 2) } : undefined,
+      tab.goal ? { el: section('b-goal', '목표', 'cyan', isRich ? md('goal-md', tab.goal) : <Text>{tab.goal}</Text>), rows: sectionRows('b-goal', textRows(tab.goal, cols - 2)) } : undefined,
       tab.doneWhen
-        ? { el: section('b-doneWhen', '종료 조건', 'yellow', isRich ? md('doneWhen-md', tab.doneWhen) : <Text>{tab.doneWhen}</Text>), rows: 2 + textRows(tab.doneWhen, cols - 2) }
+        ? { el: section('b-doneWhen', '종료 조건', 'yellow', isRich ? md('doneWhen-md', tab.doneWhen) : <Text>{tab.doneWhen}</Text>), rows: sectionRows('b-doneWhen', textRows(tab.doneWhen, cols - 2)) }
         : undefined,
       {
         el: (
           <Box key="b-items" marginTop={1}>
-            <Text bold color="green">
-              할 일
-            </Text>
+            {header('items', '할 일', 'green', `(${done}/${tab.items.length})`)}
           </Box>
         ),
         rows: 2,
       },
-      ...tab.items.map((i, n) => {
+      ...(isFolded('items') ? [] : tab.items).map((i, n) => {
         const isCurrent = n === current
         const mark = i.isDone ? '☑' : isCurrent ? '▶' : '☐'
         // 막힘·대기 사유, 풀린 뒤 처리 내역은 단계 바로 아래 줄에.
@@ -630,8 +650,9 @@ export const register: Register = (on, options) => {
                   </Box>
                 )
               }),
+              `(${tab.results.length})`,
             ),
-            rows: 2 + tab.results.reduce((sum, r) => sum + textRows(`- ${r}`, cols - 2), 0),
+            rows: sectionRows('b-results', tab.results.reduce((sum, r) => sum + textRows(`- ${r}`, cols - 2), 0)),
           }
         : undefined,
       memoLines.length > 0
@@ -647,8 +668,9 @@ export const register: Register = (on, options) => {
                   {line.trimStart().startsWith('-') ? line : `- ${line}`}
                 </Text>
               )),
+              `(${memoLines.length}줄)`,
             ),
-            rows: 2 + memoLines.reduce((sum, line) => sum + textRows(`- ${line}`, cols - 2), 0),
+            rows: sectionRows('b-memo', memoLines.reduce((sum, line) => sum + textRows(`- ${line}`, cols - 2), 0)),
           }
         : undefined,
     ].filter((x): x is { el: RenderChildren; rows: number } => x !== undefined)

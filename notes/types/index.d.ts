@@ -26,7 +26,8 @@ export type NotesBook = { root: string; tabs: NoteTab[]; history: NoteChange[]; 
 
 declare module 'claude-code' {
   interface PluginState {
-    // tick: 지금 하는 단계의 배경이 서서히 바뀌고 갱신 시각이 흐르도록 일정 간격으로 오르는 수.
-    notes: { book: NotesBook; scroll: number; tick: number }
+    // tick: 'N분 전 갱신' 이 흐르도록 30초마다 오르는 수.
+    // folded: 접어 둔 구역, 키 = "<탭 이름>|<구역>".
+    notes: { book: NotesBook; scroll: number; tick: number; folded: Record<string, boolean> }
   }
 }
