@@ -114,6 +114,12 @@ const buttonBar = (Box: ElementConstructor<BoxProps>, buttons: RenderChildren[])
   </Box>
 )
 
+// 터미널에서 글자가 차지하는 칸 수. 한글·한자·전각 문자와 체크 칸은 두 칸으로 센다.
+const WIDE = /[ᄀ-ᅟ☐-☒⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/
+const cellWidth = (s: string) => [...s].reduce((w, ch) => w + (WIDE.test(ch) ? 2 : 1), 0)
+// 폭 cols 에 접혀 들어갈 때 몇 줄이 되는지(대략).
+const textRows = (s: string, cols: number) => Math.max(1, Math.ceil(cellWidth(s) / Math.max(1, cols)))
+
 const ok = (text: string) => ({ result: text })
 const failed = () => ({ deny: 'notes 모드 처리 중 오류가 났습니다.' })
 
@@ -342,8 +348,9 @@ export const register: Register = on => {
       })
 
     // 탭 줄만 고정한다. 창 자체는 움직이지 않고, 스크롤하면 본문의 앞쪽 묶음(블록)을 건너뛰어 그린다.
-    // 아래쪽은 창 높이만큼 보이고 넘치는 부분은 잘린다(스크롤하면 올라온다).
-    // 구역마다 제목 줄을 두고 빈 줄로 나눈다: 목표·종료 조건 / 할 일 / 메모. 메모는 체크 칸 없이 │ 로 묶어 단계와 구별한다.
+    // 창에 다 안 들어가면 들어가는 묶음까지만 그리고 마지막 줄에 [▼ 아래로] 를 둔다(창 밖·상태 줄로 넘치지 않게).
+    // 구역마다 제목 줄을 두고 빈 줄로 나눈다: 목표·종료 조건 / 할 일 / 메모. 메모는 체크 칸 없이 흐린 글자로 단계와 구별한다.
+    const cols = Math.max(10, e.props.bodyColumns - 2)
     const section = (key: string, label: string, color: string, body: RenderChildren) => (
       <Box key={key} flexDirection="column" marginTop={1}>
         <Text bold color={color}>
@@ -354,48 +361,99 @@ export const register: Register = on => {
         </Box>
       </Box>
     )
-    const blocks: RenderChildren[] = [
-      <Text key="b-title" bold>
-        {tab.title} ({done}/{tab.items.length})
-      </Text>,
-      tab.goal && section('b-goal', '목표', 'cyan', <Text>{tab.goal}</Text>),
-      tab.doneWhen && section('b-doneWhen', '종료 조건', 'yellow', <Text>{tab.doneWhen}</Text>),
-      <Box key="b-items" marginTop={1}>
-        <Text bold color="green">
-          할 일
-        </Text>
-      </Box>,
-      ...tab.items.map((i, n) => (
-        // 줄 어디를 눌러도 체크가 바뀐다.
-        <Box key={`item-${n}`} paddingLeft={2}>
-          <Button key={`chk-${n}`} label={i.text} plain onPress={toggle(n)}>
-            {i.isDone ? '☑ ' : '☐ '}
-            <Text strikethrough={i.isDone} dimColor={i.isDone}>
-              {i.text}
-            </Text>
-          </Button>
-        </Box>
-      )),
-      tab.memo &&
-        section(
-          'b-memo',
-          '메모',
-          'magenta',
-          tab.memo.split('\n').map((line, n) => (
-            <Text key={`memo-${n}`} dimColor>
-              │ {line}
-            </Text>
-          )),
+    const memoLines = tab.memo?.split('\n') ?? []
+    // 묶음마다 그릴 것과 차지할 줄 수(대략)를 함께 둔다.
+    const blocks: { el: RenderChildren; rows: number }[] = [
+      {
+        el: (
+          <Text key="b-title" bold>
+            {tab.title} ({done}/{tab.items.length})
+          </Text>
         ),
-      buttonBar(Box, [
-        <Button key="remove" onPress={remove}>
-          탭 지우기
-        </Button>,
-        undoButton,
-      ]),
-    ].filter(Boolean)
+        rows: textRows(`${tab.title} (${done}/${tab.items.length})`, cols),
+      },
+      tab.goal ? { el: section('b-goal', '목표', 'cyan', <Text>{tab.goal}</Text>), rows: 2 + textRows(tab.goal, cols - 2) } : undefined,
+      tab.doneWhen
+        ? { el: section('b-doneWhen', '종료 조건', 'yellow', <Text>{tab.doneWhen}</Text>), rows: 2 + textRows(tab.doneWhen, cols - 2) }
+        : undefined,
+      {
+        el: (
+          <Box key="b-items" marginTop={1}>
+            <Text bold color="green">
+              할 일
+            </Text>
+          </Box>
+        ),
+        rows: 2,
+      },
+      ...tab.items.map((i, n) => ({
+        // 줄 어디를 눌러도 체크가 바뀐다.
+        el: (
+          <Box key={`item-${n}`} paddingLeft={2}>
+            <Button key={`chk-${n}`} label={i.text} plain onPress={toggle(n)}>
+              {i.isDone ? '☑ ' : '☐ '}
+              <Text strikethrough={i.isDone} dimColor={i.isDone}>
+                {i.text}
+              </Text>
+            </Button>
+          </Box>
+        ),
+        rows: textRows(`☐ ${i.text}`, cols - 2),
+      })),
+      memoLines.length > 0
+        ? {
+            el: section(
+              'b-memo',
+              '메모',
+              'magenta',
+              memoLines.map((line, n) => (
+                <Text key={`memo-${n}`} dimColor>
+                  {line}
+                </Text>
+              )),
+            ),
+            rows: 2 + memoLines.reduce((sum, line) => sum + textRows(line, cols - 2), 0),
+          }
+        : undefined,
+      {
+        el: buttonBar(Box, [
+          <Button key="remove" onPress={remove}>
+            탭 지우기
+          </Button>,
+          undoButton,
+        ]),
+        rows: 3,
+      },
+    ].filter((x): x is { el: RenderChildren; rows: number } => x !== undefined)
     const start = Math.min(Math.max(0, await read($, scroll)), blocks.length - 1)
+
+    // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)과 [▲ 위로] 줄을 빼고 남은 만큼 본문을 채운다.
+    const tabWidth = b.tabs.reduce((w, t) => w + cellWidth(t.title) + 6, 0)
+    const tabRows = 2 + Math.max(1, Math.ceil(tabWidth / cols))
+    const room = e.props.scroll.bodyRows - tabRows - (start > 0 ? 1 : 0)
+    const rest = blocks.slice(start)
+    const restRows = rest.reduce((sum, x) => sum + x.rows, 0)
+    // 다 안 들어가면 [▼ 아래로] 한 줄과 여유 한 줄을 남기고, 들어가는 묶음까지만 그린다(최소 한 묶음).
+    let shown = rest.length
+    if (restRows > room) {
+      let used = 0
+      shown = 0
+      while (shown < rest.length && used + rest[shown]!.rows <= room - 2) used += rest[shown++]!.rows
+      shown = Math.max(1, shown)
+    }
+    const hidden = rest.length - shown
     const up = () => void update($, scroll, s => Math.max(0, Math.min(s, blocks.length - 1) - 3))
+    const down = () => void update($, scroll, s => Math.min(blocks.length - 1, s + 3))
+    // 위·아래 표시: 기울인 글자에 배경색을 칠해 본문과 구별한다.
+    const pager = (key: string, text: string, onPress: () => void) => (
+      <Box flexDirection="row" justifyContent="center">
+        <Button key={key} label={text} plain onPress={onPress}>
+          <Text italic backgroundColor="blue" color="white">
+            {` ${text} `}
+          </Text>
+        </Button>
+      </Box>
+    )
 
     return (
       <Box flexDirection="column">
@@ -406,14 +464,9 @@ export const register: Register = on => {
             </Button>
           ))}
         </Box>
-        {start > 0 && (
-          <Box flexDirection="row" justifyContent="center">
-            <Button key="scroll-up" plain onPress={up}>
-              {`▲ 위로 (${start})`}
-            </Button>
-          </Box>
-        )}
-        {blocks.slice(start)}
+        {start > 0 && pager('scroll-up', `▲ 위로 (${start})`, up)}
+        {rest.slice(0, shown).map(x => x.el)}
+        {hidden > 0 && pager('scroll-down', `▼ 아래로 (${hidden})`, down)}
       </Box>
     )
   })

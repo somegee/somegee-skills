@@ -132,8 +132,36 @@ test('처음에는 [▲ 위로] 없이 탭 줄 다음에 본문이 처음부터 
   expect(await ui.find({ key: 'tab-긴 탭' })).toBeDefined()
   expect(await ui.find({ key: 'scroll-up' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^긴 탭 \(0\/20\)$/ })).toBeDefined()
-  expect(await ui.find({ key: 'remove' })).toBeDefined()
   expect(await ui.find({ key: 'edit' })).toBeUndefined()
+})
+
+test('창에 다 안 들어가면 들어가는 만큼만 그리고 [▼ 아래로] 를 두며, 누르면 내려가고 [▲ 위로] 가 생긴다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  const items = Array.from({ length: 20 }, (_, n) => `단계 ${n + 1}`)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '긴 탭', items } as never)
+
+  const small = { ...PANE, scroll: { offset: 0, bodyRows: 12 } }
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: small as never })
+  // 탭 줄 3 + 제목 1 + 할 일 2 + 단계 4 = 10, 남은 2줄은 [▼ 아래로] 와 여유 줄.
+  expect(await ui.find({ type: 'Text', text: /^단계 4$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^단계 5$/ })).toBeUndefined()
+  expect(await ui.find({ key: 'remove' })).toBeUndefined()
+  const down = await ui.find({ key: 'scroll-down' })
+  expect(down?.text).toContain('▼ 아래로 (17)')
+
+  await ui.press({ key: 'scroll-down' })
+  expect(await ui.find({ key: 'scroll-up' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^단계 1$/ })).toBeUndefined()
+})
+
+test('창에 다 들어가면 [▼ 아래로] 가 없다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '짧은 탭', items: ['가', '나'] } as never)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ key: 'scroll-down' })).toBeUndefined()
+  expect(await ui.find({ key: 'remove' })).toBeDefined()
 })
 
 test('줄의 글자를 눌러도 체크가 바뀐다', async ($, on) => {
@@ -157,7 +185,7 @@ test('목표·종료 조건·할 일·메모가 구역 제목으로 나뉘고, �
   for (const label of ['목표', '종료 조건', '할 일', '메모']) {
     expect(await ui.find({ type: 'Text', text: new RegExp(`^${label}$`) })).toBeDefined()
   }
-  expect(await ui.find({ type: 'Text', text: /^│ 첫 줄$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^│ 둘째 줄$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^첫 줄$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^둘째 줄$/ })).toBeDefined()
   expect(await ui.findAll({ type: 'Button', text: /첫 줄/ })).toHaveLength(0)
 })
