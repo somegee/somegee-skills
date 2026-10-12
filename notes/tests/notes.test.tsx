@@ -86,43 +86,7 @@ test('시스템 프롬프트 끝에 notes 사용 규칙이 붙는다', async ($,
   expect(sections[1]?.text).toContain('notes_check')
 })
 
-test('편집은 [저장] 해야 반영되고, 비운 단계는 빠지고, 새 단계가 더해진다', async ($, on) => {
-  fakeFiles(on)
-  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
-  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '편집 시험', items: ['가', '나', '다'] } as never)
-
-  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
-  await ui.press({ key: 'edit' })
-  await ui.input({ key: 'edit-item-0', text: '가 고침', kind: 'change' })
-  await ui.input({ key: 'edit-item-1', text: '', kind: 'change' })
-  await ui.input({ key: 'edit-add', text: '라' })
-  await ui.input({ key: 'edit-doneWhen', text: '모두 체크', kind: 'change' })
-  await ui.input({ key: 'edit-title', text: '편집 끝난 탭', kind: 'change' })
-
-  const before = await $.tool.call({ tool: 'mcp__notes__notes_read', tab: '편집 시험' } as never)
-  expect(String(before.result)).toContain('#1 [ ] 가')
-
-  await ui.press({ key: 'edit-save' })
-  const read = await $.tool.call({ tool: 'mcp__notes__notes_read', tab: '편집 끝난 탭' } as never)
-  expect(String(read.result)).toBe(['# 편집 끝난 탭 (0/3)', '종료 조건: 모두 체크', '#1 [ ] 가 고침', '#2 [ ] 다', '#3 [ ] 라'].join('\n'))
-})
-
-test('[취소]하면 고친 내용이 버려진다', async ($, on) => {
-  fakeFiles(on)
-  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
-  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '취소 시험', items: ['가'] } as never)
-
-  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
-  await ui.press({ key: 'edit' })
-  await ui.input({ key: 'edit-item-0', text: '바뀜', kind: 'change' })
-  await ui.press({ key: 'edit-cancel' })
-
-  expect(await ui.find({ type: 'Text', text: /^가$/ })).toBeDefined()
-  const read = await $.tool.call({ tool: 'mcp__notes__notes_read', tab: '취소 시험' } as never)
-  expect(String(read.result)).toContain('#1 [ ] 가')
-})
-
-test('되돌리기는 체크·편집·탭 지우기를 하나씩 되돌린다', async ($, on) => {
+test('되돌리기는 체크·탭 지우기를 하나씩 되돌린다', async ($, on) => {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '되돌리기', items: ['가', '나'] } as never)
@@ -141,25 +105,6 @@ test('되돌리기는 체크·편집·탭 지우기를 하나씩 되돌린다', 
   await ui.press({ key: 'undo' })
   expect(await ui.find({ type: 'Text', text: /아직 노트가 없습니다/ })).toBeDefined()
   expect(await ui.find({ key: 'undo' })).toBeUndefined()
-})
-
-test('문구 칸에서 Enter 해도 저장되지 않고, [저장] 을 눌러야 반영된다', async ($, on) => {
-  fakeFiles(on)
-  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
-  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: 'Enter 시험', items: ['가', '나'] } as never)
-
-  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
-  await ui.press({ key: 'edit' })
-  await ui.input({ key: 'edit-goal', text: '목표 넣음', kind: 'change' })
-  await ui.input({ key: 'edit-item-1', text: '나 고침' })
-
-  expect(await ui.find({ key: 'edit-item-1' })).toBeDefined()
-  const before = await $.tool.call({ tool: 'mcp__notes__notes_read', tab: 'Enter 시험' } as never)
-  expect(String(before.result)).toBe(['# Enter 시험 (0/2)', '#1 [ ] 가', '#2 [ ] 나'].join('\n'))
-
-  await ui.press({ key: 'edit-save' })
-  const read = await $.tool.call({ tool: 'mcp__notes__notes_read', tab: 'Enter 시험' } as never)
-  expect(String(read.result)).toBe(['# Enter 시험 (0/2)', '목표: 목표 넣음', '#1 [ ] 가', '#2 [ ] 나 고침'].join('\n'))
 })
 
 test('창은 번호를 붙이지 않고 에이전트가 쓴 문구 그대로 보여 준다', async ($, on) => {
@@ -187,6 +132,7 @@ test('처음에는 [▲ 위로] 없이 탭 줄 다음에 본문이 처음부터 
   expect(await ui.find({ key: 'scroll-up' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^긴 탭 \(0\/20\)$/ })).toBeDefined()
   expect(await ui.find({ key: 'remove' })).toBeDefined()
+  expect(await ui.find({ key: 'edit' })).toBeUndefined()
 })
 
 test('줄의 글자를 눌러도 체크가 바뀐다', async ($, on) => {

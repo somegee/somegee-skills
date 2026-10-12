@@ -16,11 +16,8 @@ export type NoteChange = { label: string; at: string; parts: NoteChangePart[] }
 
 export type NotesBook = { root: string; tabs: NoteTab[]; history: NoteChange[]; active?: string }
 
-// 편집 중인 초안. [저장] 전까지 파일에 쓰지 않는다.
-export type NoteDraft = NoteTab & { origTitle: string }
-
 declare module 'claude-code' {
   interface PluginState {
-    notes: { book: NotesBook; draft: NoteDraft | null; scroll: number }
+    notes: { book: NotesBook; scroll: number }
   }
 }

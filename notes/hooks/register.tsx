@@ -1,14 +1,13 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ElementConstructor, EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { NoteChange, NoteChangePart, NoteDraft, NoteItem, NotesBook, NoteTab } from '../types'
+import type { NoteChange, NoteChangePart, NoteItem, NotesBook, NoteTab } from '../types'
 
 const PANE = 'notes'
 const MAX_TABS = 30
 const MAX_HISTORY = 20
 const book = atom({ plugin: 'notes', key: 'book' } as const, { root: '', tabs: [], history: [] } as NotesBook)
 const scroll = atom({ plugin: 'notes', key: 'scroll' } as const, 0)
-const draft = atom({ plugin: 'notes', key: 'draft' } as const, null as NoteDraft | null)
 
 const SYNC_MS = 3000
 // 노트는 <.claude>/notes-data/<작업 폴더>.json 한 파일에 둔다. 같은 폴더의 세션들이 이 파일을 함께 읽고 쓴다.
@@ -289,10 +288,9 @@ export const register: Register = on => {
     return ok(`'${title}' 탭을 지웠습니다.`)
   }).catch(failed)
 
-  // 보기 화면에서는 창을 움직이지 않고 본문 안의 위치만 옮긴다(탭 줄·버튼 줄 고정). 편집 화면은 창이 그대로 스크롤한다.
+  // 창을 움직이지 않고 본문 안의 위치만 옮긴다(탭 줄 고정).
   // 키보드(방향키·페이지 키)로는 본문을 움직이지 않는다. 휠만 쓴다. 방향키는 초점 이동에만 쓰인다.
   on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
-    if ((await read($, draft)) !== null) return next(e)
     if (e.origin.kind === 'person' && e.pointer === undefined) return {}
     const b = await read($, book)
     const tab = findTab(b, b.active) ?? b.tabs.at(-1)
@@ -306,12 +304,8 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const els = $.ui.resolve(e)
-    const { Box, Text, Button } = els
-    // 모바일에는 입력 칸이 없어 편집 모드를 보여 주지 않는다.
-    const Input = 'Input' in els ? els.Input : undefined
+    const { Box, Text, Button } = $.ui.resolve(e)
     const b = await read($, book)
-    const d = await read($, draft)
     const tab = findTab(b, b.active) ?? b.tabs.at(-1)
     const last = b.history.at(-1)
 
@@ -320,70 +314,6 @@ export const register: Register = on => {
         {`↶ 되돌리기: ${last.label.length > 24 ? `${last.label.slice(0, 24)}…` : last.label}`}
       </Button>
     )
-
-    // 편집 중: 입력은 초안에만 담고, [저장] 을 눌렀을 때만 한 번에 반영한다. 문구 칸의 Enter 는 저장하지 않는다.
-    if (d && Input) {
-      const setDraft = (fn: (x: NoteDraft) => NoteDraft) => void update($, draft, x => (x ? fn(x) : x))
-      const withField = (key: 'title' | 'goal' | 'doneWhen' | 'memo', v: string) => (x: NoteDraft) => ({ ...x, [key]: v })
-      const withItem = (n: number, v: string) => (x: NoteDraft) => ({
-        ...x,
-        items: x.items.map((i, k) => (k === n ? { ...i, text: v } : i)),
-      })
-      const field = (key: 'title' | 'goal' | 'doneWhen' | 'memo') => (v: string) => setDraft(withField(key, v))
-      const itemText = (n: number) => (v: string) => setDraft(withItem(n, v))
-      const addItem = (v: string) => {
-        if (v.trim() !== '') setDraft(x => ({ ...x, items: [...x.items, { text: v.trim(), isDone: false }] }))
-      }
-      const cancel = () => void update($, draft, () => null)
-      // 그린 시점의 초안이 아니라 지금 상태의 초안을 읽어 저장한다.
-      const commit = async () => {
-        const cur = await read($, draft)
-        if (cur === null) return
-        const { origTitle, ...edited } = cur
-        const wanted = edited.title.trim().slice(0, 40)
-        await change($, `직접 편집: ${origTitle}`, c => {
-          const title = wanted !== '' && (wanted === origTitle || !c.tabs.some(t => t.title === wanted)) ? wanted : origTitle
-          const tab: NoteTab = {
-            title,
-            goal: asText(edited.goal),
-            doneWhen: asText(edited.doneWhen),
-            memo: asText(edited.memo),
-            items: edited.items.filter(i => i.text.trim() !== '').map(i => ({ ...i, text: i.text.trim() })),
-            updatedAt: now(),
-          }
-          const exists = c.tabs.some(t => t.title === origTitle)
-          return { ...c, tabs: exists ? c.tabs.map(t => (t.title === origTitle ? tab : t)) : [...c.tabs, tab], active: title }
-        })
-        await update($, draft, () => null)
-      }
-
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text bold>✎ 편집 중: {d.origTitle}</Text>
-          <Text dimColor>맨 아래 [저장] 을 눌러야 저장됩니다. [취소] = 저장 안 함. 단계 문구를 비우고 저장하면 그 단계가 빠집니다.</Text>
-          <Box flexDirection="column">
-            <Input key="edit-title" label="탭 이름" value={d.title} submitLabel="확인" onInput={field('title')} onSubmit={field('title')} />
-            <Input key="edit-goal" label="목표" value={d.goal ?? ''} submitLabel="확인" onInput={field('goal')} onSubmit={field('goal')} />
-            <Input key="edit-doneWhen" label="종료 조건" value={d.doneWhen ?? ''} submitLabel="확인" onInput={field('doneWhen')} onSubmit={field('doneWhen')} />
-          </Box>
-          <Box flexDirection="column">
-            {d.items.map((i, n) => (
-              <Input key={`edit-item-${n}`} label="•" value={i.text} submitLabel="확인" onInput={itemText(n)} onSubmit={itemText(n)} />
-            ))}
-            <Input key="edit-add" label="+" placeholder="새 단계 입력 후 Enter" submitLabel="추가" value="" onSubmit={addItem} />
-          </Box>
-          <Input key="edit-memo" label="메모" value={d.memo ?? ''} submitLabel="확인" onInput={field('memo')} onSubmit={field('memo')} />
-          {buttonBar(Box, [
-            <Button key="edit-save" variant="primary" onPress={() => void commit()}>
-              저장
-            </Button>,
-            <Button key="edit-cancel" role="dismiss" onPress={cancel}>
-              취소
-            </Button>,
-          ])}
-        </Box>
-      )
-    }
 
     if (tab === undefined) {
       return (
@@ -409,7 +339,6 @@ export const register: Register = on => {
         const tabs = c.tabs.filter(t => t.title !== tab.title)
         return { ...c, tabs, active: tabs.at(-1)?.title }
       })
-    const startEdit = () => void update($, draft, () => ({ ...tab, origTitle: tab.title }))
 
     // 탭 줄만 고정한다. 창 자체는 움직이지 않고, 스크롤하면 본문의 앞쪽 묶음(블록)을 건너뛰어 그린다.
     // 아래쪽은 창 높이만큼 보이고 넘치는 부분은 잘린다(스크롤하면 올라온다).
@@ -438,11 +367,6 @@ export const register: Register = on => {
         </Text>
       ),
       buttonBar(Box, [
-        Input && (
-          <Button key="edit" onPress={startEdit}>
-            ✎ 편집
-          </Button>
-        ),
         <Button key="remove" onPress={remove}>
           탭 지우기
         </Button>,
