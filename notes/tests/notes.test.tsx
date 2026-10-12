@@ -37,7 +37,8 @@ test('에이전트가 만든 탭이 옆 창에 보이고, 체크하면 취소선
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ plugin: 'notes', surface, component: 'Pane', requestId: 'notes', props: PANE })
-    expect((await ui.find({ type: 'Text', text: /종료 조건: QA 합계 일치/ }))).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^종료 조건$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^QA 합계 일치$/ })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: /원인 쿼리 찾기/ }))?.props.strikethrough).toBe(true)
     expect((await ui.find({ type: 'Text', text: /수정안 작성/ }))?.props.strikethrough).toBe(false)
     if (surface === 'desktop') continue
@@ -145,4 +146,18 @@ test('줄의 글자를 눌러도 체크가 바뀐다', async ($, on) => {
   expect(await ui.find({ key: 'chk-1', text: /나/ })).toBeDefined()
   await ui.press({ key: 'chk-1' })
   expect((await ui.find({ type: 'Text', text: /^나$/ }))?.props.strikethrough).toBe(true)
+})
+
+test('목표·종료 조건·할 일·메모가 구역 제목으로 나뉘고, 메모는 체크 칸 없이 줄마다 보인다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '구역 시험', goal: '목표 문장', done_when: '끝 조건', items: ['가'], memo: '첫 줄\n둘째 줄' } as never)
+
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  for (const label of ['목표', '종료 조건', '할 일', '메모']) {
+    expect(await ui.find({ type: 'Text', text: new RegExp(`^${label}$`) })).toBeDefined()
+  }
+  expect(await ui.find({ type: 'Text', text: /^│ 첫 줄$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^│ 둘째 줄$/ })).toBeDefined()
+  expect(await ui.findAll({ type: 'Button', text: /첫 줄/ })).toHaveLength(0)
 })

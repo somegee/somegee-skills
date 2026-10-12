@@ -134,6 +134,7 @@ const GUIDE = [
   '- 단계 하나를 끝낼 때마다 바로 notes_check 로 체크한다. 몰아서 체크하지 않는다.',
   '- 종료 조건·완료 기준이 정해지면 done_when 에 적는다.',
   '- 사용자가 꼭 봐야 할 것(결정 사항, 주의점, 사용자에게 넘긴 확인 요청, 커밋·푸시 대기 같은 남은 일)은 memo 에 적는다.',
+  '- memo 는 할 일이 아니라 참고 사항이다. 여러 건이면 한 건씩 줄을 바꿔 쓴다. 해야 할 일은 memo 가 아니라 items 에 넣는다.',
   '- 계획이 바뀌면 items 로 단계를 고친다.',
   '- 창은 단계에 번호를 붙이지 않는다. 순서가 중요하면 문구 앞에 번호를 직접 붙인다(예: "1. ...", 하위 단계는 "1-1. ..."). 결정·질문 같은 단계에는 번호 대신 [결정] 같은 머리표를 써도 된다. 번호를 쓰면 탭 안에서 빠지거나 겹치지 않게 1부터 차례로 맞춘다.',
   '- notes_read 결과의 #N 은 위치 번호(notes_check 에 넘기는 값)이고 문구 속 번호와 다를 수 있다.',
@@ -294,7 +295,7 @@ export const register: Register = on => {
     if (e.origin.kind === 'person' && e.pointer === undefined) return {}
     const b = await read($, book)
     const tab = findTab(b, b.active) ?? b.tabs.at(-1)
-    const most = (tab?.items.length ?? 0) + 5
+    const most = (tab?.items.length ?? 0) + 6
     // 휠 한 칸 = 본문 한 묶음. 크게 움직이면(페이지 키 등) 두 줄에 한 묶음꼴로 넘긴다.
     const by = Number.isFinite(e.by) && e.by !== 0 ? e.by : e.offset
     const step = Math.sign(by) * Math.max(1, Math.round(Math.abs(by) / 2))
@@ -342,30 +343,50 @@ export const register: Register = on => {
 
     // 탭 줄만 고정한다. 창 자체는 움직이지 않고, 스크롤하면 본문의 앞쪽 묶음(블록)을 건너뛰어 그린다.
     // 아래쪽은 창 높이만큼 보이고 넘치는 부분은 잘린다(스크롤하면 올라온다).
+    // 구역마다 제목 줄을 두고 빈 줄로 나눈다: 목표·종료 조건 / 할 일 / 메모. 메모는 체크 칸 없이 │ 로 묶어 단계와 구별한다.
+    const section = (key: string, label: string, color: string, body: RenderChildren) => (
+      <Box key={key} flexDirection="column" marginTop={1}>
+        <Text bold color={color}>
+          {label}
+        </Text>
+        <Box flexDirection="column" paddingLeft={2}>
+          {body}
+        </Box>
+      </Box>
+    )
     const blocks: RenderChildren[] = [
       <Text key="b-title" bold>
         {tab.title} ({done}/{tab.items.length})
       </Text>,
-      tab.goal && <Text key="b-goal">목표: {tab.goal}</Text>,
-      tab.doneWhen && (
-        <Text key="b-doneWhen" color="yellow">
-          종료 조건: {tab.doneWhen}
+      tab.goal && section('b-goal', '목표', 'cyan', <Text>{tab.goal}</Text>),
+      tab.doneWhen && section('b-doneWhen', '종료 조건', 'yellow', <Text>{tab.doneWhen}</Text>),
+      <Box key="b-items" marginTop={1}>
+        <Text bold color="green">
+          할 일
         </Text>
-      ),
+      </Box>,
       ...tab.items.map((i, n) => (
         // 줄 어디를 눌러도 체크가 바뀐다.
-        <Button key={`chk-${n}`} label={i.text} plain onPress={toggle(n)}>
-          {i.isDone ? '☑ ' : '☐ '}
-          <Text strikethrough={i.isDone} dimColor={i.isDone}>
-            {i.text}
-          </Text>
-        </Button>
+        <Box key={`item-${n}`} paddingLeft={2}>
+          <Button key={`chk-${n}`} label={i.text} plain onPress={toggle(n)}>
+            {i.isDone ? '☑ ' : '☐ '}
+            <Text strikethrough={i.isDone} dimColor={i.isDone}>
+              {i.text}
+            </Text>
+          </Button>
+        </Box>
       )),
-      tab.memo && (
-        <Text key="b-memo" dimColor>
-          메모: {tab.memo}
-        </Text>
-      ),
+      tab.memo &&
+        section(
+          'b-memo',
+          '메모',
+          'magenta',
+          tab.memo.split('\n').map((line, n) => (
+            <Text key={`memo-${n}`} dimColor>
+              │ {line}
+            </Text>
+          )),
+        ),
       buttonBar(Box, [
         <Button key="remove" onPress={remove}>
           탭 지우기
