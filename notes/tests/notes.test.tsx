@@ -135,26 +135,6 @@ test('처음에는 [▲ 위로] 없이 탭 줄 다음에 본문이 처음부터 
   expect(await ui.find({ key: 'edit' })).toBeUndefined()
 })
 
-test('창에 다 안 들어가면 들어가는 만큼만 그리고 [▼ 아래로] 를 두며, 누르면 내려가고 [▲ 위로] 가 생긴다', async ($, on) => {
-  fakeFiles(on)
-  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
-  const items = Array.from({ length: 20 }, (_, n) => `단계 ${n + 1}`)
-  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '긴 탭', items } as never)
-
-  const small = { ...PANE, scroll: { offset: 0, bodyRows: 12 } }
-  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: small as never })
-  // 탭 줄 3 + 제목 1 + 할 일 2 + 단계 4 = 10, 남은 2줄은 [▼ 아래로] 와 여유 줄.
-  expect(await ui.find({ type: 'Text', text: /^단계 4$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^단계 5$/ })).toBeUndefined()
-  expect(await ui.find({ key: 'remove' })).toBeUndefined()
-  const down = await ui.find({ key: 'scroll-down' })
-  expect(down?.text).toContain('▼ 아래로 (17)')
-
-  await ui.press({ key: 'scroll-down' })
-  expect(await ui.find({ key: 'scroll-up' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^단계 1$/ })).toBeUndefined()
-})
-
 test('창에 다 들어가면 [▼ 아래로] 가 없다', async ($, on) => {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
@@ -190,16 +170,31 @@ test('목표·종료 조건·할 일·메모가 구역 제목으로 나뉘고, �
   expect(await ui.findAll({ type: 'Button', text: /첫 줄/ })).toHaveLength(0)
 })
 
-test('다음 묶음이 통째로 안 들어가도 남는 줄만큼은 잘라서 보여 준다 (긴 메모)', async ($, on) => {
+test('창에 다 안 들어가면 본문을 창 높이만큼만 보이고, [▼ 아래로] 는 줄 단위로 내린다', async ($, on) => {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
-  const memo = Array.from({ length: 30 }, (_, n) => `메모 ${n + 1}`).join('\n')
-  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '긴 메모', items: ['가'], memo } as never)
+  const items = Array.from({ length: 20 }, (_, n) => `단계 ${n + 1}`)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '긴 탭', items } as never)
 
-  const small = { ...PANE, scroll: { offset: 0, bodyRows: 20 } }
+  const small = { ...PANE, scroll: { offset: 0, bodyRows: 15 } }
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: small as never })
-  expect(await ui.find({ type: 'Text', text: /^메모$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^메모 1$/ })).toBeDefined()
-  expect(await ui.find({ key: 'partial' })).toBeDefined()
-  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (2)')
+  // 탭 줄 3 → 남은 12줄 중 위·아래 표시와 여유 3줄을 빼면 창 9줄. 본문 26줄(제목 1 + 할 일 2 + 단계 20 + 버튼 3).
+  expect((await ui.find({ key: 'viewport' }))?.props.height).toBe(9)
+  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-0)
+  expect(await ui.find({ key: 'scroll-up' })).toBeUndefined()
+  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (18줄)')
+
+  await ui.press({ key: 'scroll-down' })
+  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-8)
+  expect((await ui.find({ key: 'scroll-up' }))?.text).toContain('▲ 위로 (8줄)')
+  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (10줄)')
+})
+
+test('창에 다 들어가면 위·아래 표시도 창 자리도 없다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '짧은 탭2', items: ['가'] } as never)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ key: 'viewport' })).toBeUndefined()
+  expect(await ui.find({ key: 'scroll-up' })).toBeUndefined()
 })

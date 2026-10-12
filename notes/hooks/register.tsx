@@ -120,6 +120,9 @@ const cellWidth = (s: string) => [...s].reduce((w, ch) => w + (WIDE.test(ch) ? 2
 // 폭 cols 에 접혀 들어갈 때 몇 줄이 되는지(대략).
 const textRows = (s: string, cols: number) => Math.max(1, Math.ceil(cellWidth(s) / Math.max(1, cols)))
 
+// 마지막으로 그린 탭에서 본문을 내릴 수 있는 최대 줄 수. 휠이 끝을 넘지 않게 그릴 때마다 갱신한다.
+let maxScroll = 0
+
 const ok = (text: string) => ({ result: text })
 const failed = () => ({ deny: 'notes 모드 처리 중 오류가 났습니다.' })
 
@@ -295,17 +298,12 @@ export const register: Register = on => {
     return ok(`'${title}' 탭을 지웠습니다.`)
   }).catch(failed)
 
-  // 창을 움직이지 않고 본문 안의 위치만 옮긴다(탭 줄 고정).
+  // 창을 움직이지 않고 본문 안의 위치만 줄 단위로 옮긴다(탭 줄 고정). 휠 한 칸 = 한 줄, Claude Code 기본과 같다.
   // 키보드(방향키·페이지 키)로는 본문을 움직이지 않는다. 휠만 쓴다. 방향키는 초점 이동에만 쓰인다.
   on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     if (e.origin.kind === 'person' && e.pointer === undefined) return {}
-    const b = await read($, book)
-    const tab = findTab(b, b.active) ?? b.tabs.at(-1)
-    const most = (tab?.items.length ?? 0) + 6
-    // 휠 한 칸 = 본문 한 묶음. 크게 움직이면(페이지 키 등) 두 줄에 한 묶음꼴로 넘긴다.
-    const by = Number.isFinite(e.by) && e.by !== 0 ? e.by : e.offset
-    const step = Math.sign(by) * Math.max(1, Math.round(Math.abs(by) / 2))
-    await update($, scroll, s => Math.min(Math.max(0, s + (Number.isFinite(step) ? step : 0)), most))
+    const by = Number.isFinite(e.by) ? e.by : 0
+    await update($, scroll, s => Math.min(Math.max(0, s + by), maxScroll))
     // 창은 맨 위에 둔다: 탭 줄이 항상 보이게.
     return next({ ...e, offset: 0 })
   })
@@ -425,45 +423,36 @@ export const register: Register = on => {
         rows: 3,
       },
     ].filter((x): x is { el: RenderChildren; rows: number } => x !== undefined)
-    const start = Math.min(Math.max(0, await read($, scroll)), blocks.length - 1)
-
-    // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)과 [▲ 위로] 줄을 빼고 남은 만큼 본문을 채운다.
+    // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)을 빼고 남은 만큼이 본문 자리다.
     const tabWidth = b.tabs.reduce((w, t) => w + cellWidth(t.title) + 6, 0)
     const tabRows = 2 + Math.max(1, Math.ceil(tabWidth / cols))
-    const room = e.props.scroll.bodyRows - tabRows - (start > 0 ? 1 : 0)
-    const rest = blocks.slice(start)
-    const restRows = rest.reduce((sum, x) => sum + x.rows, 0)
-    // 다 안 들어가면 [▼ 아래로] 한 줄과 여유 한 줄을 남기고, 통째로 들어가는 묶음까지 그린 뒤
-    // 남는 줄이 있으면 다음 묶음(긴 메모 등)을 그 높이만큼 잘라 보여 준다. 빈 공간이 크게 남지 않게.
-    let shown = rest.length
-    let partial: RenderChildren = null
-    if (restRows > room) {
-      const limit = Math.max(1, room - 2)
-      let used = 0
-      shown = 0
-      while (shown < rest.length && used + rest[shown]!.rows <= limit) used += rest[shown++]!.rows
-      const left = limit - used
-      if (shown < rest.length && left > 0) {
-        partial = (
-          <Box key="partial" flexDirection="column" height={left} overflow="hidden">
-            {rest[shown]!.el}
-          </Box>
-        )
-      }
-    }
-    const hidden = rest.length - shown
-    const up = () => void update($, scroll, s => Math.max(0, Math.min(s, blocks.length - 1) - 3))
-    const down = () => void update($, scroll, s => Math.min(blocks.length - 1, s + 3))
-    // 위·아래 표시: 기울인 글자에 배경색을 칠해 본문과 구별한다.
-    const pager = (key: string, text: string, onPress: () => void) => (
-      <Box flexDirection="row" justifyContent="center">
-        <Button key={key} label={text} plain onPress={onPress}>
-          <Text italic backgroundColor="gray">
-            {` ${text} `}
-          </Text>
-        </Button>
+    const avail = e.props.scroll.bodyRows - tabRows
+    const total = blocks.reduce((sum, x) => sum + x.rows, 0)
+    // 다 들어가면 그대로 그린다.
+    // 안 들어가면 [▲ 위로] 줄·[▼ 아래로] 줄·여유 한 줄을 늘 남기고(자리가 들썩이지 않게), 그 사이 창에서
+    // 본문 전체를 위로 off 줄만큼 밀어 올려 보여 준다. 줄 수는 어림이라 끝에 한 줄 여유를 더 둔다.
+    const room = Math.max(1, avail - 3)
+    const isScrollable = total > avail
+    maxScroll = isScrollable ? total - room + 1 : 0
+    const off = Math.min(Math.max(0, await read($, scroll)), maxScroll)
+    const page = Math.max(1, room - 1)
+    const up = () => void update($, scroll, s => Math.max(0, Math.min(s, maxScroll) - page))
+    const down = () => void update($, scroll, s => Math.min(maxScroll, s + page))
+    // 위·아래 표시: 기울인 글자에 배경색을 칠해 본문과 구별한다. 없을 때도 빈 줄로 자리를 지킨다.
+    const pager = (key: string, text: string | undefined, onPress: () => void) => (
+      <Box key={`${key}-row`} flexDirection="row" justifyContent="center">
+        {text === undefined ? (
+          <Text> </Text>
+        ) : (
+          <Button key={key} label={text} plain onPress={onPress}>
+            <Text italic backgroundColor="gray">
+              {` ${text} `}
+            </Text>
+          </Button>
+        )}
       </Box>
     )
+    const body = blocks.map(x => x.el)
 
     return (
       <Box flexDirection="column">
@@ -474,10 +463,19 @@ export const register: Register = on => {
             </Button>
           ))}
         </Box>
-        {start > 0 && pager('scroll-up', `▲ 위로 (${start})`, up)}
-        {rest.slice(0, shown).map(x => x.el)}
-        {partial}
-        {hidden > 0 && pager('scroll-down', `▼ 아래로 (${hidden})`, down)}
+        {isScrollable ? (
+          <Box flexDirection="column">
+            {pager('scroll-up', off > 0 ? `▲ 위로 (${off}줄)` : undefined, up)}
+            <Box key="viewport" flexDirection="column" height={room} overflow="hidden">
+              <Box key="viewport-body" flexDirection="column" marginTop={-off}>
+                {body}
+              </Box>
+            </Box>
+            {pager('scroll-down', off < maxScroll ? `▼ 아래로 (${maxScroll - off}줄)` : undefined, down)}
+          </Box>
+        ) : (
+          body
+        )}
       </Box>
     )
   })
