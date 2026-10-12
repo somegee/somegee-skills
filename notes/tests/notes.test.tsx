@@ -41,7 +41,8 @@ test('에이전트가 만든 탭이 옆 창에 보이고, 체크하면 취소선
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ plugin: 'notes', surface, component: 'Pane', requestId: 'notes', props: PANE })
     expect(await ui.find({ type: 'Text', text: /^종료 조건$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^QA 합계 일치$/ })).toBeDefined()
+    if (surface === 'terminal') expect(await ui.find({ type: 'Text', text: /^QA 합계 일치$/ })).toBeDefined()
+    else expect((await ui.find({ key: 'doneWhen-md' }))?.props.text).toBe('QA 합계 일치')
     expect((await ui.find({ type: 'Text', text: /원인 쿼리 찾기/ }))?.props.strikethrough).toBe(true)
     expect((await ui.find({ type: 'Text', text: /수정안 작성/ }))?.props.strikethrough).toBe(false)
     if (surface === 'desktop') continue
@@ -315,5 +316,27 @@ test('세션 이름은 대화 기록의 마지막 /rename 이름을 쓰고, 이�
 
   files.set(TP, '{"type":"ai-title","aiTitle":"자동 제목"}\n{"type":"custom-title","customTitle":"mod"}\n')
   await $.classic.UserPromptSubmit({ transcript_path: TP, prompt: 'b' } as never)
+  expect(await ui.find({ type: 'Text', text: /^mod · / })).toBeDefined()
+})
+
+test('데스크톱에서는 목표·종료 조건·결과물·메모를 Markdown 으로 그려 글자를 고를 수 있게 한다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '선택', goal: '목표 글', done_when: '끝', items: ['가'], results: ['PR https://x.com/1'], memo: '첫\n- 둘' } as never)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'desktop', component: 'Pane', requestId: 'notes', props: PANE })
+  expect((await ui.find({ key: 'goal-md' }))?.props.text).toBe('목표 글')
+  expect((await ui.find({ key: 'results-md' }))?.props.text).toBe('- PR [https://x.com/1](https://x.com/1)')
+  expect((await ui.find({ key: 'memo-md' }))?.props.text).toBe('- 첫\n- 둘')
+})
+
+test('rename 한 이름은 세션 폴더의 custom-title.json 에서 읽는다(대화 기록이 커도)', async ($, on) => {
+  const { files } = fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  on('classic.UserPromptSubmit', () => ({}))
+  files.set('C:/notes-test/S.jsonl', '{"type":"ai-title","aiTitle":"자동"}\n')
+  files.set('C:/notes-test/S/custom-title.json', '{"customTitle":"mod"}')
+  await $.classic.UserPromptSubmit({ transcript_path: 'C:/notes-test/S.jsonl', prompt: 'a' } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '이름2', items: ['가'] } as never)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   expect(await ui.find({ type: 'Text', text: /^mod · / })).toBeDefined()
 })

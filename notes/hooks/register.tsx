@@ -18,8 +18,9 @@ const CURRENT_BG = '#2b567f'
 // 결과물 문구에서 링크로 만들 주소.
 const URL_RE = /https?:\/\/[^\s)>\]]+/
 
-// 이 세션의 id 와 이름. 이름은 /rename 한 것(custom-title), 없으면 Claude Code 가 붙인 제목(ai-title).
-// 공식 API 가 없어 세션 대화 기록 파일(.jsonl)에서 마지막 제목 줄을 읽는다. 형식이 바뀌면 세션 번호로 보인다.
+// 이 세션의 id 와 이름. 이름은 /rename 한 것, 없으면 Claude Code 가 붙인 제목.
+// 공식 API 가 없어 Claude Code 가 남기는 파일을 읽는다(형식이 바뀌면 세션 번호로 보인다). $.fs.read 는 4MB 까지라
+// 작은 파일부터 본다: ① <기록 폴더>/<id>/custom-title.json ② <.claude>/sessions/*.json 의 name ③ 기록(.jsonl)의 마지막 제목 줄.
 let sessionId = ''
 let sessionTitle: string | undefined
 let transcriptPath: string | undefined
@@ -35,22 +36,49 @@ const lastTitle = (text: string, field: 'customTitle' | 'aiTitle') => {
     return found
   }
 }
+const readText = async ($: EngineInterface, path: string) => {
+  try {
+    return await $.fs.read(path)
+  } catch {
+    return undefined
+  }
+}
+// ① rename 한 이름: 기록 파일 옆 <id>/custom-title.json
+async function customTitle($: EngineInterface, transcript: string) {
+  const text = await readText($, `${transcript.replace(/\.jsonl$/, '')}/custom-title.json`)
+  return text === undefined ? undefined : lastTitle(text, 'customTitle')
+}
+// ② 실행 중인 세션 목록(<.claude>/sessions/<pid>.json)에서 이 세션의 name
+async function listedName($: EngineInterface, claudeDir: string) {
+  try {
+    for (const f of await $.fs.list(`${claudeDir}/sessions`)) {
+      if (!f.name.endsWith('.json')) continue
+      const text = await readText($, `${claudeDir}/sessions/${f.name}`)
+      if (text === undefined || !text.includes(sessionId)) continue
+      const name = (JSON.parse(text) as { sessionId?: string; name?: unknown }).name
+      if (typeof name === 'string' && name.trim() !== '') return name.trim()
+    }
+  } catch {
+    // 목록을 못 읽으면 다음 방법으로.
+  }
+  return undefined
+}
 // 기록 파일 위치: classic 훅이 준 경로, 없으면 <.claude>/projects/<작업 폴더를 - 로 바꾼 이름>/<세션 id>.jsonl
 async function refreshTitle($: EngineInterface) {
   const claudeDir = $.plugin.root.match(/^(.*?[\\/]\.claude)[\\/]/)?.[1]
-  const path =
+  const transcript =
     transcriptPath ?? (claudeDir && sessionId ? `${claudeDir}/projects/${(await $.session.root()).replace(/[^A-Za-z0-9]/g, '-')}/${sessionId}.jsonl` : undefined)
-  if (path === undefined) return
-  try {
-    const text = await $.fs.read(path)
-    const title = lastTitle(text, 'customTitle') ?? lastTitle(text, 'aiTitle')
-    if (title === undefined || title === sessionTitle) return
-    sessionTitle = title
-    // 이 세션이 다룬 탭의 이름표도 새 이름으로(파일엔 다음 변경 때 저장된다). 화면은 다시 그리게 한다.
-    await update($, book, b => ({ ...b, tabs: b.tabs.map(t => (t.session?.id === sessionId ? { ...t, session: sessionTag() } : t)) }))
-  } catch {
-    // 기록 파일을 못 읽으면 이전 이름(또는 세션 번호)을 그대로 쓴다.
+  let title = transcript === undefined ? undefined : await customTitle($, transcript)
+  if (title === undefined && claudeDir && sessionId) title = await listedName($, claudeDir)
+  if (title === undefined && transcript !== undefined) {
+    // ③ 기록이 4MB 를 넘으면 읽지 못한다(그때는 세션 번호로 보인다).
+    const text = await readText($, transcript)
+    if (text !== undefined) title = lastTitle(text, 'customTitle') ?? lastTitle(text, 'aiTitle')
   }
+  if (title === undefined || title === sessionTitle) return
+  sessionTitle = title
+  // 이 세션이 다룬 탭의 이름표도 새 이름으로(파일엔 다음 변경 때 저장된다). 화면은 다시 그리게 한다.
+  await update($, book, b => ({ ...b, tabs: b.tabs.map(t => (t.session?.id === sessionId ? { ...t, session: sessionTag() } : t)) }))
 }
 const sessionLabel = (s: NoteSession | undefined) =>
   (s?.id !== undefined && s.id === sessionId ? sessionTitle : undefined) ?? s?.title ?? (s?.id ? `세션 ${s.id.slice(0, 8)}` : undefined)
@@ -450,7 +478,10 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Link } = $.ui.resolve(e)
+    const { Box, Text, Button, Link, Markdown } = $.ui.resolve(e)
+    // 데스크톱 등은 목표·종료 조건·결과물·메모를 Markdown 으로 그려 드래그로 고를 수 있게 한다. 터미널은 Text.
+    const isRich = e.surface !== 'terminal'
+    const md = (key: string, text: string, dim = false) => <Markdown key={key} text={text} dimColor={dim} />
     const b = await read($, book)
     const tab = findTab(b, b.active) ?? b.tabs.at(-1)
     const last = b.history.at(-1)
@@ -530,9 +561,9 @@ export const register: Register = (on, options) => {
         ),
         rows: textRows(`${sessionLabel(tab.session) ?? '세션 기록 없음'} · 59분 전 갱신`, cols),
       },
-      tab.goal ? { el: section('b-goal', '목표', 'cyan', <Text>{tab.goal}</Text>), rows: 2 + textRows(tab.goal, cols - 2) } : undefined,
+      tab.goal ? { el: section('b-goal', '목표', 'cyan', isRich ? md('goal-md', tab.goal) : <Text>{tab.goal}</Text>), rows: 2 + textRows(tab.goal, cols - 2) } : undefined,
       tab.doneWhen
-        ? { el: section('b-doneWhen', '종료 조건', 'yellow', <Text>{tab.doneWhen}</Text>), rows: 2 + textRows(tab.doneWhen, cols - 2) }
+        ? { el: section('b-doneWhen', '종료 조건', 'yellow', isRich ? md('doneWhen-md', tab.doneWhen) : <Text>{tab.doneWhen}</Text>), rows: 2 + textRows(tab.doneWhen, cols - 2) }
         : undefined,
       {
         el: (
@@ -584,7 +615,9 @@ export const register: Register = (on, options) => {
               'b-results',
               '결과물',
               'blue',
-              tab.results.map((r, n) => {
+              isRich
+                ? md('results-md', tab.results.map(r => `- ${r.replace(URL_RE, u => `[${u}](${u})`)}`).join('\n'))
+                : tab.results.map((r, n) => {
                 // 주소가 들어 있으면 그 부분을 누를 수 있는 링크로. 앞뒤 글자는 그대로 둔다.
                 const url = r.match(URL_RE)?.[0]
                 if (url === undefined) return <Text key={`result-${n}`}>{`- ${r}`}</Text>
@@ -607,7 +640,9 @@ export const register: Register = (on, options) => {
               'b-memo',
               '메모',
               'magenta',
-              memoLines.map((line, n) => (
+              isRich
+                ? md('memo-md', memoLines.map(line => (line.trimStart().startsWith('-') ? line : `- ${line}`)).join('\n'), true)
+                : memoLines.map((line, n) => (
                 <Text key={`memo-${n}`} dimColor>
                   {line.trimStart().startsWith('-') ? line : `- ${line}`}
                 </Text>
