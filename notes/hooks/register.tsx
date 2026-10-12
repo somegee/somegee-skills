@@ -6,7 +6,7 @@ import type { NoteChange, NoteChangePart, NoteItem, NotesBook, NoteTab } from '.
 const PANE = 'notes'
 const MAX_TABS = 30
 const MAX_HISTORY = 20
-const book = atom({ plugin: 'notes', key: 'book' } as const, { root: '', tabs: [], history: [] } as NotesBook)
+const book = atom({ plugin: 'notes', key: 'book' } as const, { root: '', tabs: [], history: [], future: [] } as NotesBook)
 const scroll = atom({ plugin: 'notes', key: 'scroll' } as const, 0)
 
 const SYNC_MS = 3000
@@ -36,14 +36,16 @@ const describeTab = (t: NoteTab) => {
   return lines.join('\n')
 }
 
-type Saved = { tabs: NoteTab[]; history: NoteChange[] }
+// history = 되돌릴 수 있는 변경(오래된 것부터), future = 되돌린 뒤 다시 할 수 있는 변경(가장 최근에 되돌린 것이 끝).
+type Saved = { tabs: NoteTab[]; history: NoteChange[]; future: NoteChange[] }
 
+const asChanges = (v: unknown) => (Array.isArray(v) ? (v as NoteChange[]) : [])
 async function loadFile($: EngineInterface, root: string): Promise<Saved> {
   try {
     const saved = JSON.parse(await $.fs.read(dataPath($, root))) as Partial<Saved>
-    return { tabs: Array.isArray(saved.tabs) ? saved.tabs : [], history: Array.isArray(saved.history) ? saved.history : [] }
+    return { tabs: Array.isArray(saved.tabs) ? saved.tabs : [], history: asChanges(saved.history), future: asChanges(saved.future) }
   } catch {
-    return { tabs: [], history: [] }
+    return { tabs: [], history: [], future: [] }
   }
 }
 
@@ -75,7 +77,7 @@ async function save($: EngineInterface, root: string, saved: Saved) {
 }
 
 // 다른 세션이 고친 내용을 덮어쓰지 않도록, 고치기 직전에 파일의 최신본을 다시 읽어 그 위에 반영한다.
-// label 은 되돌리기 버튼에 보일 설명이다.
+// label 은 되돌리기 버튼에 보일 설명이다. 새로 고치면 앞으로가기 기록은 버린다.
 async function change($: EngineInterface, label: string, fn: (b: NotesBook) => NotesBook) {
   const { root } = await read($, book)
   const saved = await loadFile($, root)
@@ -83,27 +85,32 @@ async function change($: EngineInterface, label: string, fn: (b: NotesBook) => N
   const parts = diffTabs(saved.tabs, next.tabs)
   if (parts.length === 0) return next
   const history = [...saved.history, { label, at: now(), parts }].slice(-MAX_HISTORY)
-  await save($, root, { tabs: next.tabs, history })
-  return update($, book, c => ({ ...c, history }))
+  await save($, root, { tabs: next.tabs, history, future: [] })
+  return update($, book, c => ({ ...c, history, future: [] }))
 }
 
-// 가장 최근 변경 하나를 되돌린다.
-async function undo($: EngineInterface) {
+// 기록 한쪽(from)의 마지막 변경을 거꾸로 적용하고, 그 반대 방향 기록을 다른 쪽(to)에 쌓는다.
+// 되돌리기는 history → future, 앞으로가기는 future → history.
+async function step($: EngineInterface, from: 'history' | 'future') {
+  const to = from === 'history' ? 'future' : 'history'
   const { root } = await read($, book)
   const saved = await loadFile($, root)
-  const last = saved.history.at(-1)
-  if (last === undefined) return
-  const tabs = revert(saved.tabs, last)
-  const history = saved.history.slice(0, -1)
-  await save($, root, { tabs, history })
-  await update($, book, c => ({ ...c, tabs, history, active: tabs.some(t => t.title === c.active) ? c.active : tabs.at(-1)?.title }))
+  const entry = saved[from].at(-1)
+  if (entry === undefined) return
+  const tabs = revert(saved.tabs, entry)
+  const back: NoteChange = { label: entry.label, at: now(), parts: diffTabs(saved.tabs, tabs) }
+  const next: Saved = { tabs, [from]: saved[from].slice(0, -1), [to]: [...saved[to], back].slice(-MAX_HISTORY) } as Saved
+  await save($, root, next)
+  await update($, book, c => ({ ...c, ...next, active: tabs.some(t => t.title === c.active) ? c.active : tabs.at(-1)?.title }))
 }
+const undo = ($: EngineInterface) => step($, 'history')
+const redo = ($: EngineInterface) => step($, 'future')
 
 // 다른 세션의 변경을 이 세션 화면에 반영한다.
 async function sync($: EngineInterface) {
   const cur = await read($, book)
   const saved = await loadFile($, cur.root)
-  if (JSON.stringify(saved) === JSON.stringify({ tabs: cur.tabs, history: cur.history })) return
+  if (JSON.stringify(saved) === JSON.stringify({ tabs: cur.tabs, history: cur.history, future: cur.future ?? [] })) return
   await update($, book, c => ({ ...c, ...saved, active: saved.tabs.some(t => t.title === c.active) ? c.active : saved.tabs.at(-1)?.title }))
 }
 
@@ -314,9 +321,18 @@ export const register: Register = on => {
     const tab = findTab(b, b.active) ?? b.tabs.at(-1)
     const last = b.history.at(-1)
 
-    const undoButton = last && (
+    const nextUp = (b.future ?? []).at(-1)
+    const short = (label: string) => (label.length > 16 ? `${label.slice(0, 16)}…` : label)
+    const undoText = last && `↶ 되돌리기: ${short(last.label)}`
+    const redoText = nextUp && `↷ 앞으로: ${short(nextUp.label)}`
+    const undoButton = undoText && (
       <Button key="undo" onPress={() => void undo($)}>
-        {`↶ 되돌리기: ${last.label.length > 24 ? `${last.label.slice(0, 24)}…` : last.label}`}
+        {undoText}
+      </Button>
+    )
+    const redoButton = redoText && (
+      <Button key="redo" onPress={() => void redo($)}>
+        {redoText}
       </Button>
     )
 
@@ -324,7 +340,7 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column">
           <Text dimColor>아직 노트가 없습니다. 에이전트가 계획을 세우면 여기에 탭이 생깁니다.</Text>
-          {undoButton && buttonBar(Box, [undoButton])}
+          {(undoButton || redoButton) && buttonBar(Box, [undoButton, redoButton])}
         </Box>
       )
     }
@@ -420,9 +436,9 @@ export const register: Register = on => {
         탭 지우기
       </Button>,
       undoButton,
+      redoButton,
     ])
-    const undoLabel = last ? `↶ 되돌리기: ${last.label.slice(0, 24)}` : ''
-    const barRows = 2 + textRows(`[ 탭 지우기 ] [ ${undoLabel} ]`, cols - 2)
+    const barRows = 2 + textRows(`[ 탭 지우기 ] [ ${undoText ?? ''} ] [ ${redoText ?? ''} ]`, cols - 2)
     // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)·버튼 줄·여유 한 줄을 빼고 남은 만큼이 본문 자리다.
     const tabWidth = b.tabs.reduce((w, t) => w + cellWidth(t.title) + 6, 0)
     const tabRows = 2 + Math.max(1, Math.ceil(tabWidth / cols))

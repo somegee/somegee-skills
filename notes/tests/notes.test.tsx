@@ -199,3 +199,25 @@ test('창에 다 들어가면 위·아래 표시도 창 자리도 없다', async
   expect(await ui.find({ key: 'viewport' })).toBeUndefined()
   expect(await ui.find({ key: 'scroll-up' })).toBeUndefined()
 })
+
+test('되돌린 것은 [앞으로] 로 다시 하고, 새로 고치면 [앞으로] 가 사라진다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '앞으로', items: ['가', '나'] } as never)
+
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  await ui.press({ key: 'chk-0' })
+  expect(await ui.find({ key: 'redo' })).toBeUndefined()
+
+  await ui.press({ key: 'undo' })
+  expect((await ui.find({ type: 'Text', text: /^가$/ }))?.props.strikethrough).toBe(false)
+  expect((await ui.find({ key: 'redo' }))?.text).toContain('↷ 앞으로')
+
+  await ui.press({ key: 'redo' })
+  expect((await ui.find({ type: 'Text', text: /^가$/ }))?.props.strikethrough).toBe(true)
+  expect(await ui.find({ key: 'redo' })).toBeUndefined()
+
+  await ui.press({ key: 'undo' })
+  await ui.press({ key: 'chk-1' })
+  expect(await ui.find({ key: 'redo' })).toBeUndefined()
+})
