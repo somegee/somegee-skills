@@ -11,15 +11,49 @@ const scroll = atom({ plugin: 'notes', key: 'scroll' } as const, 0)
 const tick = atom({ plugin: 'notes', key: 'tick' } as const, 0)
 
 const SYNC_MS = 3000
-// 지금 하는 단계의 배경이 한 단계씩 바뀌는 간격. 한 바퀴 = PULSE.length 단계.
-const TICK_MS = 500
-const PULSE = ['#1d3d5c', '#24496d', '#2b567f', '#326291', '#2b567f', '#24496d']
+// 'N분 전 갱신' 이 흐르도록 다시 그리는 간격.
+const TICK_MS = 30000
+// 지금 하는 단계의 배경색(고정).
+const CURRENT_BG = '#2b567f'
+// 결과물 문구에서 링크로 만들 주소.
+const URL_RE = /https?:\/\/[^\s)>\]]+/
 
-// 이 세션의 id 와 이름. 이름은 /rename 한 것, 없으면 Claude Code 가 붙인 제목(classic 훅이 알려 줌).
+// 이 세션의 id 와 이름. 이름은 /rename 한 것(custom-title), 없으면 Claude Code 가 붙인 제목(ai-title).
+// 공식 API 가 없어 세션 대화 기록 파일(.jsonl)에서 마지막 제목 줄을 읽는다. 형식이 바뀌면 세션 번호로 보인다.
 let sessionId = ''
 let sessionTitle: string | undefined
+let transcriptPath: string | undefined
 const sessionTag = (): NoteSession => ({ id: sessionId, title: sessionTitle })
-const sessionLabel = (s: NoteSession | undefined) => s?.title ?? (s?.id ? `세션 ${s.id.slice(0, 8)}` : undefined)
+const lastTitle = (text: string, field: 'customTitle' | 'aiTitle') => {
+  const re = new RegExp(`"${field}":"((?:[^"\\\\]|\\\\.)*)"`, 'g')
+  let found: string | undefined
+  for (const m of text.matchAll(re)) found = m[1]
+  if (found === undefined) return undefined
+  try {
+    return (JSON.parse(`"${found}"`) as string).trim() || undefined
+  } catch {
+    return found
+  }
+}
+// 기록 파일 위치: classic 훅이 준 경로, 없으면 <.claude>/projects/<작업 폴더를 - 로 바꾼 이름>/<세션 id>.jsonl
+async function refreshTitle($: EngineInterface) {
+  const claudeDir = $.plugin.root.match(/^(.*?[\\/]\.claude)[\\/]/)?.[1]
+  const path =
+    transcriptPath ?? (claudeDir && sessionId ? `${claudeDir}/projects/${(await $.session.root()).replace(/[^A-Za-z0-9]/g, '-')}/${sessionId}.jsonl` : undefined)
+  if (path === undefined) return
+  try {
+    const text = await $.fs.read(path)
+    const title = lastTitle(text, 'customTitle') ?? lastTitle(text, 'aiTitle')
+    if (title === undefined || title === sessionTitle) return
+    sessionTitle = title
+    // 이 세션이 다룬 탭의 이름표도 새 이름으로(파일엔 다음 변경 때 저장된다). 화면은 다시 그리게 한다.
+    await update($, book, b => ({ ...b, tabs: b.tabs.map(t => (t.session?.id === sessionId ? { ...t, session: sessionTag() } : t)) }))
+  } catch {
+    // 기록 파일을 못 읽으면 이전 이름(또는 세션 번호)을 그대로 쓴다.
+  }
+}
+const sessionLabel = (s: NoteSession | undefined) =>
+  (s?.id !== undefined && s.id === sessionId ? sessionTitle : undefined) ?? s?.title ?? (s?.id ? `세션 ${s.id.slice(0, 8)}` : undefined)
 
 // 마지막 갱신이 지금부터 얼마 전인지 사람 말로.
 const ago = (iso: string, nowMs: number) => {
@@ -194,12 +228,15 @@ export const register: Register = (on, options) => {
   })
 
   // 세션 이름은 classic 훅 입력의 session_title 로만 알 수 있다. 시작할 때와 프롬프트마다 갱신한다(/rename 반영).
+  // classic 훅은 기록 파일 경로를 준다. 시작할 때와 프롬프트를 보낼 때마다 이름을 다시 읽는다(/rename 반영).
   on('classic.SessionStart', async ($, e, next) => {
-    if (typeof e.session_title === 'string' && e.session_title.trim() !== '') sessionTitle = e.session_title.trim()
+    if (typeof e.transcript_path === 'string' && e.transcript_path !== '') transcriptPath = e.transcript_path
+    await refreshTitle($)
     return next(e)
   })
   on('classic.UserPromptSubmit', async ($, e, next) => {
-    if (typeof e.session_title === 'string' && e.session_title.trim() !== '') sessionTitle = e.session_title.trim()
+    if (typeof e.transcript_path === 'string' && e.transcript_path !== '') transcriptPath = e.transcript_path
+    await refreshTitle($)
     return next(e)
   })
 
@@ -209,7 +246,8 @@ export const register: Register = (on, options) => {
     const saved = await loadFile($, root)
     await update($, book, () => ({ root, ...saved, active: saved.tabs.at(-1)?.title }))
     $.clock.every(SYNC_MS, () => void sync($))
-    $.clock.every(TICK_MS, () => void update($, tick, n => (n + 1) % 100000))
+    $.clock.every(TICK_MS, () => void update($, tick, n => (n + 1) % 100000).then(() => refreshTitle($)))
+    void refreshTitle($)
     // 기본은 세션을 열면 창도 연다. /config 의 notes.autoOpen 을 끄면 /notes 로만 연다.
     if (options.autoOpen !== false && e.isInteractive) void $.ui.open({ id: PANE, title: 'notes' })
 
@@ -412,7 +450,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const { Box, Text, Button, Link } = $.ui.resolve(e)
     const b = await read($, book)
     const tab = findTab(b, b.active) ?? b.tabs.at(-1)
     const last = b.history.at(-1)
@@ -442,10 +480,9 @@ export const register: Register = (on, options) => {
     }
 
     const done = tab.items.filter(i => i.isDone).length
-    // 지금 하는 단계 = 아직 안 끝난 첫 단계. tick 을 읽어 두면 일정 간격으로 다시 그려져 배경이 서서히 바뀐다.
-    const beat = await read($, tick)
+    // 지금 하는 단계 = 아직 안 끝난 첫 단계. tick 을 읽어 두면 일정 간격으로 다시 그려져 갱신 시각이 흐른다.
+    await read($, tick)
     const current = tab.items.findIndex(i => !i.isDone)
-    const pulse = PULSE[beat % PULSE.length]!
     const select = (title: string) => () =>
       void update($, book, c => ({ ...c, active: title })).then(() => update($, scroll, () => 0))
     const toggle = (n: number) => () =>
@@ -522,7 +559,7 @@ export const register: Register = (on, options) => {
               <Button key={`chk-${n}`} label={`${mark} ${i.text}`} plain dimColor={i.isDone} onPress={toggle(n)}>
                 {`${mark} `}
                 {isCurrent ? (
-                  <Text bold strikethrough={false} color="white" backgroundColor={pulse}>
+                  <Text bold strikethrough={false} color="white" backgroundColor={CURRENT_BG}>
                     {i.text}
                   </Text>
                 ) : (
@@ -547,9 +584,19 @@ export const register: Register = (on, options) => {
               'b-results',
               '결과물',
               'blue',
-              tab.results.map((r, n) => (
-                <Text key={`result-${n}`}>{`- ${r}`}</Text>
-              )),
+              tab.results.map((r, n) => {
+                // 주소가 들어 있으면 그 부분을 누를 수 있는 링크로. 앞뒤 글자는 그대로 둔다.
+                const url = r.match(URL_RE)?.[0]
+                if (url === undefined) return <Text key={`result-${n}`}>{`- ${r}`}</Text>
+                const [before, after] = [r.slice(0, r.indexOf(url)), r.slice(r.indexOf(url) + url.length)]
+                return (
+                  <Box key={`result-${n}`} flexDirection="row" flexWrap="wrap">
+                    <Text>{`- ${before}`}</Text>
+                    <Link key={`result-link-${n}`} href={url} />
+                    {after.trim() !== '' && <Text>{after}</Text>}
+                  </Box>
+                )
+              }),
             ),
             rows: 2 + tab.results.reduce((sum, r) => sum + textRows(`- ${r}`, cols - 2), 0),
           }

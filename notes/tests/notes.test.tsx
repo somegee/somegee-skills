@@ -1,21 +1,24 @@
 import { expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-// 노트 파일을 메모리에 둔다. 쓴 횟수를 돌려준다.
+// 노트 파일을 메모리에 둔다. 쓴 횟수를 돌려준다. 경로는 / 로 맞춰 둔다(엔진이 \ 로 바꿔 넘기기도 한다).
 function fakeFiles(on: On) {
   const files = new Map<string, string>()
   const writes: string[] = []
+  const reads: string[] = []
+  const norm = (p: string) => p.replace(/\\/g, '/')
   on('fs.read', (_$, e) => {
-    const text = files.get(e.path)
+    const text = files.get(norm(e.path))
+    reads.push(norm(e.path))
     if (text === undefined) throw new Error('ENOENT')
     return { value: text }
   })
   on('fs.write', (_$, e) => {
-    files.set(e.path, e.text)
-    writes.push(e.path)
+    files.set(norm(e.path), e.text)
+    writes.push(norm(e.path))
     return { value: undefined }
   })
-  return { files, writes }
+  return { files, writes, reads }
 }
 
 const PANE = { title: 'notes', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 200 } } as const
@@ -271,7 +274,7 @@ test('막힘·대기 사유와 풀린 뒤 처리 내역이 그 단계 바로 아
   expect(await ui.find({ type: 'Text', text: /^- 커밋 abc123$/ })).toBeDefined()
 })
 
-test('지금 하는 단계(안 끝난 첫 단계)는 ▶ 와 배경색으로, 제목 아래엔 세션과 갱신 시각이 보이고, [닫기] 가 있다', async ($, on) => {
+test('지금 하는 단계(안 끝난 첫 단계)는 ▶ 와 고정 배경색으로, 제목 아래엔 세션과 갱신 시각이 보이고, [닫기] 가 있다', async ($, on) => {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '현재 단계', items: ['가', '나', '다'] } as never)
@@ -283,4 +286,34 @@ test('지금 하는 단계(안 끝난 첫 단계)는 ▶ 와 배경색으로, �
   expect((await ui.find({ key: 'chk-2' }))?.props.label).toBe('☐ 다')
   expect(await ui.find({ type: 'Text', text: /· (방금|[0-9]+분 전) 갱신$/ })).toBeDefined()
   expect(await ui.find({ key: 'close' })).toBeDefined()
+})
+
+test('결과물에 주소가 있으면 링크로 그린다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '링크', items: ['가'], results: ['PR https://github.com/a/b/pull/1 (리뷰 대기)', '커밋 abc'] } as never)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  const links = await ui.findAll({ type: 'Link' })
+  expect(links).toHaveLength(1)
+  expect(links[0]?.props.href).toBe('https://github.com/a/b/pull/1')
+  expect(await ui.find({ type: 'Text', text: /^- 커밋 abc$/ })).toBeDefined()
+})
+
+test('세션 이름은 대화 기록의 마지막 /rename 이름을 쓰고, 이름을 바꾸면 다음 프롬프트에 반영된다', async ($, on) => {
+  const { files, reads } = fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  on('classic.UserPromptSubmit', () => ({}))
+  // 엔진이 경로를 절대 경로로 바꿔 읽으므로 처음부터 절대 경로로 둔다.
+  const TP = 'C:/notes-test/T.jsonl'
+  files.set(TP, '{"type":"ai-title","aiTitle":"자동 제목"}\n')
+  await $.classic.UserPromptSubmit({ transcript_path: TP, prompt: 'a' } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '이름', items: ['가'] } as never)
+
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(reads).toContain(TP)
+  expect(await ui.find({ type: 'Text', text: /^자동 제목 · / })).toBeDefined()
+
+  files.set(TP, '{"type":"ai-title","aiTitle":"자동 제목"}\n{"type":"custom-title","customTitle":"mod"}\n')
+  await $.classic.UserPromptSubmit({ transcript_path: TP, prompt: 'b' } as never)
+  expect(await ui.find({ type: 'Text', text: /^mod · / })).toBeDefined()
 })
