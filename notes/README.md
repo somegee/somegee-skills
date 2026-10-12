@@ -29,6 +29,7 @@ claude plugin install notes@somegee-skills --scope user
 
 - 노트는 `~/.claude/notes-data/<작업폴더>.json` 에 저장된다(플러그인 버전이 바뀌어도 유지). PC마다 따로이고 외부로 아무것도 보내지 않는다.
 - 본문은 마우스 휠로만 스크롤한다. 방향키는 버튼 사이 초점 이동에만 쓰인다.
+- 세션을 시작하면 옆 창이 저절로 열린다(기본값). 끄려면 `/config` 에서 notes 의 「세션 시작 시 notes 창 자동 열기」를 끈다.
 - 터미널이 144칸보다 좁으면 옆 창이 자동으로 열리지 않는다. 그때는 `/notes` 로 연다.
 - VS Code 확장, `claude -p`(무인 실행)에서는 창이 그려지지 않는다.
 - 개발 중에는 `claude --plugin-dir <이 폴더>` 로 띄우고 고친 뒤 `/reload-plugins`.

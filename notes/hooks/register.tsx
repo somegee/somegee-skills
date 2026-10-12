@@ -159,7 +159,7 @@ const GUIDE = [
   '- 탭 삭제(notes_close)는 사용자가 정리를 원할 때만 한다.',
 ].join('\n')
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
     return { sections: [...composed.sections, { id: 'notes:guide', text: GUIDE, scope: 'session' }] }
@@ -170,6 +170,8 @@ export const register: Register = on => {
     const saved = await loadFile($, root)
     await update($, book, () => ({ root, ...saved, active: saved.tabs.at(-1)?.title }))
     $.clock.every(SYNC_MS, () => void sync($))
+    // 기본은 세션을 열면 창도 연다. /config 의 notes.autoOpen 을 끄면 /notes 로만 연다.
+    if (options.autoOpen !== false && e.isInteractive) void $.ui.open({ id: PANE, title: 'notes' })
 
     await $.command.register({ name: 'notes', description: '노트 옆 창 열기 (계획·진행상황·종료 조건)' })
     await $.tool.register({
@@ -422,11 +424,11 @@ export const register: Register = on => {
               'magenta',
               memoLines.map((line, n) => (
                 <Text key={`memo-${n}`} dimColor>
-                  {line}
+                  {line.trimStart().startsWith('-') ? line : `- ${line}`}
                 </Text>
               )),
             ),
-            rows: 2 + memoLines.reduce((sum, line) => sum + textRows(line, cols - 2), 0),
+            rows: 2 + memoLines.reduce((sum, line) => sum + textRows(`- ${line}`, cols - 2), 0),
           }
         : undefined,
     ].filter((x): x is { el: RenderChildren; rows: number } => x !== undefined)

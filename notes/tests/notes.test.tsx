@@ -165,8 +165,8 @@ test('목표·종료 조건·할 일·메모가 구역 제목으로 나뉘고, �
   for (const label of ['목표', '종료 조건', '할 일', '메모']) {
     expect(await ui.find({ type: 'Text', text: new RegExp(`^${label}$`) })).toBeDefined()
   }
-  expect(await ui.find({ type: 'Text', text: /^첫 줄$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^둘째 줄$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^- 첫 줄$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^- 둘째 줄$/ })).toBeDefined()
   expect(await ui.findAll({ type: 'Button', text: /첫 줄/ })).toHaveLength(0)
 })
 
@@ -235,4 +235,13 @@ test('데스크톱에서는 체크 표시가 버튼 이름에 들어가고, 스�
   expect((await ui.find({ key: 'chk-1' }))?.props.label).toBe('☐ 단계 2')
   expect(await ui.find({ key: 'viewport' })).toBeUndefined()
   expect(await ui.find({ key: 'remove' })).toBeDefined()
+})
+
+test('메모가 이미 - 로 시작하면 - 를 겹쳐 붙이지 않는다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '메모 머리표', items: ['가'], memo: '- 이미 있음\n없음' } as never)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ type: 'Text', text: /^- 이미 있음$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^- 없음$/ })).toBeDefined()
 })

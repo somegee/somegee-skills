@@ -1,10 +1,18 @@
 {
   "name": "notes",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "에이전트가 계획·진행상황·종료조건을 탭별 노트로 기록하고, 사용자가 옆 창에서 바로 확인하는 모드",
   "types": "./types/index.d.ts",
   "author": {
     "name": "somegee",
     "email": "somegee@users.noreply.github.com"
+  },
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "세션 시작 시 notes 창 자동 열기",
+      "description": "켜 두면 세션을 시작할 때 notes 옆 창이 저절로 열린다. 끄면 /notes 로만 연다.",
+      "default": true
+    }
   }
 }
