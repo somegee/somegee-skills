@@ -1,6 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ElementConstructor, EngineInterface, Register, RenderChildren } from 'claude-code'
 
+import { callSummary, toCallDisplay } from './call-summary'
 import type { NoteChange, NoteChangePart, NoteItem, NoteItemStatus, NotesBook, NoteSession, NoteTab } from '../types'
 
 const PANE = 'notes'
@@ -479,6 +480,30 @@ export const register: Register = (on, options) => {
     await update($, scroll, s => Math.min(Math.max(0, s + by), maxScroll))
     // 창은 맨 위에 둔다: 탭 줄이 항상 보이게.
     return next({ ...e, offset: 0 })
+  })
+
+  // 대화창의 notes 도구 호출 줄. 설정 callDisplay: 요약(기본, 한 줄) / 숨김 / 원래대로(엔진이 그리던 대로).
+  // 결과 칸(탭 전체 내용)은 요약·숨김일 때 비운다. 에이전트가 받는 결과는 그대로다(화면만 바뀜).
+  const callDisplay = toCallDisplay(options.callDisplay)
+  on('ui.render', { component: 'ToolUse' }, ($, e, next) => {
+    const summary = callSummary(e.props.tool, e.props.input)
+    if (summary === undefined || callDisplay === '원래대로') return next(e)
+    const { Box, Text } = $.ui.resolve(e)
+    if (callDisplay === '숨김') return <Box key="notes-hidden" />
+    const { isRunning, isErrored, isInterrupted } = e.props
+    const tail = isErrored ? ' · 실패' : isInterrupted ? ' · 중단됨' : isRunning ? ' …' : ''
+    return (
+      <Box key="notes-call">
+        <Text dimColor={!isErrored} color={isErrored ? 'red' : undefined}>
+          {`${summary}${tail}`}
+        </Text>
+      </Box>
+    )
+  })
+  on('ui.render', { component: 'ToolResult' }, ($, e, next) => {
+    if (callSummary(e.props.tool, undefined) === undefined || callDisplay === '원래대로') return next(e)
+    const { Box } = $.ui.resolve(e)
+    return <Box key="notes-result" />
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {

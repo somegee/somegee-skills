@@ -378,3 +378,74 @@ test('본문이 창보다 길어도 구역 상자가 눌려 줄지 않는다(빈
   expect(await big.find({ key: 'viewport' })).toBeUndefined()
   expect((await big.find({ key: 'content' }))?.props.flexShrink).toBe(0)
 })
+
+// 대화창의 notes 도구 호출 줄. 설정 callDisplay: 요약(기본) / 숨김 / 원래대로.
+const callRow = (tool: string, input: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+  component: 'ToolUse' as const,
+  requestId: 'tu1',
+  props: { tool_use_id: 'tu1', tool, input, isRunning: false, isErrored: false, isInterrupted: false, ...extra } as never,
+})
+const resultRow = (tool: string) => ({
+  component: 'ToolResult' as const,
+  requestId: 'tu1',
+  props: { tool_use_id: 'tu1', tool, output: '# 긴 탭 전체 내용', isErrored: false } as never,
+})
+
+// 엔진 대역: notes 가 넘긴(next) 줄은 엔진이 원래 그리던 줄로 그린다.
+function engineRows(on: On) {
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return (<Text key="engine-row">engine</Text>) as never
+  })
+}
+
+test('기본(요약): notes 호출은 한 줄 요약으로, 결과 칸은 비운다', async ($, on) => {
+  engineRows(on)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const check = await $.ui.mount({ plugin: 'notes', surface, ...callRow('mcp__notes__notes_check', { tab: '배포', items: [2, 3] }) })
+    expect((await check.find({ key: 'notes-call' }))?.text).toContain('배포 · #2, #3 체크')
+    await check.unmount()
+
+    const write = await $.ui.mount({ plugin: 'notes', surface, ...callRow('mcp__notes__notes_write', { tab: '배포', add_items: ['a', 'b'] }) })
+    expect((await write.find({ key: 'notes-call' }))?.text).toContain('배포 · 단계 2개 추가')
+    await write.unmount()
+
+    const status = await $.ui.mount({ plugin: 'notes', surface, ...callRow('mcp__notes__notes_status', { tab: '배포', item: 4, status: 'blocked' }) })
+    expect((await status.find({ key: 'notes-call' }))?.text).toContain('배포 · #4 막힘')
+    await status.unmount()
+
+    const failed = await $.ui.mount({ plugin: 'notes', surface, ...callRow('mcp__notes__notes_read', {}, { isErrored: true }) })
+    expect((await failed.find({ key: 'notes-call' }))?.text).toContain('실패')
+    await failed.unmount()
+
+    const result = await $.ui.mount({ plugin: 'notes', surface, ...resultRow('mcp__notes__notes_check') })
+    expect(await result.find({ type: 'Text', text: /긴 탭/ })).toBeUndefined()
+    expect(await result.find({ key: 'notes-result' })).toBeDefined()
+    await result.unmount()
+  }
+})
+
+test('다른 도구의 줄은 건드리지 않는다', async ($, on) => {
+  engineRows(on)
+  const bash = await $.ui.mount({ plugin: 'notes', surface: 'terminal', ...callRow('Bash', { command: 'ls' }) })
+  expect(await bash.find({ key: 'notes-call' })).toBeUndefined()
+  expect(await bash.find({ type: 'Text', text: /^engine$/ })).toBeDefined()
+})
+
+test('숨김: notes 호출 줄과 결과 칸이 모두 비어 있다', { options: { callDisplay: '숨김' } }, async ($, on) => {
+  engineRows(on)
+  const row = await $.ui.mount({ plugin: 'notes', surface: 'terminal', ...callRow('mcp__notes__notes_check', { tab: '배포', items: [1] }) })
+  expect(await row.find({ key: 'notes-call' })).toBeUndefined()
+  expect(await row.find({ key: 'notes-hidden' })).toBeDefined()
+})
+
+test('원래대로: notes 호출 줄을 엔진이 그리던 대로 둔다', { options: { callDisplay: '원래대로' } }, async ($, on) => {
+  engineRows(on)
+  const row = await $.ui.mount({ plugin: 'notes', surface: 'terminal', ...callRow('mcp__notes__notes_check', { tab: '배포', items: [1] }) })
+  expect(await row.find({ key: 'notes-call' })).toBeUndefined()
+  expect(await row.find({ key: 'notes-hidden' })).toBeUndefined()
+  expect(await row.find({ type: 'Text', text: /^engine$/ })).toBeDefined()
+  const result = await $.ui.mount({ plugin: 'notes', surface: 'terminal', ...resultRow('mcp__notes__notes_check') })
+  expect(await result.find({ key: 'notes-result' })).toBeUndefined()
+  expect(await result.find({ type: 'Text', text: /^engine$/ })).toBeDefined()
+})
