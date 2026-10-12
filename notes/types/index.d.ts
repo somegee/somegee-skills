@@ -1,11 +1,18 @@
-export type NoteItem = { text: string; isDone: boolean }
+// status: 막힘(blocked)·대기(waiting) 표시, note 는 그 사유. 풀리면 status 를 비우고 resolved 에 처리 내역을 남긴다.
+export type NoteItemStatus = 'blocked' | 'waiting'
+export type NoteItem = { text: string; isDone: boolean; status?: NoteItemStatus; note?: string; resolved?: string }
+
+// 이 탭을 마지막으로 다룬 세션. title 은 /rename 이름(없으면 자동 제목), 둘 다 없으면 비어 있다.
+export type NoteSession = { id: string; title?: string }
 
 export type NoteTab = {
   title: string
   goal?: string
   doneWhen?: string
   items: NoteItem[]
+  results?: string[]
   memo?: string
+  session?: NoteSession
   updatedAt: string
 }
 
@@ -19,6 +26,7 @@ export type NotesBook = { root: string; tabs: NoteTab[]; history: NoteChange[]; 
 
 declare module 'claude-code' {
   interface PluginState {
-    notes: { book: NotesBook; scroll: number }
+    // tick: 지금 하는 단계의 배경이 서서히 바뀌고 갱신 시각이 흐르도록 일정 간격으로 오르는 수.
+    notes: { book: NotesBook; scroll: number; tick: number }
   }
 }

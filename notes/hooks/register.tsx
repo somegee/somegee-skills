@@ -1,15 +1,36 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ElementConstructor, EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { NoteChange, NoteChangePart, NoteItem, NotesBook, NoteTab } from '../types'
+import type { NoteChange, NoteChangePart, NoteItem, NoteItemStatus, NotesBook, NoteSession, NoteTab } from '../types'
 
 const PANE = 'notes'
 const MAX_TABS = 30
 const MAX_HISTORY = 20
 const book = atom({ plugin: 'notes', key: 'book' } as const, { root: '', tabs: [], history: [], future: [] } as NotesBook)
 const scroll = atom({ plugin: 'notes', key: 'scroll' } as const, 0)
+const tick = atom({ plugin: 'notes', key: 'tick' } as const, 0)
 
 const SYNC_MS = 3000
+// 지금 하는 단계의 배경이 한 단계씩 바뀌는 간격. 한 바퀴 = PULSE.length 단계.
+const TICK_MS = 500
+const PULSE = ['#1d3d5c', '#24496d', '#2b567f', '#326291', '#2b567f', '#24496d']
+
+// 이 세션의 id 와 이름. 이름은 /rename 한 것, 없으면 Claude Code 가 붙인 제목(classic 훅이 알려 줌).
+let sessionId = ''
+let sessionTitle: string | undefined
+const sessionTag = (): NoteSession => ({ id: sessionId, title: sessionTitle })
+const sessionLabel = (s: NoteSession | undefined) => s?.title ?? (s?.id ? `세션 ${s.id.slice(0, 8)}` : undefined)
+
+// 마지막 갱신이 지금부터 얼마 전인지 사람 말로.
+const ago = (iso: string, nowMs: number) => {
+  const sec = Math.max(0, Math.round((nowMs - Date.parse(iso)) / 1000))
+  if (!Number.isFinite(sec) || sec < 60) return '방금'
+  if (sec < 3600) return `${Math.floor(sec / 60)}분 전`
+  if (sec < 86400) return `${Math.floor(sec / 3600)}시간 전`
+  return `${Math.floor(sec / 86400)}일 전`
+}
+
+const STATUS_MARK: Record<NoteItemStatus, string> = { blocked: '⛔ 막힘', waiting: '⏳ 대기' }
 // 노트는 <.claude>/notes-data/<작업 폴더>.json 한 파일에 둔다. 같은 폴더의 세션들이 이 파일을 함께 읽고 쓴다.
 // 마켓플레이스 설치본은 버전마다 폴더가 바뀌므로 모드 폴더 밖에 둔다. .claude 아래가 아니면 모드 폴더의 data/.
 const dataDir = (pluginRoot: string) => {
@@ -31,7 +52,12 @@ const describeTab = (t: NoteTab) => {
   const lines = [`# ${t.title} (${done}/${t.items.length})`]
   if (t.goal) lines.push(`목표: ${t.goal}`)
   if (t.doneWhen) lines.push(`종료 조건: ${t.doneWhen}`)
-  t.items.forEach((i, n) => lines.push(`#${n + 1} [${i.isDone ? 'x' : ' '}] ${i.text}`))
+  t.items.forEach((i, n) => {
+    lines.push(`#${n + 1} [${i.isDone ? 'x' : ' '}] ${i.text}`)
+    if (i.status) lines.push(`    ${STATUS_MARK[i.status]}${i.note ? `: ${i.note}` : ''}`)
+    if (i.resolved) lines.push(`    ↳ 해결: ${i.resolved}`)
+  })
+  if (t.results?.length) lines.push(`결과물: ${t.results.join(' / ')}`)
   if (t.memo) lines.push(`메모: ${t.memo}`)
   return lines.join('\n')
 }
@@ -152,6 +178,8 @@ const GUIDE = [
   '- 사용자가 꼭 봐야 할 것(결정 사항, 주의점, 사용자에게 넘긴 확인 요청, 커밋·푸시 대기 같은 남은 일)은 memo 에 적는다.',
   '- memo 는 할 일이 아니라 참고 사항이다. 여러 건이면 한 건씩 줄을 바꿔 쓴다. 해야 할 일은 memo 가 아니라 items 에 넣는다.',
   '- 계획이 바뀌면 items 로 단계를 고친다.',
+  '- 단계가 막히거나(권한·오류 등) 사용자·외부 답을 기다리게 되면 notes_status 로 그 단계에 blocked / waiting 과 사유(note)를 단다. 사용자가 풀어 주거나 답이 오면 status: clear 와 처리 내역(note)을 남긴다. 그 내역은 해당 단계 바로 아래에 보인다.',
+  '- 커밋·PR·파일 경로·링크처럼 작업 결과물이 생기면 add_results 로 결과물 칸에 모은다. 메모에 섞지 않는다.',
   '- 창은 단계에 번호를 붙이지 않는다. 순서가 중요하면 문구 앞에 번호를 직접 붙인다(예: "1. ...", 하위 단계는 "1-1. ..."). 결정·질문 같은 단계에는 번호 대신 [결정] 같은 머리표를 써도 된다. 번호를 쓰면 탭 안에서 빠지거나 겹치지 않게 1부터 차례로 맞춘다.',
   '- notes_read 결과의 #N 은 위치 번호(notes_check 에 넘기는 값)이고 문구 속 번호와 다를 수 있다.',
   '- 사용자가 다른 주제로 넘어가면 기존 탭은 그대로 두고 새 탭을 만든다.',
@@ -165,11 +193,23 @@ export const register: Register = (on, options) => {
     return { sections: [...composed.sections, { id: 'notes:guide', text: GUIDE, scope: 'session' }] }
   })
 
+  // 세션 이름은 classic 훅 입력의 session_title 로만 알 수 있다. 시작할 때와 프롬프트마다 갱신한다(/rename 반영).
+  on('classic.SessionStart', async ($, e, next) => {
+    if (typeof e.session_title === 'string' && e.session_title.trim() !== '') sessionTitle = e.session_title.trim()
+    return next(e)
+  })
+  on('classic.UserPromptSubmit', async ($, e, next) => {
+    if (typeof e.session_title === 'string' && e.session_title.trim() !== '') sessionTitle = e.session_title.trim()
+    return next(e)
+  })
+
   on('session.start', async ($, e, next) => {
     const root = await $.session.root()
+    sessionId = await $.session.id()
     const saved = await loadFile($, root)
     await update($, book, () => ({ root, ...saved, active: saved.tabs.at(-1)?.title }))
     $.clock.every(SYNC_MS, () => void sync($))
+    $.clock.every(TICK_MS, () => void update($, tick, n => (n + 1) % 100000))
     // 기본은 세션을 열면 창도 연다. /config 의 notes.autoOpen 을 끄면 /notes 로만 연다.
     if (options.autoOpen !== false && e.isInteractive) void $.ui.open({ id: PANE, title: 'notes' })
 
@@ -191,8 +231,27 @@ export const register: Register = (on, options) => {
           items: { type: 'array', items: { type: 'string' }, description: '단계 목록 전체(기존 체크 상태는 같은 문구면 유지)' },
           add_items: { type: 'array', items: { type: 'string' }, description: '끝에 덧붙일 단계' },
           memo: { type: 'string', description: '사용자가 바로 봐야 할 메모(결정 사항·주의점 등)' },
+          results: { type: 'array', items: { type: 'string' }, description: '결과물 목록 전체(커밋·PR·파일 경로·링크 등)' },
+          add_results: { type: 'array', items: { type: 'string' }, description: '결과물 칸 끝에 덧붙일 것' },
         },
         required: ['tab'],
+      },
+    })
+    await $.tool.register({
+      name: 'notes_status',
+      isDeferred: false,
+      description:
+        '단계에 막힘(blocked)·대기(waiting) 표시와 사유를 달거나, 풀렸을 때 status: clear 와 처리 내역을 남긴다(단계 바로 아래에 보임). ' +
+        'item 은 notes_read 결과의 #N 위치 번호(1부터).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tab: { type: 'string' },
+          item: { type: 'integer', description: '위치 번호 #N (1부터)' },
+          status: { type: 'string', enum: ['blocked', 'waiting', 'clear'], description: 'blocked=막힘, waiting=대기, clear=풀림' },
+          note: { type: 'string', description: 'blocked/waiting 이면 사유, clear 면 어떻게 풀었는지' },
+        },
+        required: ['tab', 'item', 'status'],
       },
     })
     await $.tool.register({
@@ -240,16 +299,20 @@ export const register: Register = (on, options) => {
 
     const b = await change($, isNew ? `에이전트: 새 탭 ${title}` : `에이전트: ${title} 수정`, cur => {
       const old = findTab(cur, title)
+      // 같은 문구의 단계는 체크·막힘·처리 내역을 그대로 이어 간다.
       const items: NoteItem[] =
         a.items === undefined
           ? (old?.items ?? [])
-          : asList(a.items).map(text => ({ text, isDone: old?.items.find(i => i.text === text)?.isDone ?? false }))
+          : asList(a.items).map(text => old?.items.find(i => i.text === text) ?? { text, isDone: false })
+      const results = a.results === undefined ? (old?.results ?? []) : asList(a.results)
       const tab: NoteTab = {
         title,
         goal: asText(a.goal) ?? old?.goal,
         doneWhen: asText(a.done_when) ?? old?.doneWhen,
         memo: asText(a.memo) ?? old?.memo,
         items: [...items, ...asList(a.add_items).map(text => ({ text, isDone: false }))],
+        results: [...results, ...asList(a.add_results)],
+        session: sessionTag(),
         updatedAt: now(),
       }
       const rest = cur.tabs.filter(t => t.title !== title)
@@ -277,10 +340,39 @@ export const register: Register = (on, options) => {
       tabs: c.tabs.map(t =>
         t.title !== tab.title
           ? t
-          : { ...t, updatedAt: now(), items: t.items.map((i, n) => (nums.includes(n + 1) ? { ...i, isDone } : i)) },
+          : { ...t, session: sessionTag(), updatedAt: now(), items: t.items.map((i, n) => (nums.includes(n + 1) ? { ...i, isDone } : i)) },
       ),
     }))
 
+    return ok(describeTab(findTab(b, tab.title)!))
+  }).catch(failed)
+
+  on('tool.call', { tool: 'mcp__notes__notes_status' }, async ($, e) => {
+    const a = e as unknown as Record<string, unknown>
+    const title = asText(a.tab)
+    const cur = await read($, book)
+    const tab = findTab(cur, title)
+    if (tab === undefined) return { deny: `'${title}' 탭이 없습니다. 탭 목록: ${cur.tabs.map(t => t.title).join(', ') || '(없음)'}` }
+    const n = Number.isInteger(a.item) ? (a.item as number) : 0
+    if (n < 1 || n > tab.items.length) return { deny: `없는 단계 번호: ${String(a.item)} (1~${tab.items.length})` }
+    const status = a.status
+    if (status !== 'blocked' && status !== 'waiting' && status !== 'clear') return { deny: 'status 는 blocked, waiting, clear 중 하나입니다.' }
+    const note = asText(a.note)
+    const apply = (i: NoteItem): NoteItem => {
+      if (status === 'clear') {
+        const { status: _s, note: _n, ...rest } = i
+        return { ...rest, resolved: note ?? i.resolved ?? '해결됨' }
+      }
+      return { ...i, status, note, resolved: undefined }
+    }
+    const label = status === 'clear' ? `에이전트: #${n} 풀림` : `에이전트: #${n} ${status === 'blocked' ? '막힘' : '대기'}`
+    const b = await change($, label, c => ({
+      ...c,
+      active: tab.title,
+      tabs: c.tabs.map(t =>
+        t.title !== tab.title ? t : { ...t, session: sessionTag(), updatedAt: now(), items: t.items.map((i, k) => (k === n - 1 ? apply(i) : i)) },
+      ),
+    }))
     return ok(describeTab(findTab(b, tab.title)!))
   }).catch(failed)
 
@@ -309,7 +401,9 @@ export const register: Register = (on, options) => {
 
   // 창을 움직이지 않고 본문 안의 위치만 줄 단위로 옮긴다(탭 줄 고정). 휠 한 칸 = 한 줄, Claude Code 기본과 같다.
   // 키보드(방향키·페이지 키)로는 본문을 움직이지 않는다. 휠만 쓴다. 방향키는 초점 이동에만 쓰인다.
+  // 직접 스크롤은 터미널이 본문을 넘치게 그렸을 때만(maxScroll > 0). 데스크톱 등은 창이 스스로 스크롤하게 그대로 넘긴다.
   on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    if (maxScroll === 0) return next(e)
     if (e.origin.kind === 'person' && e.pointer === undefined) return {}
     const by = Number.isFinite(e.by) ? e.by : 0
     await update($, scroll, s => Math.min(Math.max(0, s + by), maxScroll))
@@ -348,6 +442,10 @@ export const register: Register = (on, options) => {
     }
 
     const done = tab.items.filter(i => i.isDone).length
+    // 지금 하는 단계 = 아직 안 끝난 첫 단계. tick 을 읽어 두면 일정 간격으로 다시 그려져 배경이 서서히 바뀐다.
+    const beat = await read($, tick)
+    const current = tab.items.findIndex(i => !i.isDone)
+    const pulse = PULSE[beat % PULSE.length]!
     const select = (title: string) => () =>
       void update($, book, c => ({ ...c, active: title })).then(() => update($, scroll, () => 0))
     const toggle = (n: number) => () =>
@@ -363,9 +461,7 @@ export const register: Register = (on, options) => {
         return { ...c, tabs, active: tabs.at(-1)?.title }
       })
 
-    // 탭 줄만 고정한다. 창 자체는 움직이지 않고, 스크롤하면 본문의 앞쪽 묶음(블록)을 건너뛰어 그린다.
-    // 창에 다 안 들어가면 들어가는 묶음까지만 그리고 마지막 줄에 [▼ 아래로] 를 둔다(창 밖·상태 줄로 넘치지 않게).
-    // 구역마다 제목 줄을 두고 빈 줄로 나눈다: 목표·종료 조건 / 할 일 / 메모. 메모는 체크 칸 없이 흐린 글자로 단계와 구별한다.
+    // 구역마다 제목 줄을 두고 빈 줄로 나눈다: 목표·종료 조건 / 할 일 / 결과물 / 메모. 메모는 체크 칸 없이 흐린 글자로 단계와 구별한다.
     const cols = Math.max(10, e.props.bodyColumns - 2)
     const section = (key: string, label: string, color: string, body: RenderChildren) => (
       <Box key={key} flexDirection="column" marginTop={1}>
@@ -388,6 +484,15 @@ export const register: Register = (on, options) => {
         ),
         rows: textRows(`${tab.title} (${done}/${tab.items.length})`, cols),
       },
+      // 제목 바로 아래: 이 탭을 마지막으로 다룬 세션과 갱신 시각.
+      {
+        el: (
+          <Text key="b-session" dimColor>
+            {`${sessionLabel(tab.session) ?? '세션 기록 없음'} · ${ago(tab.updatedAt, Date.now())} 갱신`}
+          </Text>
+        ),
+        rows: textRows(`${sessionLabel(tab.session) ?? '세션 기록 없음'} · 59분 전 갱신`, cols),
+      },
       tab.goal ? { el: section('b-goal', '목표', 'cyan', <Text>{tab.goal}</Text>), rows: 2 + textRows(tab.goal, cols - 2) } : undefined,
       tab.doneWhen
         ? { el: section('b-doneWhen', '종료 조건', 'yellow', <Text>{tab.doneWhen}</Text>), rows: 2 + textRows(tab.doneWhen, cols - 2) }
@@ -402,20 +507,53 @@ export const register: Register = (on, options) => {
         ),
         rows: 2,
       },
-      ...tab.items.map((i, n) => ({
-        // 줄 어디를 눌러도 체크가 바뀐다. 데스크톱은 버튼을 label 로 그리므로 label 에도 체크 표시를 넣는다.
-        el: (
-          <Box key={`item-${n}`} paddingLeft={2}>
-            <Button key={`chk-${n}`} label={`${i.isDone ? '☑' : '☐'} ${i.text}`} plain dimColor={i.isDone} onPress={toggle(n)}>
-              {i.isDone ? '☑ ' : '☐ '}
-              <Text strikethrough={i.isDone} dimColor={i.isDone}>
-                {i.text}
-              </Text>
-            </Button>
-          </Box>
-        ),
-        rows: textRows(`☐ ${i.text}`, cols - 2),
-      })),
+      ...tab.items.map((i, n) => {
+        const isCurrent = n === current
+        const mark = i.isDone ? '☑' : isCurrent ? '▶' : '☐'
+        // 막힘·대기 사유, 풀린 뒤 처리 내역은 단계 바로 아래 줄에.
+        const subs = [
+          i.status && { key: 'status', text: `${STATUS_MARK[i.status]}${i.note ? `: ${i.note}` : ''}`, color: i.status === 'blocked' ? 'red' : 'yellow' },
+          i.resolved && { key: 'resolved', text: `↳ 해결: ${i.resolved}`, color: 'green' },
+        ].filter((x): x is { key: string; text: string; color: string } => Boolean(x))
+        return {
+          // 줄 어디를 눌러도 체크가 바뀐다. 데스크톱은 버튼을 label 로 그리므로 label 에도 표시를 넣는다.
+          el: (
+            <Box key={`item-${n}`} flexDirection="column" paddingLeft={2}>
+              <Button key={`chk-${n}`} label={`${mark} ${i.text}`} plain dimColor={i.isDone} onPress={toggle(n)}>
+                {`${mark} `}
+                {isCurrent ? (
+                  <Text bold strikethrough={false} color="white" backgroundColor={pulse}>
+                    {i.text}
+                  </Text>
+                ) : (
+                  <Text strikethrough={i.isDone} dimColor={i.isDone}>
+                    {i.text}
+                  </Text>
+                )}
+              </Button>
+              {subs.map(x => (
+                <Text key={`item-${n}-${x.key}`} color={x.color}>
+                  {`   ${x.text}`}
+                </Text>
+              ))}
+            </Box>
+          ),
+          rows: textRows(`☐ ${i.text}`, cols - 2) + subs.reduce((sum, x) => sum + textRows(`   ${x.text}`, cols - 2), 0),
+        }
+      }),
+      tab.results?.length
+        ? {
+            el: section(
+              'b-results',
+              '결과물',
+              'blue',
+              tab.results.map((r, n) => (
+                <Text key={`result-${n}`}>{`- ${r}`}</Text>
+              )),
+            ),
+            rows: 2 + tab.results.reduce((sum, r) => sum + textRows(`- ${r}`, cols - 2), 0),
+          }
+        : undefined,
       memoLines.length > 0
         ? {
             el: section(
@@ -433,14 +571,19 @@ export const register: Register = (on, options) => {
         : undefined,
     ].filter((x): x is { el: RenderChildren; rows: number } => x !== undefined)
     // 아래 버튼 줄([탭 지우기]·[되돌리기])은 본문과 따로 창 맨 아래에 고정한다.
+    // [닫기] 는 오른쪽 끝에 둔다(가운데 빈 칸이 밀어 줌). 우상단 × 는 Claude Code 의 것이라 옮길 수 없다.
     const bar = buttonBar(Box, [
       <Button key="remove" onPress={remove}>
         탭 지우기
       </Button>,
       undoButton,
       redoButton,
+      <Box key="bar-gap" flexGrow={1} />,
+      <Button key="close" onPress={() => void $.ui.close({ id: PANE })}>
+        ✕ 닫기
+      </Button>,
     ])
-    const barRows = 2 + textRows(`[ 탭 지우기 ] [ ${undoText ?? ''} ] [ ${redoText ?? ''} ]`, cols - 2)
+    const barRows = 2 + textRows(['탭 지우기', undoText, redoText, '✕ 닫기'].filter(Boolean).map(x => `[ ${x} ]`).join(' '), cols - 2)
     // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)·버튼 줄·여유 한 줄을 빼고 남은 만큼이 본문 자리다.
     const tabWidth = b.tabs.reduce((w, t) => w + cellWidth(t.title) + 6, 0)
     const tabRows = 2 + Math.max(1, Math.ceil(tabWidth / cols))
@@ -453,7 +596,7 @@ export const register: Register = (on, options) => {
     // 터미널만 줄 수를 세어 직접 스크롤한다. 데스크톱 등은 창이 알아서 스크롤하므로 그대로 이어 그린다.
     const isTerminal = e.surface === 'terminal'
     const isScrollable = isTerminal && total > avail
-    maxScroll = isScrollable ? total - room + 1 : 0
+    if (isTerminal) maxScroll = isScrollable ? total - room + 1 : 0
     const off = Math.min(Math.max(0, await read($, scroll)), maxScroll)
     const page = Math.max(1, room - 1)
     const up = () => void update($, scroll, s => Math.max(0, Math.min(s, maxScroll) - page))

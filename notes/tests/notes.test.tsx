@@ -178,17 +178,18 @@ test('창에 다 안 들어가면 본문을 창 높이만큼만 보이고, [▼ 
 
   const small = { ...PANE, scroll: { offset: 0, bodyRows: 15 } }
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: small as never })
-  // 탭 줄 3·버튼 줄 3·여유 1 → 본문 자리 8줄, 위·아래 표시 2줄을 빼면 창 6줄. 본문 23줄(제목 1 + 할 일 2 + 단계 20).
-  expect((await ui.find({ key: 'viewport' }))?.props.height).toBe(6)
+  // 탭 줄 3·버튼 줄 4(되돌리기·닫기가 붙어 두 줄로 접힘)·여유 1 → 본문 자리 7줄, 위·아래 표시 2줄을 빼면 창 5줄.
+  // 본문 24줄(제목 1 + 세션 1 + 할 일 2 + 단계 20).
+  expect((await ui.find({ key: 'viewport' }))?.props.height).toBe(5)
   expect(await ui.find({ key: 'remove' })).toBeDefined()
   expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-0)
   expect(await ui.find({ key: 'scroll-up' })).toBeUndefined()
-  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (18줄)')
+  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (20줄)')
 
   await ui.press({ key: 'scroll-down' })
-  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-5)
-  expect((await ui.find({ key: 'scroll-up' }))?.text).toContain('▲ 위로 (5줄)')
-  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (13줄)')
+  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-4)
+  expect((await ui.find({ key: 'scroll-up' }))?.text).toContain('▲ 위로 (4줄)')
+  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (16줄)')
 })
 
 test('창에 다 들어가면 위·아래 표시도 창 자리도 없다', async ($, on) => {
@@ -232,7 +233,8 @@ test('데스크톱에서는 체크 표시가 버튼 이름에 들어가고, 스�
   const small = { ...PANE, placement: 'dock', scroll: { offset: 0, bodyRows: 12 } }
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'desktop', component: 'Pane', requestId: 'notes', props: small as never })
   expect((await ui.find({ key: 'chk-0' }))?.props.label).toBe('☑ 단계 1')
-  expect((await ui.find({ key: 'chk-1' }))?.props.label).toBe('☐ 단계 2')
+  expect((await ui.find({ key: 'chk-1' }))?.props.label).toBe('▶ 단계 2')
+  expect((await ui.find({ key: 'chk-2' }))?.props.label).toBe('☐ 단계 3')
   expect(await ui.find({ key: 'viewport' })).toBeUndefined()
   expect(await ui.find({ key: 'remove' })).toBeDefined()
 })
@@ -244,4 +246,41 @@ test('메모가 이미 - 로 시작하면 - 를 겹쳐 붙이지 않는다', asy
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   expect(await ui.find({ type: 'Text', text: /^- 이미 있음$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^- 없음$/ })).toBeDefined()
+})
+
+test('막힘·대기 사유와 풀린 뒤 처리 내역이 그 단계 바로 아래에 보이고, 결과물은 따로 모인다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '막힘', items: ['배포', '확인'], add_results: ['커밋 abc123'] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '막힘', item: 1, status: 'blocked', note: '권한 없음' } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '막힘', item: 2, status: 'waiting', note: '지윤님 확인' } as never)
+
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ type: 'Text', text: /⛔ 막힘: 권한 없음/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /⏳ 대기: 지윤님 확인/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^결과물$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^- 커밋 abc123$/ })).toBeDefined()
+
+  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '막힘', item: 1, status: 'clear', note: '지윤님이 권한 부여' } as never)
+  expect(await ui.find({ type: 'Text', text: /⛔ 막힘/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /↳ 해결: 지윤님이 권한 부여/ })).toBeDefined()
+
+  // 같은 문구로 단계를 다시 써도 막힘·처리 내역은 이어진다.
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '막힘', items: ['배포', '확인', '마무리'] } as never)
+  expect(await ui.find({ type: 'Text', text: /⏳ 대기: 지윤님 확인/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^- 커밋 abc123$/ })).toBeDefined()
+})
+
+test('지금 하는 단계(안 끝난 첫 단계)는 ▶ 와 배경색으로, 제목 아래엔 세션과 갱신 시각이 보이고, [닫기] 가 있다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '현재 단계', items: ['가', '나', '다'] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '현재 단계', items: [1] } as never)
+
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect((await ui.find({ key: 'chk-1' }))?.props.label).toBe('▶ 나')
+  expect((await ui.find({ type: 'Text', text: /^나$/ }))?.props.backgroundColor).toBeDefined()
+  expect((await ui.find({ key: 'chk-2' }))?.props.label).toBe('☐ 다')
+  expect(await ui.find({ type: 'Text', text: /· (방금|[0-9]+분 전) 갱신$/ })).toBeDefined()
+  expect(await ui.find({ key: 'close' })).toBeDefined()
 })
