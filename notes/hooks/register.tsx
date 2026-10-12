@@ -448,7 +448,7 @@ export const register: Register = on => {
     const pager = (key: string, text: string, onPress: () => void) => (
       <Box flexDirection="row" justifyContent="center">
         <Button key={key} label={text} plain onPress={onPress}>
-          <Text italic backgroundColor="gray" color="white">
+          <Text italic backgroundColor="gray">
             {` ${text} `}
           </Text>
         </Button>
