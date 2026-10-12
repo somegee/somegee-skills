@@ -413,25 +413,25 @@ export const register: Register = on => {
             rows: 2 + memoLines.reduce((sum, line) => sum + textRows(line, cols - 2), 0),
           }
         : undefined,
-      {
-        el: buttonBar(Box, [
-          <Button key="remove" onPress={remove}>
-            탭 지우기
-          </Button>,
-          undoButton,
-        ]),
-        rows: 3,
-      },
     ].filter((x): x is { el: RenderChildren; rows: number } => x !== undefined)
-    // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)을 빼고 남은 만큼이 본문 자리다.
+    // 아래 버튼 줄([탭 지우기]·[되돌리기])은 본문과 따로 창 맨 아래에 고정한다.
+    const bar = buttonBar(Box, [
+      <Button key="remove" onPress={remove}>
+        탭 지우기
+      </Button>,
+      undoButton,
+    ])
+    const undoLabel = last ? `↶ 되돌리기: ${last.label.slice(0, 24)}` : ''
+    const barRows = 2 + textRows(`[ 탭 지우기 ] [ ${undoLabel} ]`, cols - 2)
+    // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)·버튼 줄·여유 한 줄을 빼고 남은 만큼이 본문 자리다.
     const tabWidth = b.tabs.reduce((w, t) => w + cellWidth(t.title) + 6, 0)
     const tabRows = 2 + Math.max(1, Math.ceil(tabWidth / cols))
-    const avail = e.props.scroll.bodyRows - tabRows
+    const avail = e.props.scroll.bodyRows - tabRows - barRows - 1
     const total = blocks.reduce((sum, x) => sum + x.rows, 0)
     // 다 들어가면 그대로 그린다.
-    // 안 들어가면 [▲ 위로] 줄·[▼ 아래로] 줄·여유 한 줄을 늘 남기고(자리가 들썩이지 않게), 그 사이 창에서
+    // 안 들어가면 [▲ 위로] 줄·[▼ 아래로] 줄을 늘 남기고(자리가 들썩이지 않게), 그 사이 창에서
     // 본문 전체를 위로 off 줄만큼 밀어 올려 보여 준다. 줄 수는 어림이라 끝에 한 줄 여유를 더 둔다.
-    const room = Math.max(1, avail - 3)
+    const room = Math.max(1, avail - 2)
     const isScrollable = total > avail
     maxScroll = isScrollable ? total - room + 1 : 0
     const off = Math.min(Math.max(0, await read($, scroll)), maxScroll)
@@ -454,8 +454,10 @@ export const register: Register = on => {
     )
     const body = blocks.map(x => x.el)
 
+    // 옆에 붙은 창(dock)은 창 높이를 꽉 채워 버튼 줄이 늘 맨 아래에 오게 한다. 프롬프트 위 창(inline)은 내용 높이만큼.
+    const isDock = e.props.placement === 'dock'
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" height={isDock ? e.props.scroll.bodyRows - 1 : undefined}>
         <Box flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor="cyan" paddingX={1}>
           {b.tabs.map(t => (
             <Button key={`tab-${t.title}`} variant={t.title === tab.title ? 'primary' : 'secondary'} dimColor={t.title !== tab.title} onPress={select(t.title)}>
@@ -463,19 +465,22 @@ export const register: Register = on => {
             </Button>
           ))}
         </Box>
-        {isScrollable ? (
-          <Box flexDirection="column">
-            {pager('scroll-up', off > 0 ? `▲ 위로 (${off}줄)` : undefined, up)}
-            <Box key="viewport" flexDirection="column" height={room} overflow="hidden">
-              <Box key="viewport-body" flexDirection="column" marginTop={-off}>
-                {body}
+        <Box key="body" flexDirection="column" flexGrow={1}>
+          {isScrollable ? (
+            <Box flexDirection="column">
+              {pager('scroll-up', off > 0 ? `▲ 위로 (${off}줄)` : undefined, up)}
+              <Box key="viewport" flexDirection="column" height={room} overflow="hidden">
+                <Box key="viewport-body" flexDirection="column" marginTop={-off}>
+                  {body}
+                </Box>
               </Box>
+              {pager('scroll-down', off < maxScroll ? `▼ 아래로 (${maxScroll - off}줄)` : undefined, down)}
             </Box>
-            {pager('scroll-down', off < maxScroll ? `▼ 아래로 (${maxScroll - off}줄)` : undefined, down)}
-          </Box>
-        ) : (
-          body
-        )}
+          ) : (
+            body
+          )}
+        </Box>
+        {bar}
       </Box>
     )
   })

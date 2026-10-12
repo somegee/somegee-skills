@@ -178,16 +178,17 @@ test('창에 다 안 들어가면 본문을 창 높이만큼만 보이고, [▼ 
 
   const small = { ...PANE, scroll: { offset: 0, bodyRows: 15 } }
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: small as never })
-  // 탭 줄 3 → 남은 12줄 중 위·아래 표시와 여유 3줄을 빼면 창 9줄. 본문 26줄(제목 1 + 할 일 2 + 단계 20 + 버튼 3).
-  expect((await ui.find({ key: 'viewport' }))?.props.height).toBe(9)
+  // 탭 줄 3·버튼 줄 3·여유 1 → 본문 자리 8줄, 위·아래 표시 2줄을 빼면 창 6줄. 본문 23줄(제목 1 + 할 일 2 + 단계 20).
+  expect((await ui.find({ key: 'viewport' }))?.props.height).toBe(6)
+  expect(await ui.find({ key: 'remove' })).toBeDefined()
   expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-0)
   expect(await ui.find({ key: 'scroll-up' })).toBeUndefined()
   expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (18줄)')
 
   await ui.press({ key: 'scroll-down' })
-  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-8)
-  expect((await ui.find({ key: 'scroll-up' }))?.text).toContain('▲ 위로 (8줄)')
-  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (10줄)')
+  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-5)
+  expect((await ui.find({ key: 'scroll-up' }))?.text).toContain('▲ 위로 (5줄)')
+  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (13줄)')
 })
 
 test('창에 다 들어가면 위·아래 표시도 창 자리도 없다', async ($, on) => {
