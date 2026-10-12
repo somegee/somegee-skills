@@ -321,7 +321,7 @@ export const register: Register = on => {
       </Button>
     )
 
-    // 편집 중: 입력은 초안에만 담고, [저장] 또는 문구 칸의 Enter 때 한 번에 반영한다.
+    // 편집 중: 입력은 초안에만 담고, [저장] 을 눌렀을 때만 한 번에 반영한다. 문구 칸의 Enter 는 저장하지 않는다.
     if (d && Input) {
       const setDraft = (fn: (x: NoteDraft) => NoteDraft) => void update($, draft, x => (x ? fn(x) : x))
       const withField = (key: 'title' | 'goal' | 'doneWhen' | 'memo', v: string) => (x: NoteDraft) => ({ ...x, [key]: v })
@@ -330,18 +330,16 @@ export const register: Register = on => {
         items: x.items.map((i, k) => (k === n ? { ...i, text: v } : i)),
       })
       const field = (key: 'title' | 'goal' | 'doneWhen' | 'memo') => (v: string) => setDraft(withField(key, v))
-      const fieldEnter = (key: 'title' | 'goal' | 'doneWhen' | 'memo') => (v: string) => void commit(withField(key, v))
       const itemText = (n: number) => (v: string) => setDraft(withItem(n, v))
-      const itemEnter = (n: number) => (v: string) => void commit(withItem(n, v))
       const addItem = (v: string) => {
         if (v.trim() !== '') setDraft(x => ({ ...x, items: [...x.items, { text: v.trim(), isDone: false }] }))
       }
       const cancel = () => void update($, draft, () => null)
-      // 그린 시점의 초안이 아니라 지금 상태의 초안을 읽어 저장한다. last 는 Enter 친 칸의 값을 얹는다.
-      const commit = async (last: (x: NoteDraft) => NoteDraft = x => x) => {
+      // 그린 시점의 초안이 아니라 지금 상태의 초안을 읽어 저장한다.
+      const commit = async () => {
         const cur = await read($, draft)
         if (cur === null) return
-        const { origTitle, ...edited } = last(cur)
+        const { origTitle, ...edited } = cur
         const wanted = edited.title.trim().slice(0, 40)
         await change($, `직접 편집: ${origTitle}`, c => {
           const title = wanted !== '' && (wanted === origTitle || !c.tabs.some(t => t.title === wanted)) ? wanted : origTitle
@@ -362,19 +360,19 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column" gap={1}>
           <Text bold>✎ 편집 중: {d.origTitle}</Text>
-          <Text dimColor>문구 칸에서 Enter 또는 [저장] = 저장, [취소] = 저장 안 함. 단계 문구를 비우고 저장하면 그 단계가 빠집니다.</Text>
+          <Text dimColor>맨 아래 [저장] 을 눌러야 저장됩니다. [취소] = 저장 안 함. 단계 문구를 비우고 저장하면 그 단계가 빠집니다.</Text>
           <Box flexDirection="column">
-            <Input key="edit-title" label="탭 이름" value={d.title} submitLabel="저장" onInput={field('title')} onSubmit={fieldEnter('title')} />
-            <Input key="edit-goal" label="목표" value={d.goal ?? ''} submitLabel="저장" onInput={field('goal')} onSubmit={fieldEnter('goal')} />
-            <Input key="edit-doneWhen" label="종료 조건" value={d.doneWhen ?? ''} submitLabel="저장" onInput={field('doneWhen')} onSubmit={fieldEnter('doneWhen')} />
+            <Input key="edit-title" label="탭 이름" value={d.title} submitLabel="확인" onInput={field('title')} onSubmit={field('title')} />
+            <Input key="edit-goal" label="목표" value={d.goal ?? ''} submitLabel="확인" onInput={field('goal')} onSubmit={field('goal')} />
+            <Input key="edit-doneWhen" label="종료 조건" value={d.doneWhen ?? ''} submitLabel="확인" onInput={field('doneWhen')} onSubmit={field('doneWhen')} />
           </Box>
           <Box flexDirection="column">
             {d.items.map((i, n) => (
-              <Input key={`edit-item-${n}`} label="•" value={i.text} submitLabel="저장" onInput={itemText(n)} onSubmit={itemEnter(n)} />
+              <Input key={`edit-item-${n}`} label="•" value={i.text} submitLabel="확인" onInput={itemText(n)} onSubmit={itemText(n)} />
             ))}
             <Input key="edit-add" label="+" placeholder="새 단계 입력 후 Enter" submitLabel="추가" value="" onSubmit={addItem} />
           </Box>
-          <Input key="edit-memo" label="메모" value={d.memo ?? ''} submitLabel="저장" onInput={field('memo')} onSubmit={fieldEnter('memo')} />
+          <Input key="edit-memo" label="메모" value={d.memo ?? ''} submitLabel="확인" onInput={field('memo')} onSubmit={field('memo')} />
           {buttonBar(Box, [
             <Button key="edit-save" variant="primary" onPress={() => void commit()}>
               저장

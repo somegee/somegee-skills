@@ -143,7 +143,7 @@ test('되돌리기는 체크·편집·탭 지우기를 하나씩 되돌린다', 
   expect(await ui.find({ key: 'undo' })).toBeUndefined()
 })
 
-test('문구 칸에서 Enter 하면 그 값까지 저장하고 편집을 마친다', async ($, on) => {
+test('문구 칸에서 Enter 해도 저장되지 않고, [저장] 을 눌러야 반영된다', async ($, on) => {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: 'Enter 시험', items: ['가', '나'] } as never)
@@ -153,7 +153,11 @@ test('문구 칸에서 Enter 하면 그 값까지 저장하고 편집을 마친�
   await ui.input({ key: 'edit-goal', text: '목표 넣음', kind: 'change' })
   await ui.input({ key: 'edit-item-1', text: '나 고침' })
 
-  expect(await ui.find({ key: 'edit-item-1' })).toBeUndefined()
+  expect(await ui.find({ key: 'edit-item-1' })).toBeDefined()
+  const before = await $.tool.call({ tool: 'mcp__notes__notes_read', tab: 'Enter 시험' } as never)
+  expect(String(before.result)).toBe(['# Enter 시험 (0/2)', '#1 [ ] 가', '#2 [ ] 나'].join('\n'))
+
+  await ui.press({ key: 'edit-save' })
   const read = await $.tool.call({ tool: 'mcp__notes__notes_read', tab: 'Enter 시험' } as never)
   expect(String(read.result)).toBe(['# Enter 시험 (0/2)', '목표: 목표 넣음', '#1 [ ] 가', '#2 [ ] 나 고침'].join('\n'))
 })
