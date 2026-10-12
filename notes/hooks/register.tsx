@@ -18,6 +18,8 @@ const SYNC_MS = 3000
 const TICK_MS = 30000
 // 지금 하는 단계의 배경색(고정).
 const CURRENT_BG = '#2e6b3f'
+// 터미널 옆 창 왼쪽 여백(칸).
+const PANE_GUTTER = 1
 // 결과물 문구에서 링크로 만들 주소.
 const URL_RE = /https?:\/\/[^\s)>\]]+/
 
@@ -510,6 +512,8 @@ export const register: Register = (on, options) => {
     const { Box, Text, Button, Link, Markdown } = $.ui.resolve(e)
     // 데스크톱 등은 목표·종료 조건·결과물·메모를 Markdown 으로 그려 드래그로 고를 수 있게 한다. 터미널은 Text.
     const isRich = e.surface !== 'terminal'
+    // 터미널 옆 창은 왼쪽 구분선(│)에 글자가 붙지 않게 한 칸 띄운다. 데스크톱 등은 구분선이 없어 그대로.
+    const gutter = e.surface === 'terminal' ? PANE_GUTTER : 0
     const md = (key: string, text: string, dim = false) => <Markdown key={key} text={text} dimColor={dim} />
     const b = await read($, book)
     const tab = findTab(b, b.active) ?? b.tabs.at(-1)
@@ -532,7 +536,7 @@ export const register: Register = (on, options) => {
 
     if (tab === undefined) {
       return (
-        <Box flexDirection="column">
+        <Box key="pane-root" flexDirection="column" paddingLeft={gutter}>
           <Text dimColor>아직 노트가 없습니다. 에이전트가 계획을 세우면 여기에 탭이 생깁니다.</Text>
           {(undoButton || redoButton) && buttonBar(Box, [undoButton, redoButton])}
         </Box>
@@ -559,7 +563,7 @@ export const register: Register = (on, options) => {
       })
 
     // 구역마다 제목 줄을 두고 빈 줄로 나눈다: 목표·종료 조건 / 할 일 / 결과물 / 메모. 메모는 체크 칸 없이 흐린 글자로 단계와 구별한다.
-    const cols = Math.max(10, e.props.bodyColumns - 2)
+    const cols = Math.max(10, e.props.bodyColumns - 2 - gutter)
     // 구역 제목을 누르면 접고 편다. 접으면 제목 줄에 요약(개수 등)만 남는다.
     const foldMap = await read($, folded)
     const isFolded = (id: string) => foldMap[`${tab.title}|${id}`] === true
@@ -751,7 +755,7 @@ export const register: Register = (on, options) => {
     // 옆에 붙은 창(dock)은 창 높이를 꽉 채워 버튼 줄이 늘 맨 아래에 오게 한다. 프롬프트 위 창(inline)은 내용 높이만큼.
     const isDock = isTerminal && e.props.placement === 'dock'
     return (
-      <Box flexDirection="column" height={isDock ? e.props.scroll.bodyRows - 1 : undefined}>
+      <Box key="pane-root" flexDirection="column" paddingLeft={gutter} height={isDock ? e.props.scroll.bodyRows - 1 : undefined}>
         <Box flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor="cyan" paddingX={1}>
           {b.tabs.map(t => (
             <Button key={`tab-${t.title}`} variant={t.title === tab.title ? 'primary' : 'secondary'} dimColor={t.title !== tab.title} onPress={select(t.title)}>

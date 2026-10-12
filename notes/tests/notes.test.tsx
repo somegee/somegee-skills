@@ -449,3 +449,18 @@ test('원래대로: notes 호출 줄을 엔진이 그리던 대로 둔다', { op
   expect(await result.find({ key: 'notes-result' })).toBeUndefined()
   expect(await result.find({ type: 'Text', text: /^engine$/ })).toBeDefined()
 })
+
+test('터미널에서는 왼쪽 구분선과 붙지 않게 창 내용을 한 칸 띄운다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  const empty = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect((await empty.find({ key: 'pane-root' }))?.props.paddingLeft).toBe(1)
+  await empty.unmount()
+
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '여백', items: ['가'] } as never)
+  const term = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect((await term.find({ key: 'pane-root' }))?.props.paddingLeft).toBe(1)
+  await term.unmount()
+  const desk = await $.ui.mount({ plugin: 'notes', surface: 'desktop', component: 'Pane', requestId: 'notes', props: PANE })
+  expect((await desk.find({ key: 'pane-root' }))?.props.paddingLeft ?? 0).toBe(0)
+})
