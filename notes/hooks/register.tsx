@@ -16,7 +16,7 @@ const SYNC_MS = 3000
 // 'N분 전 갱신' 이 흐르도록 다시 그리는 간격.
 const TICK_MS = 30000
 // 지금 하는 단계의 배경색(고정).
-const CURRENT_BG = '#2b567f'
+const CURRENT_BG = '#2e6b3f'
 // 결과물 문구에서 링크로 만들 주소.
 const URL_RE = /https?:\/\/[^\s)>\]]+/
 
@@ -719,6 +719,8 @@ export const register: Register = (on, options) => {
         )}
       </Box>
     )
+    // 본문은 제 높이를 지킨다(flexShrink 0). 기본값(1)이면 창보다 길 때 상자들이 눌려 줄어,
+    // 구역 위 빈 줄에 앞 구역 글자가 겹쳐 그려지고 한 줄짜리 '할 일' 제목은 아예 사라진다.
     const body = blocks.map(x => x.el)
 
     // 옆에 붙은 창(dock)은 창 높이를 꽉 채워 버튼 줄이 늘 맨 아래에 오게 한다. 프롬프트 위 창(inline)은 내용 높이만큼.
@@ -737,14 +739,16 @@ export const register: Register = (on, options) => {
             <Box flexDirection="column">
               {pager('scroll-up', off > 0 ? `▲ 위로 (${off}줄)` : undefined, up)}
               <Box key="viewport" flexDirection="column" height={room} overflow="hidden">
-                <Box key="viewport-body" flexDirection="column" marginTop={-off}>
+                <Box key="viewport-body" flexDirection="column" flexShrink={0} marginTop={-off}>
                   {body}
                 </Box>
               </Box>
               {pager('scroll-down', off < maxScroll ? `▼ 아래로 (${maxScroll - off}줄)` : undefined, down)}
             </Box>
           ) : (
-            body
+            <Box key="content" flexDirection="column" flexShrink={0}>
+              {body}
+            </Box>
           )}
         </Box>
         {bar}

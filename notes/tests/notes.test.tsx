@@ -283,7 +283,7 @@ test('지금 하는 단계(안 끝난 첫 단계)는 ▶ 와 고정 배경색으
 
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   expect((await ui.find({ key: 'chk-1' }))?.props.label).toBe('▶ 나')
-  expect((await ui.find({ type: 'Text', text: /^나$/ }))?.props.backgroundColor).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^나$/ }))?.props.backgroundColor).toBe('#2e6b3f')
   expect((await ui.find({ key: 'chk-2' }))?.props.label).toBe('☐ 다')
   expect(await ui.find({ type: 'Text', text: /· (방금|[0-9]+분 전) 갱신$/ })).toBeDefined()
   expect(await ui.find({ key: 'close' })).toBeDefined()
@@ -359,4 +359,22 @@ test('구역 제목을 누르면 접히고 요약만 남으며, 다시 누르면
 
   await ui.press({ key: 'fold-items' })
   expect(await ui.find({ key: 'chk-0' })).toBeDefined()
+})
+
+test('본문이 창보다 길어도 구역 상자가 눌려 줄지 않는다(빈 줄·할 일 제목이 사라지지 않게)', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  const items = Array.from({ length: 20 }, (_, n) => `단계 ${n + 1}`)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '긴 탭3', goal: '목표', done_when: '끝', items, memo: '가\n나' } as never)
+
+  // 스크롤 창: 높이 고정 + 넘침 숨김 안에서 본문은 제 높이를 지켜야 잘려 보인다(눌리면 줄끼리 겹친다).
+  const small = { ...PANE, scroll: { offset: 0, bodyRows: 15 } }
+  const scrolled = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: small as never })
+  expect((await scrolled.find({ key: 'viewport-body' }))?.props.flexShrink).toBe(0)
+  await scrolled.unmount()
+
+  // 다 들어간다고 어림한 경우에도 줄 수 어림이 틀릴 수 있으니 본문은 눌리지 않는다.
+  const big = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await big.find({ key: 'viewport' })).toBeUndefined()
+  expect((await big.find({ key: 'content' }))?.props.flexShrink).toBe(0)
 })
