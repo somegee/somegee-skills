@@ -401,10 +401,10 @@ export const register: Register = on => {
         rows: 2,
       },
       ...tab.items.map((i, n) => ({
-        // 줄 어디를 눌러도 체크가 바뀐다.
+        // 줄 어디를 눌러도 체크가 바뀐다. 데스크톱은 버튼을 label 로 그리므로 label 에도 체크 표시를 넣는다.
         el: (
           <Box key={`item-${n}`} paddingLeft={2}>
-            <Button key={`chk-${n}`} label={i.text} plain onPress={toggle(n)}>
+            <Button key={`chk-${n}`} label={`${i.isDone ? '☑' : '☐'} ${i.text}`} plain dimColor={i.isDone} onPress={toggle(n)}>
               {i.isDone ? '☑ ' : '☐ '}
               <Text strikethrough={i.isDone} dimColor={i.isDone}>
                 {i.text}
@@ -448,7 +448,9 @@ export const register: Register = on => {
     // 안 들어가면 [▲ 위로] 줄·[▼ 아래로] 줄을 늘 남기고(자리가 들썩이지 않게), 그 사이 창에서
     // 본문 전체를 위로 off 줄만큼 밀어 올려 보여 준다. 줄 수는 어림이라 끝에 한 줄 여유를 더 둔다.
     const room = Math.max(1, avail - 2)
-    const isScrollable = total > avail
+    // 터미널만 줄 수를 세어 직접 스크롤한다. 데스크톱 등은 창이 알아서 스크롤하므로 그대로 이어 그린다.
+    const isTerminal = e.surface === 'terminal'
+    const isScrollable = isTerminal && total > avail
     maxScroll = isScrollable ? total - room + 1 : 0
     const off = Math.min(Math.max(0, await read($, scroll)), maxScroll)
     const page = Math.max(1, room - 1)
@@ -471,7 +473,7 @@ export const register: Register = on => {
     const body = blocks.map(x => x.el)
 
     // 옆에 붙은 창(dock)은 창 높이를 꽉 채워 버튼 줄이 늘 맨 아래에 오게 한다. 프롬프트 위 창(inline)은 내용 높이만큼.
-    const isDock = e.props.placement === 'dock'
+    const isDock = isTerminal && e.props.placement === 'dock'
     return (
       <Box flexDirection="column" height={isDock ? e.props.scroll.bodyRows - 1 : undefined}>
         <Box flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor="cyan" paddingX={1}>

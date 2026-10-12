@@ -221,3 +221,18 @@ test('되돌린 것은 [앞으로] 로 다시 하고, 새로 고치면 [앞으�
   await ui.press({ key: 'chk-1' })
   expect(await ui.find({ key: 'redo' })).toBeUndefined()
 })
+
+test('데스크톱에서는 체크 표시가 버튼 이름에 들어가고, 스크롤 창 없이 버튼 줄까지 이어 그린다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  const items = Array.from({ length: 30 }, (_, n) => `단계 ${n + 1}`)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '데스크톱', items } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '데스크톱', items: [1] } as never)
+
+  const small = { ...PANE, placement: 'dock', scroll: { offset: 0, bodyRows: 12 } }
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'desktop', component: 'Pane', requestId: 'notes', props: small as never })
+  expect((await ui.find({ key: 'chk-0' }))?.props.label).toBe('☑ 단계 1')
+  expect((await ui.find({ key: 'chk-1' }))?.props.label).toBe('☐ 단계 2')
+  expect(await ui.find({ key: 'viewport' })).toBeUndefined()
+  expect(await ui.find({ key: 'remove' })).toBeDefined()
+})
