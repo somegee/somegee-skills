@@ -433,13 +433,23 @@ export const register: Register = on => {
     const room = e.props.scroll.bodyRows - tabRows - (start > 0 ? 1 : 0)
     const rest = blocks.slice(start)
     const restRows = rest.reduce((sum, x) => sum + x.rows, 0)
-    // 다 안 들어가면 [▼ 아래로] 한 줄과 여유 한 줄을 남기고, 들어가는 묶음까지만 그린다(최소 한 묶음).
+    // 다 안 들어가면 [▼ 아래로] 한 줄과 여유 한 줄을 남기고, 통째로 들어가는 묶음까지 그린 뒤
+    // 남는 줄이 있으면 다음 묶음(긴 메모 등)을 그 높이만큼 잘라 보여 준다. 빈 공간이 크게 남지 않게.
     let shown = rest.length
+    let partial: RenderChildren = null
     if (restRows > room) {
+      const limit = Math.max(1, room - 2)
       let used = 0
       shown = 0
-      while (shown < rest.length && used + rest[shown]!.rows <= room - 2) used += rest[shown++]!.rows
-      shown = Math.max(1, shown)
+      while (shown < rest.length && used + rest[shown]!.rows <= limit) used += rest[shown++]!.rows
+      const left = limit - used
+      if (shown < rest.length && left > 0) {
+        partial = (
+          <Box key="partial" flexDirection="column" height={left} overflow="hidden">
+            {rest[shown]!.el}
+          </Box>
+        )
+      }
     }
     const hidden = rest.length - shown
     const up = () => void update($, scroll, s => Math.max(0, Math.min(s, blocks.length - 1) - 3))
@@ -466,6 +476,7 @@ export const register: Register = on => {
         </Box>
         {start > 0 && pager('scroll-up', `▲ 위로 (${start})`, up)}
         {rest.slice(0, shown).map(x => x.el)}
+        {partial}
         {hidden > 0 && pager('scroll-down', `▼ 아래로 (${hidden})`, down)}
       </Box>
     )

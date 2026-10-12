@@ -189,3 +189,17 @@ test('목표·종료 조건·할 일·메모가 구역 제목으로 나뉘고, �
   expect(await ui.find({ type: 'Text', text: /^둘째 줄$/ })).toBeDefined()
   expect(await ui.findAll({ type: 'Button', text: /첫 줄/ })).toHaveLength(0)
 })
+
+test('다음 묶음이 통째로 안 들어가도 남는 줄만큼은 잘라서 보여 준다 (긴 메모)', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  const memo = Array.from({ length: 30 }, (_, n) => `메모 ${n + 1}`).join('\n')
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '긴 메모', items: ['가'], memo } as never)
+
+  const small = { ...PANE, scroll: { offset: 0, bodyRows: 20 } }
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: small as never })
+  expect(await ui.find({ type: 'Text', text: /^메모$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^메모 1$/ })).toBeDefined()
+  expect(await ui.find({ key: 'partial' })).toBeDefined()
+  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (2)')
+})
