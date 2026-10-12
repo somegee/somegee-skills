@@ -115,39 +115,6 @@ const buttonBar = (Box: ElementConstructor<BoxProps>, buttons: RenderChildren[])
   </Box>
 )
 
-// 창 안 요소의 위아래 순서. 탭 줄·[▲ 위로]·엔진 자체 요소(element 없음)는 본문 위쪽이다.
-const BODY_BUTTONS = ['edit', 'remove', 'undo']
-const focusRank = (key: string | undefined) => {
-  if (key === undefined || key === 'scroll-up' || key.startsWith('tab-')) return -1
-  if (key.startsWith('chk-')) return Number(key.slice(4))
-  const n = BODY_BUTTONS.indexOf(key)
-  return n < 0 ? undefined : 100000 + n
-}
-// 본문에서 지금 보이는 첫 요소. 제목·목표·종료 조건 묶음 뒤에 단계가 이어지고, 단계가 다 지나가면 버튼 줄이다.
-export const firstBodyKey = (tab: NoteTab, start: number) => {
-  const lead = 1 + (tab.goal ? 1 : 0) + (tab.doneWhen ? 1 : 0)
-  const i = Math.max(0, start - lead)
-  return i < tab.items.length ? `chk-${i}` : 'edit'
-}
-// last 에서 target 으로 초점이 옮겨 갈 때 위쪽으로 가는지. 모르는 요소가 끼거나 초점이 아직 없으면 아니라고 본다.
-// 탭 줄 쪽으로 가는 건 본문 첫 요소(first)에서 올라갈 때만 위로 본다. 맨 아래에서 ↓로 한 바퀴 돌아 탭 줄로 가는 건 위가 아니다.
-export const focusMovesUp = (last: string | undefined, target: string | undefined, first: string) => {
-  const to = focusRank(target)
-  const from = focusRank(last)
-  if (last === undefined || to === undefined || from === undefined) return false
-  return to === -1 ? last === first : to < from
-}
-let lastFocus: string | undefined
-
-// 본문이 내려가 있고, 사용자의 초점이 위로 가려 하는지.
-async function isScrolledUpMove($: EngineInterface, target: string | undefined) {
-  const start = await read($, scroll)
-  if (start <= 0) return false
-  const b = await read($, book)
-  const tab = findTab(b, b.active) ?? b.tabs.at(-1)
-  return tab !== undefined && focusMovesUp(lastFocus, target, firstBodyKey(tab, start))
-}
-
 const ok = (text: string) => ({ result: text })
 const failed = () => ({ deny: 'notes 모드 처리 중 오류가 났습니다.' })
 
@@ -323,8 +290,10 @@ export const register: Register = on => {
   }).catch(failed)
 
   // 보기 화면에서는 창을 움직이지 않고 본문 안의 위치만 옮긴다(탭 줄·버튼 줄 고정). 편집 화면은 창이 그대로 스크롤한다.
+  // 키보드(방향키·페이지 키)로는 본문을 움직이지 않는다. 휠만 쓴다. 방향키는 초점 이동에만 쓰인다.
   on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     if ((await read($, draft)) !== null) return next(e)
+    if (e.origin.kind === 'person' && e.pointer === undefined) return {}
     const b = await read($, book)
     const tab = findTab(b, b.active) ?? b.tabs.at(-1)
     const most = (tab?.items.length ?? 0) + 5
@@ -334,18 +303,6 @@ export const register: Register = on => {
     await update($, scroll, s => Math.min(Math.max(0, s + (Number.isFinite(step) ? step : 0)), most))
     // 창은 맨 위에 둔다: 탭 줄이 항상 보이게.
     return next({ ...e, offset: 0 })
-  })
-
-  // 창을 맨 위에 묶어 두므로 엔진은 ↑ 를 스크롤로 못 쓰고 초점 이동으로 넘긴다.
-  // 본문이 내려가 있을 때 사용자의 초점이 위로 움직이려 하면, 대신 본문을 한 묶음 올리고 초점은 그 자리에 둔다.
-  on('ui.focus', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
-    if (e.origin.kind === 'person' && (await read($, draft)) === null && (await isScrolledUpMove($, e.element))) {
-      await update($, scroll, s => Math.max(0, s - 1))
-      return {}
-    }
-    const result = await next(e)
-    if (result.deny === undefined) lastFocus = e.element
-    return result
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -469,14 +426,13 @@ export const register: Register = on => {
         </Text>
       ),
       ...tab.items.map((i, n) => (
-        <Box key={`item-${n}`} flexDirection="row" columnGap={1}>
-          <Button key={`chk-${n}`} plain onPress={toggle(n)}>
-            {i.isDone ? '☑' : '☐'}
-          </Button>
+        // 줄 어디를 눌러도 체크가 바뀐다.
+        <Button key={`chk-${n}`} label={i.text} plain onPress={toggle(n)}>
+          {i.isDone ? '☑ ' : '☐ '}
           <Text strikethrough={i.isDone} dimColor={i.isDone}>
             {i.text}
           </Text>
-        </Box>
+        </Button>
       )),
       tab.memo && (
         <Text key="b-memo" dimColor>
