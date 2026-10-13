@@ -18,6 +18,8 @@ function fakeFiles(on: On) {
     writes.push(norm(e.path))
     return { value: undefined }
   })
+  on('session.root', () => ({ value: '/w' }) as never)
+  on('session.id', () => ({ value: 's1' }) as never)
   return { files, writes, reads }
 }
 
@@ -480,8 +482,6 @@ test('헤드리스 세션에서는 notes 도구를 등록하지 않고, 사람�
   })
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  on('session.root', () => ({ value: '/w' }) as never)
-  on('session.id', () => ({ value: 's1' }) as never)
   on('clock.every', () => ({ value: undefined }) as never)
   on('command.register', () => ({ value: undefined }) as never)
 
@@ -504,4 +504,14 @@ test('서브에이전트가 notes 도구를 부르면 거절하고 노트 파일
 
   const main = await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '메인', items: ['가'] } as never)
   expect(String(main.result)).toContain('#1 [ ] 가')
+})
+
+test('/clear 뒤처럼 세션 상태의 작업 폴더가 비어 있어도 이름 없는 .json 이 아니라 작업 폴더 노트 파일에 쓴다', async ($, on) => {
+  const { writes } = fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '클리어 뒤', items: ['가'] } as never)
+
+  expect(writes.some(p => p.endsWith('/w.json'))).toBe(true)
+  expect(writes.some(p => p.endsWith('/.json'))).toBe(false)
 })

@@ -170,10 +170,21 @@ async function save($: EngineInterface, root: string, saved: Saved) {
   await $.fs.write(dataPath($, root), JSON.stringify({ root, ...saved }, null, 1))
 }
 
+// /clear 하면 세션 상태가 처음 값(root '')으로 돌아가는데 session.start 는 다시 오지 않는다.
+// 그때 root 가 비어 있으면 엔진에 다시 물어 채운다(빈 root 로는 이름 없는 노트 파일 .json 에 쓰게 된다).
+async function projectRoot($: EngineInterface) {
+  const { root } = await read($, book)
+  if (root !== '') return root
+  const fresh = await $.session.root()
+  sessionId = await $.session.id()
+  await update($, book, c => ({ ...c, root: fresh }))
+  return fresh
+}
+
 // 다른 세션이 고친 내용을 덮어쓰지 않도록, 고치기 직전에 파일의 최신본을 다시 읽어 그 위에 반영한다.
 // label 은 되돌리기 버튼에 보일 설명이다. 새로 고치면 앞으로가기 기록은 버린다.
 async function change($: EngineInterface, label: string, fn: (b: NotesBook) => NotesBook) {
-  const { root } = await read($, book)
+  const root = await projectRoot($)
   const saved = await loadFile($, root)
   const next = await update($, book, cur => fn({ ...cur, ...saved }))
   const parts = diffTabs(saved.tabs, next.tabs)
@@ -187,7 +198,7 @@ async function change($: EngineInterface, label: string, fn: (b: NotesBook) => N
 // 되돌리기는 history → future, 앞으로가기는 future → history.
 async function step($: EngineInterface, from: 'history' | 'future') {
   const to = from === 'history' ? 'future' : 'history'
-  const { root } = await read($, book)
+  const root = await projectRoot($)
   const saved = await loadFile($, root)
   const entry = saved[from].at(-1)
   if (entry === undefined) return
@@ -202,8 +213,9 @@ const redo = ($: EngineInterface) => step($, 'future')
 
 // 다른 세션의 변경을 이 세션 화면에 반영한다.
 async function sync($: EngineInterface) {
+  const root = await projectRoot($)
   const cur = await read($, book)
-  const saved = await loadFile($, cur.root)
+  const saved = await loadFile($, root)
   if (JSON.stringify(saved) === JSON.stringify({ tabs: cur.tabs, history: cur.history, future: cur.future ?? [] })) return
   await update($, book, c => ({ ...c, ...saved, active: saved.tabs.some(t => t.title === c.active) ? c.active : saved.tabs.at(-1)?.title }))
 }
