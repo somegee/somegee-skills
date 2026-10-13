@@ -255,7 +255,6 @@ const GUIDE = [
   '- 사용자가 다른 주제로 넘어가면 기존 탭은 그대로 두고 새 탭을 만든다.',
   '- 사용자가 "아까 거 어디까지 했지" 처럼 이전 작업을 물으면 먼저 notes_read 로 확인하고 답한다.',
   '- 탭 삭제(notes_close)는 사용자가 정리를 원할 때만 한다.',
-  '- 서브에이전트는 notes 도구를 쓰지 않는다. 노트는 메인 에이전트만 고친다.',
 ].join('\n')
 
 export const register: Register = (on, options) => {
