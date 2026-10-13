@@ -86,7 +86,7 @@ test('다른 세션이 파일에 추가한 탭을 덮어쓰지 않는다', async
 
 test('시스템 프롬프트 끝에 notes 사용 규칙이 붙는다', async ($, on) => {
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' as const }] }))
-  const { sections } = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] })
+  const { sections } = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [] })
   expect(sections.map(s => s.id)).toEqual(['intro', 'notes:guide'])
   expect(sections[1]?.text).toContain('notes_check')
 })
@@ -463,4 +463,45 @@ test('터미널에서는 왼쪽 구분선과 붙지 않게 창 내용을 한 칸
   await term.unmount()
   const desk = await $.ui.mount({ plugin: 'notes', surface: 'desktop', component: 'Pane', requestId: 'notes', props: PANE })
   expect((await desk.find({ key: 'pane-root' }))?.props.paddingLeft ?? 0).toBe(0)
+})
+
+test('헤드리스(-p·SDK)에서는 notes 사용 규칙을 넣지 않는다', async ($, on) => {
+  on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' as const }] }))
+  const { sections } = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] })
+  expect(sections.map(s => s.id)).toEqual(['intro'])
+})
+
+test('헤드리스 세션에서는 notes 도구를 등록하지 않고, 사람이 있는 세션에서는 등록한다', async ($, on) => {
+  fakeFiles(on)
+  const registered: string[] = []
+  on('tool.register', (_$, e) => {
+    registered.push(e.name)
+    return { value: undefined } as never
+  })
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.root', () => ({ value: '/w' }) as never)
+  on('session.id', () => ({ value: 's1' }) as never)
+  on('clock.every', () => ({ value: undefined }) as never)
+  on('command.register', () => ({ value: undefined }) as never)
+
+  await $.session.start({ cwd: '/w', surface: null, isInteractive: false } as never)
+  expect(registered).toEqual([])
+
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true } as never)
+  expect(registered).toContain('notes_write')
+})
+
+test('서브에이전트가 notes 도구를 부르면 거절하고 노트 파일에 쓰지 않는다', async ($, on) => {
+  const { writes } = fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+
+  for (const tool of ['notes_write', 'notes_check', 'notes_status', 'notes_read', 'notes_close']) {
+    const res = await $.tool.call({ tool: `mcp__notes__${tool}`, tab: '서브', items: ['가'], agentId: 'sub-1' } as never)
+    expect(String(res.deny ?? res.text)).toContain('메인 에이전트만')
+  }
+  expect(writes.length).toBe(0)
+
+  const main = await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '메인', items: ['가'] } as never)
+  expect(String(main.result)).toContain('#1 [ ] 가')
 })

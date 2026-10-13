@@ -226,6 +226,8 @@ let maxScroll = 0
 
 const ok = (text: string) => ({ result: text })
 const failed = () => ({ deny: 'notes 모드 처리 중 오류가 났습니다.' })
+// 노트는 사람이 보는 메인 에이전트만 쓴다. 서브에이전트·팀원 루프에서 부르면 거절한다.
+const MAIN_ONLY = { deny: 'notes 는 메인 에이전트만 씁니다. 진행 상황은 결과로 메인 에이전트에게 돌려주세요.' }
 
 // 매 세션 시스템 프롬프트 끝에 붙는 사용 규칙. 고정 문구라 프롬프트 캐시를 깨지 않는다.
 const GUIDE = [
@@ -253,11 +255,14 @@ const GUIDE = [
   '- 사용자가 다른 주제로 넘어가면 기존 탭은 그대로 두고 새 탭을 만든다.',
   '- 사용자가 "아까 거 어디까지 했지" 처럼 이전 작업을 물으면 먼저 notes_read 로 확인하고 답한다.',
   '- 탭 삭제(notes_close)는 사용자가 정리를 원할 때만 한다.',
+  '- 서브에이전트는 notes 도구를 쓰지 않는다. 노트는 메인 에이전트만 고친다.',
 ].join('\n')
 
 export const register: Register = (on, options) => {
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
+    // 헤드리스(-p·SDK)는 그릴 곳이 없다. 보는 사람이 없으니 규칙을 넣지 않는다.
+    if (e.surfaces.length === 0) return composed
     return { sections: [...composed.sections, { id: 'notes:guide', text: GUIDE, scope: 'session' }] }
   })
 
@@ -275,6 +280,8 @@ export const register: Register = (on, options) => {
   })
 
   on('session.start', async ($, e, next) => {
+    // 헤드리스(크론·-p·SDK)는 볼 사람이 없다. 도구를 등록하지 않아 노트 파일에 쓰지 못하게 한다.
+    if (!e.isInteractive) return next(e)
     const root = await $.session.root()
     sessionId = await $.session.id()
     const saved = await loadFile($, root)
@@ -365,6 +372,7 @@ export const register: Register = (on, options) => {
   })
 
   on('tool.call', { tool: 'mcp__notes__notes_write' }, async ($, e) => {
+    if (e.agentId !== undefined) return MAIN_ONLY
     const a = e as unknown as Record<string, unknown>
     const title = asText(a.tab)?.slice(0, 40)
     if (title === undefined) return { deny: 'tab(탭 이름)이 필요합니다.' }
@@ -397,6 +405,7 @@ export const register: Register = (on, options) => {
   }).catch(failed)
 
   on('tool.call', { tool: 'mcp__notes__notes_check' }, async ($, e) => {
+    if (e.agentId !== undefined) return MAIN_ONLY
     const a = e as unknown as Record<string, unknown>
     const title = asText(a.tab)
     const cur = await read($, book)
@@ -421,6 +430,7 @@ export const register: Register = (on, options) => {
   }).catch(failed)
 
   on('tool.call', { tool: 'mcp__notes__notes_status' }, async ($, e) => {
+    if (e.agentId !== undefined) return MAIN_ONLY
     const a = e as unknown as Record<string, unknown>
     const title = asText(a.tab)
     const cur = await read($, book)
@@ -450,6 +460,7 @@ export const register: Register = (on, options) => {
   }).catch(failed)
 
   on('tool.call', { tool: 'mcp__notes__notes_read' }, async ($, e) => {
+    if (e.agentId !== undefined) return MAIN_ONLY
     const a = e as unknown as Record<string, unknown>
     const b = await read($, book)
     const title = asText(a.tab)
@@ -462,6 +473,7 @@ export const register: Register = (on, options) => {
   }).catch(failed)
 
   on('tool.call', { tool: 'mcp__notes__notes_close' }, async ($, e) => {
+    if (e.agentId !== undefined) return MAIN_ONLY
     const title = asText((e as unknown as Record<string, unknown>).tab)
     const cur = await read($, book)
     if (findTab(cur, title) === undefined) return { deny: `'${title}' 탭이 없습니다.` }
