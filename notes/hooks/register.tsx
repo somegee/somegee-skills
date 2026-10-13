@@ -281,6 +281,8 @@ export const register: Register = (on, options) => {
   // classic 훅은 기록 파일 경로를 준다. 시작할 때와 프롬프트를 보낼 때마다 이름을 다시 읽는다(/rename 반영).
   on('classic.SessionStart', async ($, e, next) => {
     if (typeof e.transcript_path === 'string' && e.transcript_path !== '') transcriptPath = e.transcript_path
+    // /clear 는 세션 상태를 비운다. 3초 주기 동기화를 기다리지 않고 노트 파일을 바로 다시 읽는다.
+    if (e.source === 'clear') await sync($)
     await refreshTitle($)
     return next(e)
   })

@@ -8,7 +8,8 @@ function fakeFiles(on: On) {
   const reads: string[] = []
   const norm = (p: string) => p.replace(/\\/g, '/')
   on('fs.read', (_$, e) => {
-    const text = files.get(norm(e.path))
+    // 키를 파일 이름 끝부분('/w.json')으로 넣어 두어도 찾는다(모드 폴더 경로를 몰라도 되게).
+    const text = files.get(norm(e.path)) ?? [...files].find(([k]) => k.startsWith('/') && norm(e.path).endsWith(k))?.[1]
     reads.push(norm(e.path))
     if (text === undefined) throw new Error('ENOENT')
     return { value: text }
@@ -514,4 +515,15 @@ test('/clear 뒤처럼 세션 상태의 작업 폴더가 비어 있어도 이름
 
   expect(writes.some(p => p.endsWith('/w.json'))).toBe(true)
   expect(writes.some(p => p.endsWith('/.json'))).toBe(false)
+})
+
+test('/clear 뒤 SessionStart(clear) 가 오면 노트 파일을 바로 다시 읽어 창에 보인다', async ($, on) => {
+  const { files } = fakeFiles(on)
+  files.set('/w.json', JSON.stringify({ root: '/w', tabs: [{ title: '남은 탭', items: [{ text: '가', isDone: false }], updatedAt: '2026-10-13T00:00:00Z' }], history: [], future: [] }))
+
+  on('classic.SessionStart', () => ({}) as never)
+  await $.classic.SessionStart({ source: 'clear' } as never)
+
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ type: 'Text', text: /남은 탭/ })).toBeDefined()
 })
