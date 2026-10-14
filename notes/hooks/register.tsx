@@ -843,19 +843,21 @@ export const register: Register = (on, options) => {
             const isActive = t.title === tab.title
             const name = isActive ? `▶ ${t.title}` : t.title
             const marked = tabMark(t, states)
+            // 지금 탭 앞 화살표는 탭 줄 테두리와 같은 청록으로 칠한다.
+            const arrow = <Text key="arrow" color="cyan">▶ </Text>
             // 지금 탭은 기울인 굵은 글씨로 다른 탭과 구별한다. 엔진은 테두리([ ]) 있는 버튼을 통째로 굵게 칠하므로,
             // 다른 탭은 테두리 없는 버튼(plain)에 [ ]를 글자로 넣어 보통 굵기로 그린다.
             if (marked === undefined)
               return (
                 <Button key={`tab-${t.title}`} label={name} variant={isActive ? 'primary' : 'secondary'} plain={isActive ? undefined : true} dimColor={!isActive} onPress={select(t.title)}>
-                  <Text bold={isActive} italic={isActive}>{isActive ? name : `[ ${name} ]`}</Text>
+                  <Text bold={isActive} italic={isActive}>{isActive ? [arrow, t.title] : `[ ${name} ]`}</Text>
                 </Button>
               )
             // 표시가 붙은 탭은 표시와 색을 붙인다(색을 못 보는 화면에서도 표시로 구별). 다 끝난 탭(✅)만 흐리게.
             const { mark, color } = TAB_MARK[marked]
             return (
               <Button key={`tab-${t.title}`} label={`${name} ${mark}`} variant={isActive ? 'primary' : 'secondary'} plain={isActive ? undefined : true} dimColor={!isActive && marked === 'done'} onPress={select(t.title)}>
-                <Text bold={isActive} italic={isActive} color={color}>{isActive ? `${name} ${mark}` : `[ ${name} ${mark} ]`}</Text>
+                <Text bold={isActive} italic={isActive} color={color}>{isActive ? [arrow, `${t.title} ${mark}`] : `[ ${name} ${mark} ]`}</Text>
               </Button>
             )
           })}
