@@ -10,6 +10,7 @@
 - **목표·종료 조건·결과물·메모** 구역별 표시. 결과물(커밋·PR·파일·링크)은 따로 모인다.
 - **지금 하는 단계**: 안 끝난 첫 단계 앞에 ▶ 와 서서히 바뀌는 배경색.
 - **막힘·대기**: 단계 아래에 ⛔ 막힘 / ⏳ 대기 사유, 풀리면 ↳ 해결 내역이 남는다. 안 끝난 단계에 막힘이 있으면 탭 이름이 빨강·⛔, 대기만 있으면 노랑·⏳ 으로 바뀌어 다른 탭을 보는 중에도 눈에 띈다.
+- **탭 줄 표시**: 그 탭을 마지막으로 다룬 세션이 일하는 중이면 초록 ●, 허락 창·질문 창을 띄웠으면 청록 💬, 모든 단계가 끝나면 흐린 ✅. 겹치면 ⛔ → 💬 → ⏳ → ● → ✅ 순서로 하나만. 세션 상태는 `<.claude>/notes-data/live/<세션 id>.json` 에 따로 쓰고, 3분 넘게 소식이 없으면 무시한다.
 - **세션·갱신 시각**: 제목 아래에 이 탭을 다룬 세션 이름(/rename 이름, 없으면 자동 제목이나 세션 번호)과 마지막 갱신 시각.
 - **[✕ 닫기]**: 아래 버튼 줄 오른쪽 끝.
 - **구역 접기**: 목표·종료 조건·할 일·결과물·메모 제목을 누르면 접히고(▸ + 개수 요약) 다시 누르면 펴진다.
@@ -52,5 +53,5 @@ notes is a Claude Code mod: the agent writes its plan, progress and finish line 
 
 - Install: `claude plugin marketplace add somegee/somegee-skills` then `claude plugin install notes@somegee-skills --scope user`.
 - Language: open `/config`, find notes → "언어 / Language" and pick `English`. The pane, tool descriptions and the agent guide switch to English from the next session.
-- Every session in the same project folder shares one set of notes. A tab whose open steps are blocked turns red with ⛔; waiting only, yellow with ⏳.
+- Every session in the same project folder shares one set of notes. A tab whose open steps are blocked turns red with ⛔; waiting only, yellow with ⏳. A green ● means the session that last touched the tab is working, a cyan 💬 that it shows a permission or question dialog, and a dim ✅ that every step is done.
 - Headless runs (`claude -p`, cron, SDK) and subagents never touch the notes.

@@ -556,9 +556,9 @@ test('안 끝난 단계에 막힘이 있으면 탭 이름이 빨강·⛔, 대기
   expect((await ui.find({ type: 'Text', text: /^▶ 평범$/ }))?.props.italic).toBe(true)
   expect((await ui.find({ type: 'Text', text: /^\[ 조사 ⏳ \]$/ }))?.props.italic).toBe(false)
 
-  // 대기 단계를 끝내면 표시가 사라진다.
+  // 대기 단계를 끝내면 대기 표시가 사라지고, 단계가 다 끝났으니 ✅ 가 붙는다.
   await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '조사', items: [1] } as never)
-  expect(await ui.find({ type: 'Button', text: /^(\[ )?(▶ )?조사( \])?$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^(\[ )?(▶ )?조사 ✅( \])?$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /조사 ⏳/ })).toBeUndefined()
 })
 
@@ -602,4 +602,49 @@ test('English: 대화창 요약 줄도 영어로 나온다', EN, async ($, on) =
   await check.unmount()
   const write = await $.ui.mount({ plugin: 'notes', surface: 'terminal', ...callRow('mcp__notes__notes_write', { tab: 'Deploy', add_items: ['a'] }) })
   expect((await write.find({ key: 'notes-call' }))?.text).toContain('Deploy · +1 step')
+})
+
+test('모든 단계가 끝난 탭은 ✅ 를 붙이고 흐리게, 하나라도 남으면 표시가 없다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '끝남', items: ['A'] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '끝남', items: [1] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '진행', items: ['B', 'C'] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '진행', items: [1] } as never)
+
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ type: 'Text', text: /^\[ 끝남 ✅ \]$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Button', text: /^\[ 끝남 ✅ \]$/ }))?.props.dimColor).toBe(true)
+  expect(await ui.find({ type: 'Text', text: /^▶ 진행$/ })).toBeDefined()
+})
+
+test('허락 창이 뜨면 이 세션 탭에 💬, 그 도구 호출이 끝나면 일하는 중 ● 으로 바뀌고 상태 파일에 남는다', async ($, on) => {
+  const { files } = fakeFiles(on)
+  on('classic.PermissionRequest', () => ({ value: {} }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '배포', items: ['A'] } as never)
+
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect((await ui.find({ type: 'Text', text: /^▶ 배포 💬$/ }))?.props.color).toBe('cyan')
+  const livePath = [...files.keys()].find(k => k.endsWith('/live/s1.json'))
+  expect(JSON.parse(files.get(livePath!)!).state).toBe('ask')
+
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  expect((await ui.find({ type: 'Text', text: /^▶ 배포 ●$/ }))?.props.color).toBe('green')
+  expect(JSON.parse(files.get(livePath!)!).state).toBe('working')
+})
+
+test('막힘은 💬 보다, 💬 는 대기보다 먼저 보인다', async ($, on) => {
+  fakeFiles(on)
+  on('classic.PermissionRequest', () => ({ value: {} }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '배포', items: ['A', 'B'] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '배포', item: 1, status: 'waiting', note: '확인' } as never)
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ type: 'Text', text: /^▶ 배포 💬$/ })).toBeDefined()
+  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '배포', item: 2, status: 'blocked', note: '권한' } as never)
+  expect(await ui.find({ type: 'Text', text: /^▶ 배포 ⛔$/ })).toBeDefined()
 })

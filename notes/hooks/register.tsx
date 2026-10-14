@@ -3,7 +3,7 @@ import type { BoxProps, ElementConstructor, EngineInterface, Register, RenderChi
 
 import { callSummary, toCallDisplay } from './call-summary'
 import { TEXT, toLang, type Strings } from './i18n'
-import type { NoteChange, NoteChangePart, NoteItem, NoteItemStatus, NotesBook, NoteSession, NoteTab } from '../types'
+import type { LiveState, NoteChange, NoteChangePart, NoteItem, NoteItemStatus, NotesBook, NoteSession, NoteTab } from '../types'
 
 const PANE = 'notes'
 // 화면·도구 설명·사용 규칙의 문구. register 가 설정 language 로 고른다(기본 한국어).
@@ -14,6 +14,7 @@ const book = atom({ plugin: 'notes', key: 'book' } as const, { root: '', tabs: [
 const scroll = atom({ plugin: 'notes', key: 'scroll' } as const, 0)
 const tick = atom({ plugin: 'notes', key: 'tick' } as const, 0)
 // 접어 둔 구역. 키 = '<탭 이름>|<구역>'. 이 세션에서만 유지된다(다른 세션·파일과 공유하지 않음).
+const live = atom({ plugin: 'notes', key: 'live' } as const, {} as Record<string, LiveState>)
 const folded = atom({ plugin: 'notes', key: 'folded' } as const, {} as Record<string, boolean>)
 
 const SYNC_MS = 3000
@@ -103,10 +104,60 @@ const ago = (iso: string, nowMs: number) => {
 
 const statusMark = (s: NoteItemStatus) => (s === 'blocked' ? `⛔ ${L.blocked}` : `⏳ ${L.waiting}`)
 // 탭 줄 표시: 안 끝난 단계에 막힘이 하나라도 있으면 빨강, 대기만 있으면 노랑. 다른 탭에서 일하는 중에도 한눈에 보이게.
-const TAB_ALERT: Record<NoteItemStatus, { mark: string; color: string }> = { blocked: { mark: '⛔', color: 'red' }, waiting: { mark: '⏳', color: 'yellow' } }
-const tabAlert = (t: NoteTab): NoteItemStatus | undefined => {
+// 세션 표시: 그 탭을 마지막으로 다룬 세션이 일하는 중이면 초록 ●, 질문·허락 창을 띄웠으면 청록 💬. 모든 단계가 끝나면 ✅.
+// 여러 개가 겹치면 하나만: ⛔ → 💬 → ⏳ → ● → ✅.
+type TabMark = NoteItemStatus | 'ask' | 'working' | 'done'
+const TAB_MARK: Record<TabMark, { mark: string; color?: string }> = {
+  blocked: { mark: '⛔', color: 'red' },
+  ask: { mark: '💬', color: 'cyan' },
+  waiting: { mark: '⏳', color: 'yellow' },
+  working: { mark: '●', color: 'green' },
+  done: { mark: '✅' },
+}
+const tabMark = (t: NoteTab, states: Record<string, LiveState>): TabMark | undefined => {
   const open = t.items.filter(i => !i.isDone)
-  return open.some(i => i.status === 'blocked') ? 'blocked' : open.some(i => i.status === 'waiting') ? 'waiting' : undefined
+  const state = t.session === undefined ? undefined : states[t.session.id]
+  if (open.some(i => i.status === 'blocked')) return 'blocked'
+  if (state === 'ask') return 'ask'
+  if (open.some(i => i.status === 'waiting')) return 'waiting'
+  if (state === 'working') return 'working'
+  return t.items.length > 0 && open.length === 0 ? 'done' : undefined
+}
+
+// 세션 상태는 세션마다 <notes-data>/live/<세션 id>.json 한 파일에 { state, at } 로 쓴다(노트 파일과 따로라 서로 덮어쓰지 않는다).
+// 일하는 동안은 1분마다 at 을 새로 쓰고, 3분 넘게 소식이 없으면 꺼진 세션으로 보고 무시한다.
+const LIVE_BEAT_MS = 60000
+const LIVE_STALE_MS = 180000
+let myLive: { state: LiveState; at: number } = { state: 'idle', at: 0 }
+const livePath = ($: EngineInterface, id: string) => `${dataDir($.plugin.root)}/live/${id.replace(/[^A-Za-z0-9-]/g, '')}.json`
+async function setLive($: EngineInterface, state: LiveState) {
+  if (sessionId === '' || state === myLive.state) return
+  myLive = { state, at: Date.now() }
+  await update($, live, m => ({ ...m, [sessionId]: state }))
+  await writeLive($)
+}
+const writeLive = ($: EngineInterface) =>
+  $.fs.write(livePath($, sessionId), JSON.stringify({ state: myLive.state, at: new Date(myLive.at).toISOString() })).catch(() => undefined)
+// 3초 동기화 때: 내 상태가 일하는 중이면 1분마다 at 갱신, 탭에 걸린 다른 세션들의 상태 파일을 읽는다.
+async function syncLive($: EngineInterface) {
+  if (sessionId === '') return
+  if (myLive.state !== 'idle' && Date.now() - myLive.at >= LIVE_BEAT_MS) {
+    myLive = { ...myLive, at: Date.now() }
+    await writeLive($)
+  }
+  const ids = [...new Set((await read($, book)).tabs.map(t => t.session?.id).filter((id): id is string => !!id && id !== sessionId))]
+  const next: Record<string, LiveState> = { [sessionId]: myLive.state }
+  for (const id of ids) {
+    try {
+      const v = JSON.parse(await $.fs.read(livePath($, id))) as { state?: unknown; at?: unknown }
+      const isFresh = typeof v.at === 'string' && Date.now() - Date.parse(v.at) < LIVE_STALE_MS
+      if (isFresh && (v.state === 'working' || v.state === 'ask')) next[id] = v.state
+    } catch {
+      // 상태 파일이 없으면(그 세션은 이 기능 이전 버전이거나 아직 일하지 않음) 표시하지 않는다.
+    }
+  }
+  const cur = await read($, live)
+  if (JSON.stringify(cur) !== JSON.stringify(next)) await update($, live, () => next)
 }
 // 노트는 <.claude>/notes-data/<작업 폴더>.json 한 파일에 둔다. 같은 폴더의 세션들이 이 파일을 함께 읽고 쓴다.
 // 마켓플레이스 설치본은 버전마다 폴더가 바뀌므로 모드 폴더 밖에 둔다. .claude 아래가 아니면 모드 폴더의 data/.
@@ -276,6 +327,34 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // 세션 상태: 턴이 시작되면 일하는 중, 끝나면 쉼. 허락 창·질문 창이 뜨면 답 필요, 그 도구 호출이 끝나면 다시 일하는 중.
+  on('turn.start', async ($, e, next) => {
+    await setLive($, 'working')
+    return next(e)
+  })
+  on('turn.complete', async ($, e, next) => {
+    // 서브에이전트의 턴 끝은 메인 세션이 쉬는 게 아니다.
+    if (e.agentId === undefined) await setLive($, 'idle')
+    return next(e)
+  })
+  on('classic.PermissionRequest', async ($, e, next) => {
+    await setLive($, 'ask')
+    return next(e)
+  })
+  on('tool.call', { tool: /^(AskUserQuestion|ExitPlanMode)$/ }, async ($, e, next) => {
+    if (e.agentId === undefined) await setLive($, 'ask')
+    return next(e)
+  })
+  on('tool.call', async ($, e, next) => {
+    const result = await next(e)
+    if (myLive.state === 'ask') await setLive($, 'working')
+    return result
+  })
+  on('session.end', async ($, e, next) => {
+    await setLive($, 'idle')
+    return next(e)
+  })
+
   on('session.start', async ($, e, next) => {
     // 헤드리스(크론·-p·SDK)는 볼 사람이 없다. 도구를 등록하지 않아 노트 파일에 쓰지 못하게 한다.
     if (!e.isInteractive) return next(e)
@@ -284,7 +363,7 @@ export const register: Register = (on, options) => {
     const saved = await loadFile($, root)
     await update($, book, () => ({ root, ...saved, active: saved.tabs.at(-1)?.title }))
     // 3초마다: 다른 세션이 고친 노트 반영 + /rename 한 이름 반영.
-    $.clock.every(SYNC_MS, () => void sync($).then(() => refreshTitle($, true)))
+    $.clock.every(SYNC_MS, () => void sync($).then(() => Promise.all([refreshTitle($, true), syncLive($)])))
     $.clock.every(TICK_MS, () => void update($, tick, n => (n + 1) % 100000).then(() => refreshTitle($)))
     void refreshTitle($)
     // 기본은 세션을 열면 창도 연다. /config 의 notes.autoOpen 을 끄면 /notes 로만 연다.
@@ -518,6 +597,7 @@ export const register: Register = (on, options) => {
     const gutter = e.surface === 'terminal' ? PANE_GUTTER : 0
     const md = (key: string, text: string, dim = false) => <Markdown key={key} text={text} dimColor={dim} />
     const b = await read($, book)
+    const states = await read($, live)
     const tab = findTab(b, b.active) ?? b.tabs.at(-1)
     const last = b.history.at(-1)
 
@@ -762,19 +842,19 @@ export const register: Register = (on, options) => {
           {b.tabs.map(t => {
             const isActive = t.title === tab.title
             const name = isActive ? `▶ ${t.title}` : t.title
-            const alert = tabAlert(t)
+            const marked = tabMark(t, states)
             // 지금 탭은 기울인 굵은 글씨로 다른 탭과 구별한다. 엔진은 테두리([ ]) 있는 버튼을 통째로 굵게 칠하므로,
             // 다른 탭은 테두리 없는 버튼(plain)에 [ ]를 글자로 넣어 보통 굵기로 그린다.
-            if (alert === undefined)
+            if (marked === undefined)
               return (
                 <Button key={`tab-${t.title}`} label={name} variant={isActive ? 'primary' : 'secondary'} plain={isActive ? undefined : true} dimColor={!isActive} onPress={select(t.title)}>
                   <Text bold={isActive} italic={isActive}>{isActive ? name : `[ ${name} ]`}</Text>
                 </Button>
               )
-            // 막힘·대기 탭은 흐리게 하지 않고 표시와 색을 붙인다(색을 못 보는 화면에서도 표시로 구별).
-            const { mark, color } = TAB_ALERT[alert]
+            // 표시가 붙은 탭은 표시와 색을 붙인다(색을 못 보는 화면에서도 표시로 구별). 다 끝난 탭(✅)만 흐리게.
+            const { mark, color } = TAB_MARK[marked]
             return (
-              <Button key={`tab-${t.title}`} label={`${name} ${mark}`} variant={isActive ? 'primary' : 'secondary'} plain={isActive ? undefined : true} onPress={select(t.title)}>
+              <Button key={`tab-${t.title}`} label={`${name} ${mark}`} variant={isActive ? 'primary' : 'secondary'} plain={isActive ? undefined : true} dimColor={!isActive && marked === 'done'} onPress={select(t.title)}>
                 <Text bold={isActive} italic={isActive} color={color}>{isActive ? `${name} ${mark}` : `[ ${name} ${mark} ]`}</Text>
               </Button>
             )

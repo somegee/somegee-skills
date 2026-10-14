@@ -5,6 +5,9 @@ export type NoteItem = { text: string; isDone: boolean; status?: NoteItemStatus;
 // 이 탭을 마지막으로 다룬 세션. title 은 /rename 이름(없으면 자동 제목), 둘 다 없으면 비어 있다.
 export type NoteSession = { id: string; title?: string }
 
+// 세션 상태: working = 일하는 중(턴 진행), ask = 질문·허락 창이 떠서 사람 답을 기다림, idle = 쉼.
+export type LiveState = 'working' | 'ask' | 'idle'
+
 export type NoteTab = {
   title: string
   goal?: string
@@ -28,6 +31,7 @@ declare module 'claude-code' {
   interface PluginState {
     // tick: 'N분 전 갱신' 이 흐르도록 30초마다 오르는 수.
     // folded: 접어 둔 구역, 키 = "<탭 이름>|<구역>".
-    notes: { book: NotesBook; scroll: number; tick: number; folded: Record<string, boolean> }
+    // live: 세션 id → 상태(탭 줄의 ●·💬 표시용).
+    notes: { book: NotesBook; scroll: number; tick: number; folded: Record<string, boolean>; live: Record<string, LiveState> }
   }
 }
