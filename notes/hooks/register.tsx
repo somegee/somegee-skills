@@ -763,11 +763,11 @@ export const register: Register = (on, options) => {
             const isActive = t.title === tab.title
             const name = isActive ? `▶ ${t.title}` : t.title
             const alert = tabAlert(t)
-            // 지금 탭은 기울인 굵은 글씨로 다른 탭과 구별한다.
+            // 지금 탭은 기울인 굵은 글씨로 다른 탭과 구별한다. 다른 탭은 보통 굵기를 직접 적어 버튼 기본 굵기를 끈다.
             if (alert === undefined)
               return (
                 <Button key={`tab-${t.title}`} label={name} variant={isActive ? 'primary' : 'secondary'} dimColor={!isActive} onPress={select(t.title)}>
-                  <Text bold={isActive} italic={isActive}>{name}</Text>
+                  <Text weight={isActive ? 'bold' : 'regular'} italic={isActive}>{name}</Text>
                 </Button>
               )
             // 막힘·대기 탭은 흐리게 하지 않고 표시와 색을 붙인다(색을 못 보는 화면에서도 표시로 구별).

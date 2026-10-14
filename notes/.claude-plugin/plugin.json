@@ -1,6 +1,6 @@
 {
   "name": "notes",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "description": "에이전트가 계획·진행상황·종료조건을 탭별 노트로 기록하고, 사용자가 옆 창에서 바로 확인하는 모드",
   "types": "./types/index.d.ts",
   "author": {
