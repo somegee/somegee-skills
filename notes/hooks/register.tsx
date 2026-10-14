@@ -99,6 +99,12 @@ const ago = (iso: string, nowMs: number) => {
 }
 
 const STATUS_MARK: Record<NoteItemStatus, string> = { blocked: '⛔ 막힘', waiting: '⏳ 대기' }
+// 탭 줄 표시: 안 끝난 단계에 막힘이 하나라도 있으면 빨강, 대기만 있으면 노랑. 다른 탭에서 일하는 중에도 한눈에 보이게.
+const TAB_ALERT: Record<NoteItemStatus, { mark: string; color: string }> = { blocked: { mark: '⛔', color: 'red' }, waiting: { mark: '⏳', color: 'yellow' } }
+const tabAlert = (t: NoteTab): NoteItemStatus | undefined => {
+  const open = t.items.filter(i => !i.isDone)
+  return open.some(i => i.status === 'blocked') ? 'blocked' : open.some(i => i.status === 'waiting') ? 'waiting' : undefined
+}
 // 노트는 <.claude>/notes-data/<작업 폴더>.json 한 파일에 둔다. 같은 폴더의 세션들이 이 파일을 함께 읽고 쓴다.
 // 마켓플레이스 설치본은 버전마다 폴더가 바뀌므로 모드 폴더 밖에 둔다. .claude 아래가 아니면 모드 폴더의 data/.
 const dataDir = (pluginRoot: string) => {
@@ -782,11 +788,24 @@ export const register: Register = (on, options) => {
     return (
       <Box key="pane-root" flexDirection="column" paddingLeft={gutter} height={isDock ? e.props.scroll.bodyRows - 1 : undefined}>
         <Box flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor="cyan" paddingX={1}>
-          {b.tabs.map(t => (
-            <Button key={`tab-${t.title}`} variant={t.title === tab.title ? 'primary' : 'secondary'} dimColor={t.title !== tab.title} onPress={select(t.title)}>
-              {t.title === tab.title ? `▶ ${t.title}` : t.title}
-            </Button>
-          ))}
+          {b.tabs.map(t => {
+            const isActive = t.title === tab.title
+            const name = isActive ? `▶ ${t.title}` : t.title
+            const alert = tabAlert(t)
+            if (alert === undefined)
+              return (
+                <Button key={`tab-${t.title}`} variant={isActive ? 'primary' : 'secondary'} dimColor={!isActive} onPress={select(t.title)}>
+                  {name}
+                </Button>
+              )
+            // 막힘·대기 탭은 흐리게 하지 않고 표시와 색을 붙인다(색을 못 보는 화면에서도 표시로 구별).
+            const { mark, color } = TAB_ALERT[alert]
+            return (
+              <Button key={`tab-${t.title}`} label={`${name} ${mark}`} variant={isActive ? 'primary' : 'secondary'} onPress={select(t.title)}>
+                <Text bold color={color}>{`${name} ${mark}`}</Text>
+              </Button>
+            )
+          })}
         </Box>
         <Box key="body" flexDirection="column" flexGrow={1}>
           {isScrollable ? (

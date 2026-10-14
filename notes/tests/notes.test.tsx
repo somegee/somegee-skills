@@ -527,3 +527,28 @@ test('/clear 뒤 SessionStart(clear) 가 오면 노트 파일을 바로 다시 �
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   expect(await ui.find({ type: 'Text', text: /남은 탭/ })).toBeDefined()
 })
+
+test('안 끝난 단계에 막힘이 있으면 탭 이름이 빨강·⛔, 대기만 있으면 노랑·⏳, 다 끝나면 원래대로', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '배포', items: ['A', 'B'] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '조사', items: ['C'] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '평범', items: ['D'] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '배포', item: 1, status: 'waiting', note: '확인' } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '배포', item: 2, status: 'blocked', note: '권한' } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '조사', item: 1, status: 'waiting', note: '답' } as never)
+
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  // 마지막으로 표시를 단 '조사'가 지금 탭이다.
+  expect((await ui.find({ type: 'Text', text: /^배포 ⛔$/ }))?.props.color).toBe('red')
+  expect((await ui.find({ type: 'Text', text: /^▶ 조사 ⏳$/ }))?.props.color).toBe('yellow')
+  expect(await ui.find({ type: 'Button', text: /^평범$/ })).toBeDefined()
+
+  await ui.press({ key: 'tab-평범' })
+  expect((await ui.find({ type: 'Text', text: /^조사 ⏳$/ }))?.props.color).toBe('yellow')
+
+  // 대기 단계를 끝내면 표시가 사라진다.
+  await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '조사', items: [1] } as never)
+  expect(await ui.find({ type: 'Button', text: /^(▶ )?조사$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /조사 ⏳/ })).toBeUndefined()
+})
