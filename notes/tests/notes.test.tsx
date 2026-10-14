@@ -65,7 +65,7 @@ test('탭이 여러 개면 탭 버튼으로 전환된다', async ($, on) => {
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '크론 로그', items: ['B'] } as never)
 
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
-  expect(await ui.findAll({ type: 'Button', text: /^(▶ )?(대시보드 쿼리|크론 로그)$/ })).toHaveLength(2)
+  expect(await ui.findAll({ type: 'Button', text: /^(\[ )?(▶ )?(대시보드 쿼리|크론 로그)( \])?$/ })).toHaveLength(2)
   expect(await ui.find({ type: 'Text', text: /B$/ })).toBeDefined()
 
   await ui.press({ key: 'tab-대시보드 쿼리' })
@@ -540,22 +540,25 @@ test('안 끝난 단계에 막힘이 있으면 탭 이름이 빨강·⛔, 대기
 
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   // 마지막으로 표시를 단 '조사'가 지금 탭이다.
-  expect((await ui.find({ type: 'Text', text: /^배포 ⛔$/ }))?.props.color).toBe('red')
+  expect((await ui.find({ type: 'Text', text: /^\[ 배포 ⛔ \]$/ }))?.props.color).toBe('red')
   expect((await ui.find({ type: 'Text', text: /^▶ 조사 ⏳$/ }))?.props.color).toBe('yellow')
-  expect(await ui.find({ type: 'Button', text: /^평범$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /^\[ 평범 \]$/ })).toBeDefined()
 
   expect((await ui.find({ type: 'Text', text: /^▶ 조사 ⏳$/ }))?.props.italic).toBe(true)
-  expect((await ui.find({ type: 'Text', text: /^배포 ⛔$/ }))?.props.italic).toBe(false)
+  expect((await ui.find({ type: 'Text', text: /^\[ 배포 ⛔ \]$/ }))?.props.italic).toBe(false)
+  // 엔진은 테두리 있는 버튼을 통째로 굵게 칠하므로, 지금 탭이 아니면 plain 버튼 + 보통 굵기여야 한다.
+  expect((await ui.find({ type: 'Text', text: /^\[ 배포 ⛔ \]$/ }))?.props.bold).toBe(false)
+  expect((await ui.find({ type: 'Button', text: /^\[ 평범 \]$/ }))?.props.plain).toBe(true)
 
   await ui.press({ key: 'tab-평범' })
-  expect((await ui.find({ type: 'Text', text: /^조사 ⏳$/ }))?.props.color).toBe('yellow')
+  expect((await ui.find({ type: 'Text', text: /^\[ 조사 ⏳ \]$/ }))?.props.color).toBe('yellow')
   // 지금 탭은 기울인 글씨, 나머지는 바로 선 글씨.
   expect((await ui.find({ type: 'Text', text: /^▶ 평범$/ }))?.props.italic).toBe(true)
-  expect((await ui.find({ type: 'Text', text: /^조사 ⏳$/ }))?.props.italic).toBe(false)
+  expect((await ui.find({ type: 'Text', text: /^\[ 조사 ⏳ \]$/ }))?.props.italic).toBe(false)
 
   // 대기 단계를 끝내면 표시가 사라진다.
   await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '조사', items: [1] } as never)
-  expect(await ui.find({ type: 'Button', text: /^(▶ )?조사$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /^(\[ )?(▶ )?조사( \])?$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /조사 ⏳/ })).toBeUndefined()
 })
 

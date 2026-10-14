@@ -763,18 +763,19 @@ export const register: Register = (on, options) => {
             const isActive = t.title === tab.title
             const name = isActive ? `▶ ${t.title}` : t.title
             const alert = tabAlert(t)
-            // 지금 탭은 기울인 굵은 글씨로 다른 탭과 구별한다.
+            // 지금 탭은 기울인 굵은 글씨로 다른 탭과 구별한다. 엔진은 테두리([ ]) 있는 버튼을 통째로 굵게 칠하므로,
+            // 다른 탭은 테두리 없는 버튼(plain)에 [ ]를 글자로 넣어 보통 굵기로 그린다.
             if (alert === undefined)
               return (
-                <Button key={`tab-${t.title}`} label={name} variant={isActive ? 'primary' : 'secondary'} dimColor={!isActive} onPress={select(t.title)}>
-                  <Text bold={isActive} italic={isActive}>{name}</Text>
+                <Button key={`tab-${t.title}`} label={name} variant={isActive ? 'primary' : 'secondary'} plain={isActive ? undefined : true} dimColor={!isActive} onPress={select(t.title)}>
+                  <Text bold={isActive} italic={isActive}>{isActive ? name : `[ ${name} ]`}</Text>
                 </Button>
               )
             // 막힘·대기 탭은 흐리게 하지 않고 표시와 색을 붙인다(색을 못 보는 화면에서도 표시로 구별).
             const { mark, color } = TAB_ALERT[alert]
             return (
-              <Button key={`tab-${t.title}`} label={`${name} ${mark}`} variant={isActive ? 'primary' : 'secondary'} onPress={select(t.title)}>
-                <Text bold={isActive} italic={isActive} color={color}>{`${name} ${mark}`}</Text>
+              <Button key={`tab-${t.title}`} label={`${name} ${mark}`} variant={isActive ? 'primary' : 'secondary'} plain={isActive ? undefined : true} onPress={select(t.title)}>
+                <Text bold={isActive} italic={isActive} color={color}>{isActive ? `${name} ${mark}` : `[ ${name} ${mark} ]`}</Text>
               </Button>
             )
           })}
