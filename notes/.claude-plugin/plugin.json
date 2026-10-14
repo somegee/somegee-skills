@@ -1,6 +1,6 @@
 {
   "name": "notes",
-  "version": "0.10.6",
+  "version": "0.11.0",
   "description": "에이전트가 계획·진행상황·종료조건을 탭별 노트로 기록하고, 사용자가 옆 창에서 바로 확인하는 모드",
   "types": "./types/index.d.ts",
   "author": {
@@ -8,16 +8,26 @@
     "email": "somegee@users.noreply.github.com"
   },
   "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "언어 / Language",
+      "description": "notes 창·도구 설명·에이전트 사용 규칙의 언어. 바꾼 뒤 새 세션부터 적용된다. / Language of the notes pane, tool descriptions and the agent guide. Applies from the next session.",
+      "options": [
+        "한국어",
+        "English"
+      ],
+      "default": "한국어"
+    },
     "autoOpen": {
       "type": "boolean",
-      "title": "세션 시작 시 notes 창 자동 열기",
+      "title": "세션 시작 시 notes 창 자동 열기 / Open notes pane on session start",
       "description": "켜 두면 세션을 시작할 때 notes 옆 창이 저절로 열린다. 끄면 /notes 로만 연다.",
       "default": true
     },
     "callDisplay": {
       "type": "string",
-      "title": "대화창의 notes 도구 호출 표시",
-      "description": "요약 = 한 줄로 줄이고 결과(탭 전체 내용)는 숨김. 숨김 = 호출 줄도 안 보임. 원래대로 = Claude Code 기본 표시. 에이전트가 받는 결과는 어느 쪽이든 같다.",
+      "title": "대화창의 notes 도구 호출 표시 / How notes tool calls appear in chat",
+      "description": "요약 = 한 줄로 줄이고 결과(탭 전체 내용)는 숨김. 숨김 = 호출 줄도 안 보임. 원래대로 = Claude Code 기본 표시. 에이전트가 받는 결과는 어느 쪽이든 같다. / 요약 = one-line summary, 숨김 = hidden, 원래대로 = Claude Code default.",
       "options": [
         "요약",
         "숨김",

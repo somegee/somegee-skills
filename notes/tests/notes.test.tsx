@@ -552,3 +552,45 @@ test('안 끝난 단계에 막힘이 있으면 탭 이름이 빨강·⛔, 대기
   expect(await ui.find({ type: 'Button', text: /^(▶ )?조사$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /조사 ⏳/ })).toBeUndefined()
 })
+
+const EN = { options: { language: 'English' } }
+
+test('English: 사용 규칙·도구 결과·창 문구가 영어로 나온다', EN, async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' as const }] }))
+  const { sections } = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [] })
+  expect(sections[1]?.text).toContain('short English name')
+
+  const wrote = await $.tool.call({
+    tool: 'mcp__notes__notes_write',
+    tab: 'Deploy fix',
+    goal: 'Ship it',
+    done_when: 'CI green',
+    items: ['Patch', 'Test'],
+    memo: 'Push pending',
+  } as never)
+  expect(String(wrote.result)).toContain('Goal: Ship it')
+  expect(String(wrote.result)).toContain('Done when: CI green')
+  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: 'Deploy fix', item: 2, status: 'waiting', note: 'reviewer' } as never)
+
+  const bad = await $.tool.call({ tool: 'mcp__notes__notes_check', tab: 'Nope', items: [1] } as never)
+  expect(String(bad.deny)).toContain("No tab named 'Nope'.")
+
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ type: 'Text', text: /^▾ Done when$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^▾ To do$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /⏳ waiting: reviewer/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /updated just now$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /Delete tab/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /✕ Close/ })).toBeDefined()
+})
+
+test('English: 대화창 요약 줄도 영어로 나온다', EN, async ($, on) => {
+  engineRows(on)
+  const check = await $.ui.mount({ plugin: 'notes', surface: 'terminal', ...callRow('mcp__notes__notes_check', { tab: 'Deploy', items: [2, 3] }) })
+  expect((await check.find({ key: 'notes-call' }))?.text).toContain('Deploy · #2, #3 checked')
+  await check.unmount()
+  const write = await $.ui.mount({ plugin: 'notes', surface: 'terminal', ...callRow('mcp__notes__notes_write', { tab: 'Deploy', add_items: ['a'] }) })
+  expect((await write.find({ key: 'notes-call' }))?.text).toContain('Deploy · +1 step')
+})

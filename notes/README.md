@@ -34,6 +34,7 @@ claude plugin install notes@somegee-skills --scope user
 
 - 노트는 `~/.claude/notes-data/<작업폴더>.json` 에 저장된다(플러그인 버전이 바뀌어도 유지). PC마다 따로이고 외부로 아무것도 보내지 않는다.
 - 본문은 마우스 휠로만 스크롤한다. 방향키는 버튼 사이 초점 이동에만 쓰인다.
+- 언어: `/config` 에서 notes 의 「언어 / Language」를 `한국어`(기본) 또는 `English` 로 고른다. 창 문구·도구 설명·에이전트 사용 규칙이 함께 바뀌고, 새 세션부터 적용된다.
 - 세션을 시작하면 옆 창이 저절로 열린다(기본값). 끄려면 `/config` 에서 notes 의 「세션 시작 시 notes 창 자동 열기」를 끈다.
 - 터미널이 144칸보다 좁으면 옆 창이 자동으로 열리지 않는다. 그때는 `/notes` 로 연다.
 - VS Code 확장, `claude -p`(무인 실행)에서는 창이 그려지지 않는다.
@@ -44,3 +45,12 @@ claude plugin install notes@somegee-skills --scope user
 ```
 claude plugin uninstall notes@somegee-skills
 ```
+
+## English
+
+notes is a Claude Code mod: the agent writes its plan, progress and finish line into per-task tabs, and you watch them in a side pane — no more scrolling back to find "where were we?".
+
+- Install: `claude plugin marketplace add somegee/somegee-skills` then `claude plugin install notes@somegee-skills --scope user`.
+- Language: open `/config`, find notes → "언어 / Language" and pick `English`. The pane, tool descriptions and the agent guide switch to English from the next session.
+- Every session in the same project folder shares one set of notes. A tab whose open steps are blocked turns red with ⛔; waiting only, yellow with ⏳.
+- Headless runs (`claude -p`, cron, SDK) and subagents never touch the notes.
