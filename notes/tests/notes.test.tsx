@@ -728,3 +728,39 @@ test('전체: 공유 파일이 없으면 세션 시작 때 폴더별 노트를 �
   expect(tabs.map(t => t.title)).toEqual(['B 탭', '겹침'])
   expect(tabs[1]!.memo).toBe('새것')
 })
+
+// 테마(theme·background): 터미널 창에만 칠한다. 기본은 지금까지 색 그대로.
+async function mountWithTab($: Parameters<Parameters<typeof test>[1]>[0], on: On, surface: 'terminal' | 'desktop' = 'terminal') {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '테마', items: ['지금 단계', '다음'] } as never)
+  return $.ui.mount({ plugin: 'notes', surface, component: 'Pane', requestId: 'notes', props: PANE })
+}
+
+test('기본 테마: 창 배경을 칠하지 않고 지금 단계는 원래 초록 배경', async ($, on) => {
+  const ui = await mountWithTab($, on)
+  expect((await ui.find({ key: 'pane-root' }))?.props.backgroundColor).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /^지금 단계$/ }))?.props.backgroundColor).toBe('#2e6b3f')
+})
+
+test('밝게: 창 배경과 글자색, 지금 단계 색이 테마 색으로 바뀐다', { options: { theme: '밝게' } }, async ($, on) => {
+  const ui = await mountWithTab($, on)
+  expect((await ui.find({ key: 'pane-root' }))?.props.backgroundColor).toBe('#fafafa')
+  expect((await ui.find({ type: 'Text', text: /^다음$/ }))?.props.color).toBe('#1f2328')
+  expect((await ui.find({ type: 'Text', text: /^지금 단계$/ }))?.props.backgroundColor).toBe('#d6f0dc')
+})
+
+test('배경색 직접 지정은 테마 배경을 덮어쓴다', { options: { theme: '어둡게', background: '#112233' } }, async ($, on) => {
+  const ui = await mountWithTab($, on)
+  expect((await ui.find({ key: 'pane-root' }))?.props.backgroundColor).toBe('#112233')
+})
+
+test('배경색이 색 코드가 아니면 테마 배경을 쓴다', { options: { theme: '어둡게', background: 'blue; rm' } }, async ($, on) => {
+  const ui = await mountWithTab($, on)
+  expect((await ui.find({ key: 'pane-root' }))?.props.backgroundColor).toBe('#1e2230')
+})
+
+test('데스크톱 등 터미널이 아닌 화면에는 테마를 칠하지 않는다', { options: { theme: '고대비' } }, async ($, on) => {
+  const ui = await mountWithTab($, on, 'desktop')
+  expect((await ui.find({ key: 'pane-root' }))?.props.backgroundColor).toBeUndefined()
+})

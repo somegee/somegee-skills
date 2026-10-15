@@ -37,6 +37,7 @@ claude plugin install notes@somegee-skills --scope user
 - 처음 `전체` 로 쓸 때 `_all.json` 이 없으면 지금까지 폴더별로 쓰던 노트 탭을 모아 만든다(같은 이름의 탭은 최근 것, 최대 30개). 폴더별 파일은 그대로 남으므로 `같은 폴더` 로 되돌리면 예전 노트가 다시 보인다.
 - 본문은 마우스 휠로만 스크롤한다. 방향키는 버튼 사이 초점 이동에만 쓰인다.
 - 언어: `/config` 에서 notes 의 「언어 / Language」를 `한국어`(기본) 또는 `English` 로 고른다. 창 문구·도구 설명·에이전트 사용 규칙이 함께 바뀌고, 새 세션부터 적용된다.
+- 창 색: `/config` 에서 notes 의 「창 테마」를 `기본`(터미널 색 그대로) / `어둡게` / `밝게` / `고대비` 중 고른다. 「창 배경색 직접 지정」에 `#1e2230` 처럼 색 코드를 넣으면 배경만 그 색으로 바뀐다(글자색은 테마를 따름). 터미널 창에만 적용되고 새 세션부터 반영된다.
 - 세션을 시작하면 옆 창이 저절로 열린다(기본값). 끄려면 `/config` 에서 notes 의 「세션 시작 시 notes 창 자동 열기」를 끈다.
 - 크론·`claude -p`·SDK 같은 헤드리스 세션은 기본으로 노트를 건드리지 않는다. 그런 세션도 노트를 쓰게 하려면 `/config` 에서 notes 의 「헤드리스 세션에서도 노트 쓰기」를 켠다(새 세션부터).
 - 터미널이 144칸보다 좁으면 옆 창이 자동으로 열리지 않는다. 그때는 `/notes` 로 연다.
@@ -55,6 +56,7 @@ notes is a Claude Code mod: the agent writes its plan, progress and finish line 
 
 - Install: `claude plugin marketplace add somegee/somegee-skills` then `claude plugin install notes@somegee-skills --scope user`.
 - Language: open `/config`, find notes → "언어 / Language" and pick `English`. The pane, tool descriptions and the agent guide switch to English from the next session.
+- Theme: pick "창 테마 / Pane theme" (`기본` = terminal colors, `어둡게` dark, `밝게` light, `고대비` high contrast) in `/config`; "창 배경색 직접 지정" takes a hex color such as `#1e2230` to override just the background. Terminal pane only, from the next session.
 - Headless sessions (cron, `claude -p`, SDK) leave the notes alone by default. To let them write notes, turn on "Use notes in headless sessions" under notes in `/config` (applies from the next session).
 - By default every session on this PC shares one set of notes, whatever the project folder. Pick `같은 폴더` (same project folder only) or `세션마다` (no sharing, one note per session) under "노트 공유 범위 / Who shares the notes" in `/config` (applies from the next session). A tab whose open steps are blocked turns red with ⛔; waiting only, yellow with ⏳. A green ● means the session that last touched the tab is working, a cyan 💬 that it shows a permission or question dialog, and a dim ✅ that every step is done.
 - Headless runs (`claude -p`, cron, SDK) and subagents never touch the notes.

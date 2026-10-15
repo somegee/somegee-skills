@@ -1,6 +1,6 @@
 {
   "name": "notes",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "에이전트가 계획·진행상황·종료조건을 탭별 노트로 기록하고, 사용자가 옆 창에서 바로 확인하는 모드",
   "types": "./types/index.d.ts",
   "author": {
@@ -51,6 +51,24 @@
         "세션마다"
       ],
       "default": "전체"
+    },
+    "theme": {
+      "type": "string",
+      "title": "창 테마 / Pane theme",
+      "description": "터미널 notes 창의 색. 기본 = 터미널 배경·글자색 그대로. 어둡게 = 짙은 남색 배경. 밝게 = 흰 배경에 어두운 글자. 고대비 = 검정 배경에 진한 원색. 새 세션부터 적용. / Colors of the terminal notes pane.",
+      "options": [
+        "기본",
+        "어둡게",
+        "밝게",
+        "고대비"
+      ],
+      "default": "기본"
+    },
+    "background": {
+      "type": "string",
+      "title": "창 배경색 직접 지정 / Pane background color",
+      "description": "#RRGGBB 또는 #RGB 로 쓰면 테마의 배경색 대신 이 색을 칠한다(예: #1e2230). 비워 두면 테마 색. 글자색은 테마를 따르니 어울리는 테마와 함께 고른다. 새 세션부터 적용. / Hex color that overrides the theme background. Empty = theme color.",
+      "default": ""
     }
   }
 }

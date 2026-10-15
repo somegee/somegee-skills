@@ -3,6 +3,7 @@ import type { BoxProps, ElementConstructor, EngineInterface, Register, RenderChi
 
 import { callSummary, toCallDisplay } from './call-summary'
 import { TEXT, toLang, type Strings } from './i18n'
+import { BASE_THEME, toTheme, type NotesTheme } from './theme'
 import { mergeTabs, noteFileName, SHARED_FILE, toShareScope, type ShareScope } from './share-scope'
 import type { LiveState, NoteChange, NoteChangePart, NoteItem, NoteItemStatus, NotesBook, NoteSession, NoteTab } from '../types'
 
@@ -21,8 +22,8 @@ const folded = atom({ plugin: 'notes', key: 'folded' } as const, {} as Record<st
 const SYNC_MS = 3000
 // 'N분 전 갱신' 이 흐르도록 다시 그리는 간격.
 const TICK_MS = 30000
-// 지금 하는 단계의 배경색(고정).
-const CURRENT_BG = '#2e6b3f'
+// 터미널 창 색(theme.ts). register 가 설정 theme·background 로 고른다.
+let theme: NotesTheme = BASE_THEME
 // 터미널 옆 창 왼쪽 여백(칸).
 const PANE_GUTTER = 1
 // 결과물 문구에서 링크로 만들 주소.
@@ -108,13 +109,7 @@ const statusMark = (s: NoteItemStatus) => (s === 'blocked' ? `⛔ ${L.blocked}` 
 // 세션 표시: 그 탭을 마지막으로 다룬 세션이 일하는 중이면 초록 ●, 질문·허락 창을 띄웠으면 청록 💬. 모든 단계가 끝나면 ✅.
 // 여러 개가 겹치면 하나만: ⛔ → 💬 → ⏳ → ● → ✅.
 type TabMark = NoteItemStatus | 'ask' | 'working' | 'done'
-const TAB_MARK: Record<TabMark, { mark: string; color?: string }> = {
-  blocked: { mark: '⛔', color: 'red' },
-  ask: { mark: '💬', color: 'cyan' },
-  waiting: { mark: '⏳', color: 'yellow' },
-  working: { mark: '●', color: 'green' },
-  done: { mark: '✅' },
-}
+const TAB_MARK: Record<TabMark, string> = { blocked: '⛔', ask: '💬', waiting: '⏳', working: '●', done: '✅' }
 const tabMark = (t: NoteTab, states: Record<string, LiveState>): TabMark | undefined => {
   const open = t.items.filter(i => !i.isDone)
   const state = t.session === undefined ? undefined : states[t.session.id]
@@ -305,8 +300,8 @@ async function sync($: EngineInterface) {
 }
 
 // 하단 버튼 줄: 상단 탭 줄과 같은 둥근 테두리 상자.
-const buttonBar = (Box: ElementConstructor<BoxProps>, buttons: RenderChildren[]) => (
-  <Box flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor="gray" paddingX={1}>
+const buttonBar = (Box: ElementConstructor<BoxProps>, buttons: RenderChildren[], border: string) => (
+  <Box flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor={border} paddingX={1}>
     {buttons.filter(Boolean)}
   </Box>
 )
@@ -333,6 +328,8 @@ export const register: Register = (on, options) => {
   const useHeadless = options.headless === true
   // 노트를 어느 세션끼리 공유할지. /config 의 notes.shareScope, 기본은 이 PC 의 모든 세션.
   shareScope = toShareScope(options.shareScope)
+  // 터미널 창 테마와 직접 고른 배경색. /config 의 notes.theme·notes.background.
+  theme = toTheme(options.theme, options.background)
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
     // 헤드리스(-p·SDK)는 그릴 곳이 없다. 설정으로 켜지 않았으면 보는 사람이 없으니 규칙을 넣지 않는다.
@@ -625,6 +622,8 @@ export const register: Register = (on, options) => {
     // 터미널 옆 창은 왼쪽 구분선(│)에 글자가 붙지 않게 한 칸 띄운다. 데스크톱 등은 구분선이 없어 그대로.
     const gutter = e.surface === 'terminal' ? PANE_GUTTER : 0
     const md = (key: string, text: string, dim = false) => <Markdown key={key} text={text} dimColor={dim} />
+    // 테마는 터미널에만 칠한다. 데스크톱 등은 Markdown 글자색을 바꿀 수 없어 기본 색을 쓴다.
+    const th = e.surface === 'terminal' ? theme : BASE_THEME
     const b = await read($, book)
     const states = await read($, live)
     const tab = findTab(b, b.active) ?? b.tabs.at(-1)
@@ -647,9 +646,9 @@ export const register: Register = (on, options) => {
 
     if (tab === undefined) {
       return (
-        <Box key="pane-root" flexDirection="column" paddingLeft={gutter}>
-          <Text dimColor>{L.empty}</Text>
-          {(undoButton || redoButton) && buttonBar(Box, [undoButton, redoButton])}
+        <Box key="pane-root" flexDirection="column" paddingLeft={gutter} backgroundColor={th.bg}>
+          <Text dimColor color={th.text}>{L.empty}</Text>
+          {(undoButton || redoButton) && buttonBar(Box, [undoButton, redoButton], th.barBorder)}
         </Box>
       )
     }
@@ -708,7 +707,7 @@ export const register: Register = (on, options) => {
     const blocks: { el: RenderChildren; rows: number }[] = [
       {
         el: (
-          <Text key="b-title" bold>
+          <Text key="b-title" bold color={th.text}>
             {tab.title} ({done}/{tab.items.length})
           </Text>
         ),
@@ -717,20 +716,20 @@ export const register: Register = (on, options) => {
       // 제목 바로 아래: 이 탭을 마지막으로 다룬 세션과 갱신 시각.
       {
         el: (
-          <Text key="b-session" dimColor>
+          <Text key="b-session" dimColor color={th.text}>
             {`${sessionLabel(tab.session) ?? L.noSession} · ${L.updated(ago(tab.updatedAt, Date.now()))}`}
           </Text>
         ),
         rows: textRows(`${sessionLabel(tab.session) ?? L.noSession} · ${L.updated(L.agoSample)}`, cols),
       },
-      tab.goal ? { el: section('b-goal', L.goal, 'cyan', isRich ? md('goal-md', tab.goal) : <Text>{tab.goal}</Text>), rows: sectionRows('b-goal', textRows(tab.goal, cols - 2)) } : undefined,
+      tab.goal ? { el: section('b-goal', L.goal, th.section.goal, isRich ? md('goal-md', tab.goal) : <Text color={th.text}>{tab.goal}</Text>), rows: sectionRows('b-goal', textRows(tab.goal, cols - 2)) } : undefined,
       tab.doneWhen
-        ? { el: section('b-doneWhen', L.doneWhen, 'yellow', isRich ? md('doneWhen-md', tab.doneWhen) : <Text>{tab.doneWhen}</Text>), rows: sectionRows('b-doneWhen', textRows(tab.doneWhen, cols - 2)) }
+        ? { el: section('b-doneWhen', L.doneWhen, th.section.doneWhen, isRich ? md('doneWhen-md', tab.doneWhen) : <Text color={th.text}>{tab.doneWhen}</Text>), rows: sectionRows('b-doneWhen', textRows(tab.doneWhen, cols - 2)) }
         : undefined,
       {
         el: (
           <Box key="b-items" marginTop={1}>
-            {header('items', L.todo, 'green', `(${done}/${tab.items.length})`)}
+            {header('items', L.todo, th.section.todo, `(${done}/${tab.items.length})`)}
           </Box>
         ),
         rows: 2,
@@ -740,21 +739,21 @@ export const register: Register = (on, options) => {
         const mark = i.isDone ? '☑' : isCurrent ? '▶' : '☐'
         // 막힘·대기 사유, 풀린 뒤 처리 내역은 단계 바로 아래 줄에.
         const subs = [
-          i.status && { key: 'status', text: `${statusMark(i.status)}${i.note ? `: ${i.note}` : ''}`, color: i.status === 'blocked' ? 'red' : 'yellow' },
-          i.resolved && { key: 'resolved', text: `${L.resolved}: ${i.resolved}`, color: 'green' },
+          i.status && { key: 'status', text: `${statusMark(i.status)}${i.note ? `: ${i.note}` : ''}`, color: th.mark[i.status] },
+          i.resolved && { key: 'resolved', text: `${L.resolved}: ${i.resolved}`, color: th.section.todo },
         ].filter((x): x is { key: string; text: string; color: string } => Boolean(x))
         return {
           // 줄 어디를 눌러도 체크가 바뀐다. 데스크톱은 버튼을 label 로 그리므로 label 에도 표시를 넣는다.
           el: (
             <Box key={`item-${n}`} flexDirection="column" paddingLeft={2}>
               <Button key={`chk-${n}`} label={`${mark} ${i.text}`} plain dimColor={i.isDone} onPress={toggle(n)}>
-                {`${mark} `}
+                <Text color={th.text}>{`${mark} `}</Text>
                 {isCurrent ? (
-                  <Text bold strikethrough={false} color="white" backgroundColor={CURRENT_BG}>
+                  <Text bold strikethrough={false} color={th.current.text} backgroundColor={th.current.bg}>
                     {i.text}
                   </Text>
                 ) : (
-                  <Text strikethrough={i.isDone} dimColor={i.isDone}>
+                  <Text strikethrough={i.isDone} dimColor={i.isDone} color={th.text}>
                     {i.text}
                   </Text>
                 )}
@@ -774,19 +773,19 @@ export const register: Register = (on, options) => {
             el: section(
               'b-results',
               L.results,
-              'blue',
+              th.section.results,
               isRich
                 ? md('results-md', tab.results.map(r => `- ${r.replace(URL_RE, u => `[${u}](${u})`)}`).join('\n'))
                 : tab.results.map((r, n) => {
                 // 주소가 들어 있으면 그 부분을 누를 수 있는 링크로. 앞뒤 글자는 그대로 둔다.
                 const url = r.match(URL_RE)?.[0]
-                if (url === undefined) return <Text key={`result-${n}`}>{`- ${r}`}</Text>
+                if (url === undefined) return <Text key={`result-${n}`} color={th.text}>{`- ${r}`}</Text>
                 const [before, after] = [r.slice(0, r.indexOf(url)), r.slice(r.indexOf(url) + url.length)]
                 return (
                   <Box key={`result-${n}`} flexDirection="row" flexWrap="wrap">
-                    <Text>{`- ${before}`}</Text>
+                    <Text color={th.text}>{`- ${before}`}</Text>
                     <Link key={`result-link-${n}`} href={url} />
-                    {after.trim() !== '' && <Text>{after}</Text>}
+                    {after.trim() !== '' && <Text color={th.text}>{after}</Text>}
                   </Box>
                 )
               }),
@@ -800,11 +799,11 @@ export const register: Register = (on, options) => {
             el: section(
               'b-memo',
               L.memo,
-              'magenta',
+              th.section.memo,
               isRich
                 ? md('memo-md', memoLines.map(line => (line.trimStart().startsWith('-') ? line : `- ${line}`)).join('\n'), true)
                 : memoLines.map((line, n) => (
-                <Text key={`memo-${n}`} dimColor>
+                <Text key={`memo-${n}`} dimColor color={th.text}>
                   {line.trimStart().startsWith('-') ? line : `- ${line}`}
                 </Text>
               )),
@@ -826,7 +825,7 @@ export const register: Register = (on, options) => {
       <Button key="close" onPress={() => void $.ui.close({ id: PANE })}>
         {L.close}
       </Button>,
-    ])
+    ], th.barBorder)
     const barRows = 2 + textRows([L.removeTab, undoText, redoText, L.close].filter(Boolean).map(x => `[ ${x} ]`).join(' '), cols - 2)
     // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)·버튼 줄·여유 한 줄을 빼고 남은 만큼이 본문 자리다.
     const tabWidth = b.tabs.reduce((w, t) => w + cellWidth(t.title) + 6, 0)
@@ -852,7 +851,7 @@ export const register: Register = (on, options) => {
           <Text> </Text>
         ) : (
           <Button key={key} label={text} plain onPress={onPress}>
-            <Text italic backgroundColor="gray">
+            <Text italic color={th.text} backgroundColor={th.pagerBg}>
               {` ${text} `}
             </Text>
           </Button>
@@ -866,24 +865,25 @@ export const register: Register = (on, options) => {
     // 옆에 붙은 창(dock)은 창 높이를 꽉 채워 버튼 줄이 늘 맨 아래에 오게 한다. 프롬프트 위 창(inline)은 내용 높이만큼.
     const isDock = isTerminal && e.props.placement === 'dock'
     return (
-      <Box key="pane-root" flexDirection="column" paddingLeft={gutter} height={isDock ? e.props.scroll.bodyRows - 1 : undefined}>
-        <Box flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor="cyan" paddingX={1}>
+      <Box key="pane-root" flexDirection="column" paddingLeft={gutter} height={isDock ? e.props.scroll.bodyRows - 1 : undefined} backgroundColor={th.bg}>
+        <Box flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor={th.tabBorder} paddingX={1}>
           {b.tabs.map(t => {
             const isActive = t.title === tab.title
             const name = isActive ? `▶ ${t.title}` : t.title
             const marked = tabMark(t, states)
             // 지금 탭 앞 화살표는 탭 줄 테두리와 같은 청록으로 칠한다.
-            const arrow = <Text key="arrow" color="cyan">▶ </Text>
+            const arrow = <Text key="arrow" color={th.tabBorder}>▶ </Text>
             // 지금 탭은 기울인 굵은 글씨로 다른 탭과 구별한다. 엔진은 테두리([ ]) 있는 버튼을 통째로 굵게 칠하므로,
             // 다른 탭은 테두리 없는 버튼(plain)에 [ ]를 글자로 넣어 보통 굵기로 그린다.
             if (marked === undefined)
               return (
                 <Button key={`tab-${t.title}`} label={name} variant={isActive ? 'primary' : 'secondary'} plain={isActive ? undefined : true} dimColor={!isActive} onPress={select(t.title)}>
-                  <Text bold={isActive} italic={isActive}>{isActive ? [arrow, t.title] : `[ ${name} ]`}</Text>
+                  <Text bold={isActive} italic={isActive} color={th.text}>{isActive ? [arrow, t.title] : `[ ${name} ]`}</Text>
                 </Button>
               )
             // 표시가 붙은 탭은 표시와 색을 붙인다(색을 못 보는 화면에서도 표시로 구별). 다 끝난 탭(✅)만 흐리게.
-            const { mark, color } = TAB_MARK[marked]
+            const mark = TAB_MARK[marked]
+            const color = marked === 'done' ? th.text : th.mark[marked]
             return (
               <Button key={`tab-${t.title}`} label={`${name} ${mark}`} variant={isActive ? 'primary' : 'secondary'} plain={isActive ? undefined : true} dimColor={!isActive && marked === 'done'} onPress={select(t.title)}>
                 <Text bold={isActive} italic={isActive} color={color}>{isActive ? [arrow, `${t.title} ${mark}`] : `[ ${name} ${mark} ]`}</Text>
