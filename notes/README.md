@@ -37,6 +37,7 @@ claude plugin install notes@somegee-skills --scope user
 - 본문은 마우스 휠로만 스크롤한다. 방향키는 버튼 사이 초점 이동에만 쓰인다.
 - 언어: `/config` 에서 notes 의 「언어 / Language」를 `한국어`(기본) 또는 `English` 로 고른다. 창 문구·도구 설명·에이전트 사용 규칙이 함께 바뀌고, 새 세션부터 적용된다.
 - 세션을 시작하면 옆 창이 저절로 열린다(기본값). 끄려면 `/config` 에서 notes 의 「세션 시작 시 notes 창 자동 열기」를 끈다.
+- 크론·`claude -p`·SDK 같은 헤드리스 세션은 기본으로 노트를 건드리지 않는다. 그런 세션도 노트를 쓰게 하려면 `/config` 에서 notes 의 「헤드리스 세션에서도 노트 쓰기」를 켠다(새 세션부터).
 - 터미널이 144칸보다 좁으면 옆 창이 자동으로 열리지 않는다. 그때는 `/notes` 로 연다.
 - VS Code 확장, `claude -p`(무인 실행)에서는 창이 그려지지 않는다.
 - 개발 중에는 `claude --plugin-dir <이 폴더>` 로 띄우고 고친 뒤 `/reload-plugins`.
@@ -53,5 +54,6 @@ notes is a Claude Code mod: the agent writes its plan, progress and finish line 
 
 - Install: `claude plugin marketplace add somegee/somegee-skills` then `claude plugin install notes@somegee-skills --scope user`.
 - Language: open `/config`, find notes → "언어 / Language" and pick `English`. The pane, tool descriptions and the agent guide switch to English from the next session.
+- Headless sessions (cron, `claude -p`, SDK) leave the notes alone by default. To let them write notes, turn on "Use notes in headless sessions" under notes in `/config` (applies from the next session).
 - Every session in the same project folder shares one set of notes. A tab whose open steps are blocked turns red with ⛔; waiting only, yellow with ⏳. A green ● means the session that last touched the tab is working, a cyan 💬 that it shows a permission or question dialog, and a dim ✅ that every step is done.
 - Headless runs (`claude -p`, cron, SDK) and subagents never touch the notes.

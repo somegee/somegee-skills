@@ -305,10 +305,12 @@ const mainOnly = () => ({ deny: L.mainOnly })
 
 export const register: Register = (on, options) => {
   L = TEXT[toLang(options.language)]
+  // 헤드리스(크론·-p·SDK)에서도 노트를 쓸지. /config 의 notes.headless, 기본은 끔.
+  const useHeadless = options.headless === true
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
-    // 헤드리스(-p·SDK)는 그릴 곳이 없다. 보는 사람이 없으니 규칙을 넣지 않는다.
-    if (e.surfaces.length === 0) return composed
+    // 헤드리스(-p·SDK)는 그릴 곳이 없다. 설정으로 켜지 않았으면 보는 사람이 없으니 규칙을 넣지 않는다.
+    if (e.surfaces.length === 0 && !useHeadless) return composed
     return { sections: [...composed.sections, { id: 'notes:guide', text: L.guide, scope: 'session' }] }
   })
 
@@ -356,8 +358,8 @@ export const register: Register = (on, options) => {
   })
 
   on('session.start', async ($, e, next) => {
-    // 헤드리스(크론·-p·SDK)는 볼 사람이 없다. 도구를 등록하지 않아 노트 파일에 쓰지 못하게 한다.
-    if (!e.isInteractive) return next(e)
+    // 헤드리스(크론·-p·SDK)는 볼 사람이 없다. 설정으로 켜지 않았으면 도구를 등록하지 않아 노트 파일에 쓰지 못하게 한다.
+    if (!e.isInteractive && !useHeadless) return next(e)
     const root = await $.session.root()
     sessionId = await $.session.id()
     const saved = await loadFile($, root)

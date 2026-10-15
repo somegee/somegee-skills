@@ -493,6 +493,25 @@ test('헤드리스 세션에서는 notes 도구를 등록하지 않고, 사람�
   expect(registered).toContain('notes_write')
 })
 
+test('설정에서 헤드리스를 켜면 헤드리스 세션도 notes 규칙과 도구를 받는다', { options: { headless: true } }, async ($, on) => {
+  fakeFiles(on)
+  const registered: string[] = []
+  on('tool.register', (_$, e) => {
+    registered.push(e.name)
+    return { value: undefined } as never
+  })
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('clock.every', () => ({ value: undefined }) as never)
+  on('command.register', () => ({ value: undefined }) as never)
+  on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' as const }] }))
+
+  const { sections } = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] })
+  expect(sections.map(s => s.id)).toEqual(['intro', 'notes:guide'])
+  await $.session.start({ cwd: '/w', surface: null, isInteractive: false } as never)
+  expect(registered).toContain('notes_write')
+})
+
 test('서브에이전트가 notes 도구를 부르면 거절하고 노트 파일에 쓰지 않는다', async ($, on) => {
   const { writes } = fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)

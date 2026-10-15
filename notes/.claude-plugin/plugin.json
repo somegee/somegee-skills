@@ -1,6 +1,6 @@
 {
   "name": "notes",
-  "version": "0.12.1",
+  "version": "0.13.0",
   "description": "에이전트가 계획·진행상황·종료조건을 탭별 노트로 기록하고, 사용자가 옆 창에서 바로 확인하는 모드",
   "types": "./types/index.d.ts",
   "author": {
@@ -34,6 +34,12 @@
         "원래대로"
       ],
       "default": "요약"
+    },
+    "headless": {
+      "type": "boolean",
+      "title": "헤드리스 세션에서도 노트 쓰기 / Use notes in headless sessions",
+      "description": "켜면 크론·claude -p·SDK 처럼 사람이 보지 않는 세션도 notes 도구와 사용 규칙을 받아 노트를 쓴다. 기본은 끔(노트를 건드리지 않음). 새 세션부터 적용. / When on, headless sessions (cron, claude -p, SDK) also get the notes tools and guide. Off by default.",
+      "default": false
     }
   }
 }
