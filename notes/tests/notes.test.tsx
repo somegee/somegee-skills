@@ -526,7 +526,7 @@ test('서브에이전트가 notes 도구를 부르면 거절하고 노트 파일
   expect(String(main.result)).toContain('#1 [ ] 가')
 })
 
-test('/clear 뒤처럼 세션 상태의 작업 폴더가 비어 있어도 이름 없는 .json 이 아니라 작업 폴더 노트 파일에 쓴다', async ($, on) => {
+test('/clear 뒤처럼 세션 상태의 작업 폴더가 비어 있어도 이름 없는 .json 이 아니라 작업 폴더 노트 파일에 쓴다', { options: { shareScope: '같은 폴더' } }, async ($, on) => {
   const { writes } = fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
 
@@ -536,7 +536,7 @@ test('/clear 뒤처럼 세션 상태의 작업 폴더가 비어 있어도 이름
   expect(writes.some(p => p.endsWith('/.json'))).toBe(false)
 })
 
-test('/clear 뒤 SessionStart(clear) 가 오면 노트 파일을 바로 다시 읽어 창에 보인다', async ($, on) => {
+test('/clear 뒤 SessionStart(clear) 가 오면 노트 파일을 바로 다시 읽어 창에 보인다', { options: { shareScope: '같은 폴더' } }, async ($, on) => {
   const { files } = fakeFiles(on)
   files.set('/w.json', JSON.stringify({ root: '/w', tabs: [{ title: '남은 탭', items: [{ text: '가', isDone: false }], updatedAt: '2026-10-13T00:00:00Z' }], history: [], future: [] }))
 
@@ -666,4 +666,65 @@ test('막힘은 💬 보다, 💬 는 대기보다 먼저 보인다', async ($, 
   expect(await ui.find({ type: 'Text', text: /^▶ 배포 💬$/ })).toBeDefined()
   await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '배포', item: 2, status: 'blocked', note: '권한' } as never)
   expect(await ui.find({ type: 'Text', text: /^▶ 배포 ⛔$/ })).toBeDefined()
+})
+
+// 공유 범위(shareScope): 전체(기본) = _all.json, 같은 폴더 = <작업 폴더>.json, 세션마다 = sessions/<세션 id>.json.
+const saveFile = (root: string, title: string, updatedAt = '2026-10-13T00:00:00Z') =>
+  JSON.stringify({ root, tabs: [{ title, items: [{ text: '가', isDone: false }], updatedAt }], history: [], future: [] })
+
+test('기본(전체): 작업 폴더와 상관없이 한 파일에 쓰고, 다른 폴더 세션이 쓴 탭도 보인다', async ($, on) => {
+  const { files, writes } = fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  files.set('/_all.json', saveFile('/other', '다른 폴더 탭'))
+
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '내 탭', items: ['A'] } as never)
+
+  expect(writes.every(p => p.endsWith('/_all.json'))).toBe(true)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ key: 'tab-다른 폴더 탭' })).toBeDefined()
+  expect(await ui.find({ key: 'tab-내 탭' })).toBeDefined()
+})
+
+test('같은 폴더: 작업 폴더 파일에만 쓴다', { options: { shareScope: '같은 폴더' } }, async ($, on) => {
+  const { writes } = fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '내 탭', items: ['A'] } as never)
+  expect(writes).toHaveLength(1)
+  expect(writes[0]).toMatch(/\/w\.json$/)
+})
+
+test('세션마다: 세션 id 파일에 쓰고 다른 세션 노트는 보이지 않는다', { options: { shareScope: '세션마다' } }, async ($, on) => {
+  const { files, writes } = fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  files.set('/_all.json', saveFile('/w', '전체 탭'))
+  files.set('/w.json', saveFile('/w', '폴더 탭'))
+
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '내 탭', items: ['A'] } as never)
+
+  expect(writes).toHaveLength(1)
+  expect(writes[0]).toMatch(/\/sessions\/s1\.json$/)
+  const read = await $.tool.call({ tool: 'mcp__notes__notes_read' } as never)
+  expect(String(read.result)).toContain('내 탭')
+  expect(String(read.result)).not.toContain('전체 탭')
+  expect(String(read.result)).not.toContain('폴더 탭')
+})
+
+test('전체: 공유 파일이 없으면 세션 시작 때 폴더별 노트를 모아 만든다(같은 이름은 최근 것)', async ($, on) => {
+  const { files } = fakeFiles(on)
+  files.set('/a.json', saveFile('/a', '겹침', '2026-10-01T00:00:00Z'))
+  files.set('/b.json', JSON.stringify({ root: '/b', tabs: [{ title: '겹침', items: [], memo: '새것', updatedAt: '2026-10-05T00:00:00Z' }, { title: 'B 탭', items: [], updatedAt: '2026-10-03T00:00:00Z' }] }))
+  on('fs.list', () => ({ value: [{ name: 'a.json', kind: 'file' }, { name: 'b.json', kind: 'file' }, { name: 'live', kind: 'dir' }] }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('clock.every', () => ({ value: undefined }) as never)
+  on('command.register', () => ({ value: undefined }) as never)
+  on('tool.register', () => ({ value: undefined }) as never)
+
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true } as never)
+
+  const shared = [...files].find(([k]) => k.endsWith('/_all.json'))
+  expect(shared).toBeDefined()
+  const tabs = (JSON.parse(shared![1]) as { tabs: { title: string; memo?: string }[] }).tabs
+  expect(tabs.map(t => t.title)).toEqual(['B 탭', '겹침'])
+  expect(tabs[1]!.memo).toBe('새것')
 })

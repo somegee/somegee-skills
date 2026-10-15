@@ -3,6 +3,7 @@ import type { BoxProps, ElementConstructor, EngineInterface, Register, RenderChi
 
 import { callSummary, toCallDisplay } from './call-summary'
 import { TEXT, toLang, type Strings } from './i18n'
+import { mergeTabs, noteFileName, SHARED_FILE, toShareScope, type ShareScope } from './share-scope'
 import type { LiveState, NoteChange, NoteChangePart, NoteItem, NoteItemStatus, NotesBook, NoteSession, NoteTab } from '../types'
 
 const PANE = 'notes'
@@ -159,14 +160,15 @@ async function syncLive($: EngineInterface) {
   const cur = await read($, live)
   if (JSON.stringify(cur) !== JSON.stringify(next)) await update($, live, () => next)
 }
-// 노트는 <.claude>/notes-data/<작업 폴더>.json 한 파일에 둔다. 같은 폴더의 세션들이 이 파일을 함께 읽고 쓴다.
+// 노트는 <.claude>/notes-data/ 아래 한 파일에 두고, 그 파일을 쓰는 세션들이 함께 읽고 쓴다(공유 범위는 share-scope.ts).
+// 전체 = _all.json, 같은 폴더 = <작업 폴더>.json, 세션마다 = sessions/<세션 id>.json.
 // 마켓플레이스 설치본은 버전마다 폴더가 바뀌므로 모드 폴더 밖에 둔다. .claude 아래가 아니면 모드 폴더의 data/.
+let shareScope: ShareScope = '전체'
 const dataDir = (pluginRoot: string) => {
   const claudeDir = pluginRoot.match(/^(.*?[\\/]\.claude)[\\/]/)?.[1]
   return claudeDir === undefined ? `${pluginRoot}/data` : `${claudeDir}/notes-data`
 }
-const dataPath = ($: EngineInterface, root: string) =>
-  `${dataDir($.plugin.root)}/${root.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "")}.json`
+const dataPath = ($: EngineInterface, root: string) => `${dataDir($.plugin.root)}/${noteFileName(shareScope, root, sessionId)}`
 const now = () => new Date().toISOString()
 const asText = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined)
 const asList = (v: unknown) =>
@@ -228,6 +230,28 @@ function revert(tabs: NoteTab[], entry: NoteChange): NoteTab[] {
 
 async function save($: EngineInterface, root: string, saved: Saved) {
   await $.fs.write(dataPath($, root), JSON.stringify({ root, ...saved }, null, 1))
+}
+
+// 전체 공유 파일이 아직 없으면(처음 전체로 바꾼 PC) 지금까지 폴더별로 쓰던 노트 탭을 모아 만든다.
+async function seedShared($: EngineInterface, root: string) {
+  const dir = dataDir($.plugin.root)
+  if ((await readText($, `${dir}/${SHARED_FILE}`)) !== undefined) return
+  const lists: NoteTab[][] = []
+  try {
+    for (const f of await $.fs.list(dir)) {
+      if (!f.name.endsWith('.json') || f.name === SHARED_FILE) continue
+      try {
+        const tabs = (JSON.parse((await readText($, `${dir}/${f.name}`)) ?? '{}') as Partial<Saved>).tabs
+        if (Array.isArray(tabs)) lists.push(tabs)
+      } catch {
+        // 깨진 파일은 건너뛴다.
+      }
+    }
+  } catch {
+    // 폴더가 없으면 빈 노트로 시작한다.
+  }
+  const tabs = mergeTabs(lists, MAX_TABS)
+  if (tabs.length > 0) await save($, root, { tabs, history: [], future: [] })
 }
 
 // /clear 하면 세션 상태가 처음 값(root '')으로 돌아가는데 session.start 는 다시 오지 않는다.
@@ -307,6 +331,8 @@ export const register: Register = (on, options) => {
   L = TEXT[toLang(options.language)]
   // 헤드리스(크론·-p·SDK)에서도 노트를 쓸지. /config 의 notes.headless, 기본은 끔.
   const useHeadless = options.headless === true
+  // 노트를 어느 세션끼리 공유할지. /config 의 notes.shareScope, 기본은 이 PC 의 모든 세션.
+  shareScope = toShareScope(options.shareScope)
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
     // 헤드리스(-p·SDK)는 그릴 곳이 없다. 설정으로 켜지 않았으면 보는 사람이 없으니 규칙을 넣지 않는다.
@@ -362,6 +388,7 @@ export const register: Register = (on, options) => {
     if (!e.isInteractive && !useHeadless) return next(e)
     const root = await $.session.root()
     sessionId = await $.session.id()
+    if (shareScope === '전체') await seedShared($, root)
     const saved = await loadFile($, root)
     await update($, book, () => ({ root, ...saved, active: saved.tabs.at(-1)?.title }))
     // 3초마다: 다른 세션이 고친 노트 반영 + /rename 한 이름 반영.

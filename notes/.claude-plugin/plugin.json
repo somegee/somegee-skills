@@ -1,6 +1,6 @@
 {
   "name": "notes",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "에이전트가 계획·진행상황·종료조건을 탭별 노트로 기록하고, 사용자가 옆 창에서 바로 확인하는 모드",
   "types": "./types/index.d.ts",
   "author": {
@@ -40,6 +40,17 @@
       "title": "헤드리스 세션에서도 노트 쓰기 / Use notes in headless sessions",
       "description": "켜면 크론·claude -p·SDK 처럼 사람이 보지 않는 세션도 notes 도구와 사용 규칙을 받아 노트를 쓴다. 기본은 끔(노트를 건드리지 않음). 새 세션부터 적용. / When on, headless sessions (cron, claude -p, SDK) also get the notes tools and guide. Off by default.",
       "default": false
+    },
+    "shareScope": {
+      "type": "string",
+      "title": "노트 공유 범위 / Who shares the notes",
+      "description": "전체 = 이 PC 의 모든 세션이 작업 폴더 상관없이 한 노트를 함께 본다(기본). 같은 폴더 = 같은 작업 폴더에서 연 세션끼리만. 세션마다 = 공유 안 함, 세션 하나에 노트 하나. 새 세션부터 적용. / 전체 = every session on this PC (default), 같은 폴더 = sessions in the same project folder, 세션마다 = no sharing, one note per session.",
+      "options": [
+        "전체",
+        "같은 폴더",
+        "세션마다"
+      ],
+      "default": "전체"
     }
   }
 }

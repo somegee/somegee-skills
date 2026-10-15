@@ -15,7 +15,7 @@
 - **[✕ 닫기]**: 아래 버튼 줄 오른쪽 끝.
 - **구역 접기**: 목표·종료 조건·할 일·결과물·메모 제목을 누르면 접히고(▸ + 개수 요약) 다시 누르면 펴진다.
 - **[↶ 되돌리기] / [↷ 앞으로]**: 최근 변경 20건을 하나씩 되돌리고, 되돌린 것은 다시 할 수 있다(새로 고치면 앞으로 기록은 사라짐)(체크·탭 지우기·에이전트 수정 모두).
-- **세션 간 공유**: 같은 작업 폴더에서 연 세션끼리 노트 내용을 공유한다(3초마다 반영). 보고 있는 탭은 세션마다 따로.
+- **세션 간 공유**: 기본은 이 PC의 모든 세션이 작업 폴더와 상관없이 한 노트를 함께 본다(3초마다 반영). 보고 있는 탭은 세션마다 따로. `/config` 의 「노트 공유 범위」로 `전체`(기본) / `같은 폴더` / `세션마다`(공유 안 함) 중 고른다(새 세션부터).
 - **사용 규칙 자동 적용**: 세션마다 지시하지 않아도, 여러 단계 작업이면 에이전트가 알아서 탭을 만든다.
 
 ## 설치 (Claude Code 2.1.287 이상)
@@ -33,7 +33,8 @@ claude plugin install notes@somegee-skills --scope user
 
 ## 알아 둘 것
 
-- 노트는 `~/.claude/notes-data/<작업폴더>.json` 에 저장된다(플러그인 버전이 바뀌어도 유지). PC마다 따로이고 외부로 아무것도 보내지 않는다.
+- 노트 파일은 `~/.claude/notes-data/` 아래에 있다(플러그인 버전이 바뀌어도 유지): 전체 = `_all.json`, 같은 폴더 = `<작업폴더>.json`, 세션마다 = `sessions/<세션 id>.json`. PC마다 따로이고 외부로 아무것도 보내지 않는다.
+- 처음 `전체` 로 쓸 때 `_all.json` 이 없으면 지금까지 폴더별로 쓰던 노트 탭을 모아 만든다(같은 이름의 탭은 최근 것, 최대 30개). 폴더별 파일은 그대로 남으므로 `같은 폴더` 로 되돌리면 예전 노트가 다시 보인다.
 - 본문은 마우스 휠로만 스크롤한다. 방향키는 버튼 사이 초점 이동에만 쓰인다.
 - 언어: `/config` 에서 notes 의 「언어 / Language」를 `한국어`(기본) 또는 `English` 로 고른다. 창 문구·도구 설명·에이전트 사용 규칙이 함께 바뀌고, 새 세션부터 적용된다.
 - 세션을 시작하면 옆 창이 저절로 열린다(기본값). 끄려면 `/config` 에서 notes 의 「세션 시작 시 notes 창 자동 열기」를 끈다.
@@ -55,5 +56,5 @@ notes is a Claude Code mod: the agent writes its plan, progress and finish line 
 - Install: `claude plugin marketplace add somegee/somegee-skills` then `claude plugin install notes@somegee-skills --scope user`.
 - Language: open `/config`, find notes → "언어 / Language" and pick `English`. The pane, tool descriptions and the agent guide switch to English from the next session.
 - Headless sessions (cron, `claude -p`, SDK) leave the notes alone by default. To let them write notes, turn on "Use notes in headless sessions" under notes in `/config` (applies from the next session).
-- Every session in the same project folder shares one set of notes. A tab whose open steps are blocked turns red with ⛔; waiting only, yellow with ⏳. A green ● means the session that last touched the tab is working, a cyan 💬 that it shows a permission or question dialog, and a dim ✅ that every step is done.
+- By default every session on this PC shares one set of notes, whatever the project folder. Pick `같은 폴더` (same project folder only) or `세션마다` (no sharing, one note per session) under "노트 공유 범위 / Who shares the notes" in `/config` (applies from the next session). A tab whose open steps are blocked turns red with ⛔; waiting only, yellow with ⏳. A green ● means the session that last touched the tab is working, a cyan 💬 that it shows a permission or question dialog, and a dim ✅ that every step is done.
 - Headless runs (`claude -p`, cron, SDK) and subagents never touch the notes.
