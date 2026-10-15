@@ -460,7 +460,13 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // /notes 는 열기·닫기를 오간다: 창이 보이고 있으면 닫고, 아니면 연다(닫기 버튼 대신).
   on('command.run', { command: 'notes' }, async $ => {
+    const isShown = (await $.ui.panes()).some(p => p.id === PANE && p.isShown && p.isPlaced)
+    if (isShown) {
+      await $.ui.close({ id: PANE })
+      return { text: L.paneClosed }
+    }
     await $.ui.open({ id: PANE, title: 'notes' })
     const b = await read($, book)
     return { text: L.opened(b.tabs.length) }
@@ -814,19 +820,15 @@ export const register: Register = (on, options) => {
         : undefined,
     ].filter((x): x is { el: RenderChildren; rows: number } => x !== undefined)
     // 아래 버튼 줄([탭 지우기]·[되돌리기])은 본문과 따로 창 맨 아래에 고정한다.
-    // [닫기] 는 오른쪽 끝에 둔다(가운데 빈 칸이 밀어 줌). 우상단 × 는 Claude Code 의 것이라 옮길 수 없다.
+    // 창 닫기 버튼은 두지 않는다([탭 지우기]와 헷갈림). 창은 /notes 를 다시 입력하거나 우상단 × 로 닫는다.
     const bar = buttonBar(Box, [
       <Button key="remove" onPress={remove}>
         {L.removeTab}
       </Button>,
       undoButton,
       redoButton,
-      <Box key="bar-gap" flexGrow={1} />,
-      <Button key="close" onPress={() => void $.ui.close({ id: PANE })}>
-        {L.close}
-      </Button>,
     ], th.barBorder)
-    const barRows = 2 + textRows([L.removeTab, undoText, redoText, L.close].filter(Boolean).map(x => `[ ${x} ]`).join(' '), cols - 2)
+    const barRows = 2 + textRows([L.removeTab, undoText, redoText].filter(Boolean).map(x => `[ ${x} ]`).join(' '), cols - 2)
     // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)·버튼 줄·여유 한 줄을 빼고 남은 만큼이 본문 자리다.
     const tabWidth = b.tabs.reduce((w, t) => w + cellWidth(t.title) + 6, 0)
     const tabRows = 2 + Math.max(1, Math.ceil(tabWidth / cols))
@@ -881,12 +883,13 @@ export const register: Register = (on, options) => {
                   <Text bold={isActive} italic={isActive} color={th.text}>{isActive ? [arrow, t.title] : `[ ${name} ]`}</Text>
                 </Button>
               )
-            // 표시가 붙은 탭은 표시와 색을 붙인다(색을 못 보는 화면에서도 표시로 구별). 다 끝난 탭(✅)만 흐리게.
+            // 표시가 붙은 탭은 제목 앞에 표시를 붙이고 색을 칠한다(색을 못 보는 화면에서도 표시로 구별). 다 끝난 탭(✅)만 흐리게.
             const mark = TAB_MARK[marked]
             const color = marked === 'done' ? th.text : th.mark[marked]
+            const markedTitle = `${mark} ${t.title}`
             return (
-              <Button key={`tab-${t.title}`} label={`${name} ${mark}`} variant={isActive ? 'primary' : 'secondary'} plain={isActive ? undefined : true} dimColor={!isActive && marked === 'done'} onPress={select(t.title)}>
-                <Text bold={isActive} italic={isActive} color={color}>{isActive ? [arrow, `${t.title} ${mark}`] : `[ ${name} ${mark} ]`}</Text>
+              <Button key={`tab-${t.title}`} label={isActive ? `▶ ${markedTitle}` : markedTitle} variant={isActive ? 'primary' : 'secondary'} plain={isActive ? undefined : true} dimColor={!isActive && marked === 'done'} onPress={select(t.title)}>
+                <Text bold={isActive} italic={isActive} color={color}>{isActive ? [arrow, markedTitle] : `[ ${markedTitle} ]`}</Text>
               </Button>
             )
           })}

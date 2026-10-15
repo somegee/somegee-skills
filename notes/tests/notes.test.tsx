@@ -185,18 +185,18 @@ test('창에 다 안 들어가면 본문을 창 높이만큼만 보이고, [▼ 
 
   const small = { ...PANE, scroll: { offset: 0, bodyRows: 15 } }
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: small as never })
-  // 탭 줄 3·버튼 줄 4(되돌리기·닫기가 붙어 두 줄로 접힘)·여유 1 → 본문 자리 7줄, 위·아래 표시 2줄을 빼면 창 5줄.
+  // 탭 줄 3·버튼 줄 3(탭 지우기 한 줄)·여유 1 → 본문 자리 8줄, 위·아래 표시 2줄을 빼면 창 6줄.
   // 본문 24줄(제목 1 + 세션 1 + 할 일 2 + 단계 20).
-  expect((await ui.find({ key: 'viewport' }))?.props.height).toBe(5)
+  expect((await ui.find({ key: 'viewport' }))?.props.height).toBe(6)
   expect(await ui.find({ key: 'remove' })).toBeDefined()
   expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-0)
   expect(await ui.find({ key: 'scroll-up' })).toBeUndefined()
-  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (20줄)')
+  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (19줄)')
 
   await ui.press({ key: 'scroll-down' })
-  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-4)
-  expect((await ui.find({ key: 'scroll-up' }))?.text).toContain('▲ 위로 (4줄)')
-  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (16줄)')
+  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-5)
+  expect((await ui.find({ key: 'scroll-up' }))?.text).toContain('▲ 위로 (5줄)')
+  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (14줄)')
 })
 
 test('창에 다 들어가면 위·아래 표시도 창 자리도 없다', async ($, on) => {
@@ -278,7 +278,7 @@ test('막힘·대기 사유와 풀린 뒤 처리 내역이 그 단계 바로 아
   expect(await ui.find({ type: 'Text', text: /^- 커밋 abc123$/ })).toBeDefined()
 })
 
-test('지금 하는 단계(안 끝난 첫 단계)는 ▶ 와 고정 배경색으로, 제목 아래엔 세션과 갱신 시각이 보이고, [닫기] 가 있다', async ($, on) => {
+test('지금 하는 단계(안 끝난 첫 단계)는 ▶ 와 고정 배경색으로, 제목 아래엔 세션과 갱신 시각이 보이고, [닫기] 버튼은 없다', async ($, on) => {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '현재 단계', items: ['가', '나', '다'] } as never)
@@ -289,7 +289,7 @@ test('지금 하는 단계(안 끝난 첫 단계)는 ▶ 와 고정 배경색으
   expect((await ui.find({ type: 'Text', text: /^나$/ }))?.props.backgroundColor).toBe('#2e6b3f')
   expect((await ui.find({ key: 'chk-2' }))?.props.label).toBe('☐ 다')
   expect(await ui.find({ type: 'Text', text: /· (방금|[0-9]+분 전) 갱신$/ })).toBeDefined()
-  expect(await ui.find({ key: 'close' })).toBeDefined()
+  expect(await ui.find({ key: 'close' })).toBeUndefined()
 })
 
 test('결과물에 주소가 있으면 링크로 그린다', async ($, on) => {
@@ -559,26 +559,26 @@ test('안 끝난 단계에 막힘이 있으면 탭 이름이 빨강·⛔, 대기
 
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   // 마지막으로 표시를 단 '조사'가 지금 탭이다.
-  expect((await ui.find({ type: 'Text', text: /^\[ 배포 ⛔ \]$/ }))?.props.color).toBe('red')
-  expect((await ui.find({ type: 'Text', text: /^▶ 조사 ⏳$/ }))?.props.color).toBe('yellow')
+  expect((await ui.find({ type: 'Text', text: /^\[ ⛔ 배포 \]$/ }))?.props.color).toBe('red')
+  expect((await ui.find({ type: 'Text', text: /^▶ ⏳ 조사$/ }))?.props.color).toBe('yellow')
   expect(await ui.find({ type: 'Button', text: /^\[ 평범 \]$/ })).toBeDefined()
 
-  expect((await ui.find({ type: 'Text', text: /^▶ 조사 ⏳$/ }))?.props.italic).toBe(true)
-  expect((await ui.find({ type: 'Text', text: /^\[ 배포 ⛔ \]$/ }))?.props.italic).toBe(false)
+  expect((await ui.find({ type: 'Text', text: /^▶ ⏳ 조사$/ }))?.props.italic).toBe(true)
+  expect((await ui.find({ type: 'Text', text: /^\[ ⛔ 배포 \]$/ }))?.props.italic).toBe(false)
   // 엔진은 테두리 있는 버튼을 통째로 굵게 칠하므로, 지금 탭이 아니면 plain 버튼 + 보통 굵기여야 한다.
-  expect((await ui.find({ type: 'Text', text: /^\[ 배포 ⛔ \]$/ }))?.props.bold).toBe(false)
+  expect((await ui.find({ type: 'Text', text: /^\[ ⛔ 배포 \]$/ }))?.props.bold).toBe(false)
   expect((await ui.find({ type: 'Button', text: /^\[ 평범 \]$/ }))?.props.plain).toBe(true)
 
   await ui.press({ key: 'tab-평범' })
-  expect((await ui.find({ type: 'Text', text: /^\[ 조사 ⏳ \]$/ }))?.props.color).toBe('yellow')
+  expect((await ui.find({ type: 'Text', text: /^\[ ⏳ 조사 \]$/ }))?.props.color).toBe('yellow')
   // 지금 탭은 기울인 글씨, 나머지는 바로 선 글씨.
   expect((await ui.find({ type: 'Text', text: /^▶ 평범$/ }))?.props.italic).toBe(true)
-  expect((await ui.find({ type: 'Text', text: /^\[ 조사 ⏳ \]$/ }))?.props.italic).toBe(false)
+  expect((await ui.find({ type: 'Text', text: /^\[ ⏳ 조사 \]$/ }))?.props.italic).toBe(false)
 
   // 대기 단계를 끝내면 대기 표시가 사라지고, 단계가 다 끝났으니 ✅ 가 붙는다.
   await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '조사', items: [1] } as never)
-  expect(await ui.find({ type: 'Text', text: /^(\[ )?(▶ )?조사 ✅( \])?$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /조사 ⏳/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^(\[ )?(▶ )?✅ 조사( \])?$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /⏳ 조사/ })).toBeUndefined()
 })
 
 const EN = { options: { language: 'English' } }
@@ -611,7 +611,8 @@ test('English: 사용 규칙·도구 결과·창 문구가 영어로 나온다',
   expect(await ui.find({ type: 'Text', text: /⏳ waiting: reviewer/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /updated just now$/ })).toBeDefined()
   expect(await ui.find({ type: 'Button', text: /Delete tab/ })).toBeDefined()
-  expect(await ui.find({ type: 'Button', text: /✕ Close/ })).toBeDefined()
+  expect(await ui.find({ key: 'remove' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /Close/ })).toBeUndefined()
 })
 
 test('English: 대화창 요약 줄도 영어로 나온다', EN, async ($, on) => {
@@ -632,8 +633,8 @@ test('모든 단계가 끝난 탭은 ✅ 를 붙이고 흐리게, 하나라도 �
   await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '진행', items: [1] } as never)
 
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
-  expect(await ui.find({ type: 'Text', text: /^\[ 끝남 ✅ \]$/ })).toBeDefined()
-  expect((await ui.find({ type: 'Button', text: /^\[ 끝남 ✅ \]$/ }))?.props.dimColor).toBe(true)
+  expect(await ui.find({ type: 'Text', text: /^\[ ✅ 끝남 \]$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Button', text: /^\[ ✅ 끝남 \]$/ }))?.props.dimColor).toBe(true)
   expect(await ui.find({ type: 'Text', text: /^▶ 진행$/ })).toBeDefined()
 })
 
@@ -646,12 +647,12 @@ test('허락 창이 뜨면 이 세션 탭에 💬, 그 도구 호출이 끝나�
 
   await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
-  expect((await ui.find({ type: 'Text', text: /^▶ 배포 💬$/ }))?.props.color).toBe('cyan')
+  expect((await ui.find({ type: 'Text', text: /^▶ 💬 배포$/ }))?.props.color).toBe('cyan')
   const livePath = [...files.keys()].find(k => k.endsWith('/live/s1.json'))
   expect(JSON.parse(files.get(livePath!)!).state).toBe('ask')
 
   await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
-  expect((await ui.find({ type: 'Text', text: /^▶ 배포 ●$/ }))?.props.color).toBe('green')
+  expect((await ui.find({ type: 'Text', text: /^▶ ● 배포$/ }))?.props.color).toBe('green')
   expect(JSON.parse(files.get(livePath!)!).state).toBe('working')
 })
 
@@ -663,9 +664,9 @@ test('막힘은 💬 보다, 💬 는 대기보다 먼저 보인다', async ($, 
   await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '배포', item: 1, status: 'waiting', note: '확인' } as never)
   await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
-  expect(await ui.find({ type: 'Text', text: /^▶ 배포 💬$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^▶ 💬 배포$/ })).toBeDefined()
   await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '배포', item: 2, status: 'blocked', note: '권한' } as never)
-  expect(await ui.find({ type: 'Text', text: /^▶ 배포 ⛔$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^▶ ⛔ 배포$/ })).toBeDefined()
 })
 
 // 공유 범위(shareScope): 전체(기본) = _all.json, 같은 폴더 = <작업 폴더>.json, 세션마다 = sessions/<세션 id>.json.
@@ -763,4 +764,28 @@ test('배경색이 색 코드가 아니면 테마 배경을 쓴다', { options: 
 test('데스크톱 등 터미널이 아닌 화면에는 테마를 칠하지 않는다', { options: { theme: '고대비' } }, async ($, on) => {
   const ui = await mountWithTab($, on, 'desktop')
   expect((await ui.find({ key: 'pane-root' }))?.props.backgroundColor).toBeUndefined()
+})
+
+test('/notes 는 창이 보이면 닫고, 닫혀 있으면 연다', async ($, on) => {
+  fakeFiles(on)
+  let isShown = false
+  const calls: string[] = []
+  on('ui.panes', () => ({ value: isShown ? [{ id: 'notes', title: 'notes', isShown: true, isFocused: false, isPlaced: true }] : [] }) as never)
+  on('ui.open', () => {
+    calls.push('open')
+    isShown = true
+    return { value: { isPlaced: true } } as const
+  })
+  on('ui.close', () => {
+    calls.push('close')
+    isShown = false
+    return { value: undefined } as never
+  })
+
+  const first = await $.command.run({ command: 'notes', args: '' } as never)
+  const second = await $.command.run({ command: 'notes', args: '' } as never)
+
+  expect(calls).toEqual(['open', 'close'])
+  expect(String((first as { text?: string }).text)).toContain('열었습니다')
+  expect(String((second as { text?: string }).text)).toContain('닫았습니다')
 })

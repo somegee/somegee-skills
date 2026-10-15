@@ -86,7 +86,6 @@ const ko = {
   // 창
   empty: '아직 노트가 없습니다. 에이전트가 계획을 세우면 여기에 탭이 생깁니다.',
   removeTab: '탭 지우기',
-  close: '✕ 닫기',
   undo: '↶ 되돌리기',
   redo: '↷ 앞으로',
   scrollUp: (n: number) => `▲ 위로 (${n}줄)`,
@@ -111,7 +110,8 @@ const ko = {
   closed: (tab: string | undefined) => `'${tab}' 탭을 지웠습니다.`,
   opened: (n: number) => (n === 0 ? '노트 창을 열었습니다. 아직 탭이 없습니다.' : `노트 창을 열었습니다. 탭 ${n}개.`),
   // 명령·도구 설명
-  command: '노트 옆 창 열기 (계획·진행상황·종료 조건)',
+  command: '노트 옆 창 열기·닫기 (계획·진행상황·종료 조건)',
+  paneClosed: '노트 창을 닫았습니다. /notes 로 다시 엽니다.',
   tools: {
     write:
       '사용자가 바로 볼 노트 탭을 만들거나 고친다(옆 창에 표시, 작업 폴더별 유지). ' +
@@ -182,7 +182,6 @@ const en: Strings = {
   memoLines: n => `(${n} ${n === 1 ? 'line' : 'lines'})`,
   empty: 'No notes yet. A tab appears here once the agent makes a plan.',
   removeTab: 'Delete tab',
-  close: '✕ Close',
   undo: '↶ Undo',
   redo: '↷ Redo',
   scrollUp: n => `▲ Up (${n} ${n === 1 ? 'line' : 'lines'})`,
@@ -204,7 +203,8 @@ const en: Strings = {
   noTabs: 'There are no note tabs.',
   closed: tab => `Deleted tab '${tab}'.`,
   opened: n => (n === 0 ? 'Opened the notes pane. No tabs yet.' : `Opened the notes pane. ${n} ${n === 1 ? 'tab' : 'tabs'}.`),
-  command: 'Open the notes side pane (plan, progress, finish line)',
+  command: 'Open or close the notes side pane (plan, progress, finish line)',
+  paneClosed: 'Closed the notes pane. Run /notes to open it again.',
   tools: {
     write:
       'Create or update a note tab the user sees right away (shown in the side pane, kept per project folder). ' +
