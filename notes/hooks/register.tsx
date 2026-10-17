@@ -857,10 +857,10 @@ export const register: Register = (on, options) => {
     const bar = buttonBar([{ key: 'remove', icon: BAR_ICON.remove, text: L.removeTab, onPress: remove }, ...historyButtons])
     // 버튼 한 줄 + 가로줄 한 줄.
     const barRows = 2
-    // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)·버튼 줄·여유 한 줄을 빼고 남은 만큼이 본문 자리다.
+    // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)·버튼 줄을 빼고 남은 만큼이 본문 자리다(아래 여백 없이 끝까지 채움).
     const tabWidth = b.tabs.reduce((w, t) => w + cellWidth(t.title) + 6, 0)
     const tabRows = 2 + Math.max(1, Math.ceil(tabWidth / cols))
-    const avail = e.props.scroll.bodyRows - tabRows - barRows - 1
+    const avail = e.props.scroll.bodyRows - tabRows - barRows
     const total = blocks.reduce((sum, x) => sum + x.rows, 0)
     // 다 들어가면 그대로 그린다.
     // 안 들어가면 [▲ 위로] 줄·[▼ 아래로] 줄을 늘 남기고(자리가 들썩이지 않게), 그 사이 창에서
@@ -895,7 +895,7 @@ export const register: Register = (on, options) => {
     // 옆에 붙은 창(dock)은 창 높이를 꽉 채워 버튼 줄이 늘 맨 아래에 오게 한다. 프롬프트 위 창(inline)은 내용 높이만큼.
     const isDock = isTerminal && e.props.placement === 'dock'
     return (
-      <Box key="pane-root" flexDirection="column" paddingLeft={gutter} height={isDock ? e.props.scroll.bodyRows - 1 : undefined} backgroundColor={th.bg}>
+      <Box key="pane-root" flexDirection="column" paddingLeft={gutter} height={isDock ? e.props.scroll.bodyRows : undefined} backgroundColor={th.bg}>
         <Box flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor={th.tabBorder} paddingX={1}>
           {b.tabs.map(t => {
             const isActive = t.title === tab.title
