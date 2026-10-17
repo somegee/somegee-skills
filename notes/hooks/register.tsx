@@ -664,16 +664,22 @@ export const register: Register = (on, options) => {
       last && { key: 'undo', icon: BAR_ICON.undo, text: L.undo, detail: short(last.label), onPress: () => void undo($) },
       nextUp && { key: 'redo', icon: BAR_ICON.redo, text: L.redo, detail: short(nextUp.label), onPress: () => void redo($) },
     ].filter((x): x is BarButton => Boolean(x))
-    // 한 줄로만 그린다(테두리 없음). 탭 줄 안쪽 글자와 줄이 맞게 좌우 한 칸 띄운다.
+    // 버튼은 한 줄로만 그린다(테두리 없음). 탭 줄 안쪽 글자와 줄이 맞게 좌우 한 칸 띄운다.
+    // 바로 밑 본문 제목과 붙어 보이지 않게 흐린 가로줄을 긋는다. 폭을 넘는 만큼은 잘라 한 줄로 둔다.
     const buttonBar = (buttons: BarButton[]) => {
       const labels = barLabels(buttons, cols)
       return (
-        <Box key="bar" flexDirection="row" columnGap={1} paddingX={1}>
-          {buttons.map((x, n) => (
-            <Button key={x.key} onPress={x.onPress}>
-              {labels[n]}
-            </Button>
-          ))}
+        <Box key="bar" flexDirection="column">
+          <Box key="bar-buttons" flexDirection="row" columnGap={1} paddingX={1}>
+            {buttons.map((x, n) => (
+              <Button key={x.key} onPress={x.onPress}>
+                {labels[n]}
+              </Button>
+            ))}
+          </Box>
+          <Box key="bar-line" height={1} overflow="hidden">
+            <Text dimColor color={th.text}>{'─'.repeat(Math.max(1, e.props.bodyColumns))}</Text>
+          </Box>
         </Box>
       )
     }
@@ -849,7 +855,8 @@ export const register: Register = (on, options) => {
     // 버튼 줄은 탭 줄 바로 아래, 본문과 따로 고정한다(본문을 내려도 그 자리).
     // 창 닫기 버튼은 두지 않는다([탭 지우기]와 헷갈림). 창은 /notes 를 다시 입력하거나 우상단 × 로 닫는다.
     const bar = buttonBar([{ key: 'remove', icon: BAR_ICON.remove, text: L.removeTab, onPress: remove }, ...historyButtons])
-    const barRows = 1
+    // 버튼 한 줄 + 가로줄 한 줄.
+    const barRows = 2
     // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)·버튼 줄·여유 한 줄을 빼고 남은 만큼이 본문 자리다.
     const tabWidth = b.tabs.reduce((w, t) => w + cellWidth(t.title) + 6, 0)
     const tabRows = 2 + Math.max(1, Math.ceil(tabWidth / cols))
