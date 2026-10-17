@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { BoxProps, ElementConstructor, EngineInterface, Register, RenderChildren } from 'claude-code'
+import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
 import { callSummary, toCallDisplay } from './call-summary'
 import { TEXT, toLang, type Strings } from './i18n'
@@ -107,17 +107,30 @@ const ago = (iso: string, nowMs: number) => {
 const statusMark = (s: NoteItemStatus) => (s === 'blocked' ? `⛔ ${L.blocked}` : `⏳ ${L.waiting}`)
 // 탭 줄 표시: 안 끝난 단계에 막힘이 하나라도 있으면 빨강, 대기만 있으면 노랑. 다른 탭에서 일하는 중에도 한눈에 보이게.
 // 세션 표시: 그 탭을 마지막으로 다룬 세션이 일하는 중이면 초록 ●, 질문·허락 창을 띄웠으면 청록 💬. 모든 단계가 끝나면 ✅.
-// 여러 개가 겹치면 하나만: ⛔ → 💬 → ⏳ → ● → ✅.
+// 여러 개가 겹치면 하나만: ✅ → ⛔ → 💬 → ⏳ → ●. 다 끝난 탭은 그 세션이 다른 일을 하는 중이어도 ✅ 만 보인다
+// (막힘·대기는 안 끝난 단계에만 붙으니 ✅ 와 겹치지 않는다).
+// ●·💬 는 그 세션이 가장 최근에 고친 탭 하나에만 켠다. 한 세션이 탭 A 를 하다 새 탭 B 로 넘어가면 A 는 꺼진다.
 type TabMark = NoteItemStatus | 'ask' | 'working' | 'done'
 const TAB_MARK: Record<TabMark, string> = { blocked: '⛔', ask: '💬', waiting: '⏳', working: '●', done: '✅' }
-const tabMark = (t: NoteTab, states: Record<string, LiveState>): TabMark | undefined => {
+// 세션 id → 그 세션이 가장 최근에 고친 탭 이름.
+const latestTabs = (tabs: NoteTab[]) => {
+  const latest = new Map<string, NoteTab>()
+  for (const t of tabs) {
+    if (t.session === undefined) continue
+    const prev = latest.get(t.session.id)
+    if (prev === undefined || Date.parse(t.updatedAt) >= Date.parse(prev.updatedAt)) latest.set(t.session.id, t)
+  }
+  return new Map([...latest].map(([id, t]) => [id, t.title]))
+}
+const tabMark = (t: NoteTab, states: Record<string, LiveState>, latest: Map<string, string>): TabMark | undefined => {
   const open = t.items.filter(i => !i.isDone)
-  const state = t.session === undefined ? undefined : states[t.session.id]
+  if (t.items.length > 0 && open.length === 0) return 'done'
+  const isSessionTab = t.session !== undefined && latest.get(t.session.id) === t.title
+  const state = isSessionTab ? states[t.session!.id] : undefined
   if (open.some(i => i.status === 'blocked')) return 'blocked'
   if (state === 'ask') return 'ask'
   if (open.some(i => i.status === 'waiting')) return 'waiting'
-  if (state === 'working') return 'working'
-  return t.items.length > 0 && open.length === 0 ? 'done' : undefined
+  return state === 'working' ? 'working' : undefined
 }
 
 // 세션 상태는 세션마다 <notes-data>/live/<세션 id>.json 한 파일에 { state, at } 로 쓴다(노트 파일과 따로라 서로 덮어쓰지 않는다).
@@ -299,16 +312,24 @@ async function sync($: EngineInterface) {
   await update($, book, c => ({ ...c, ...saved, active: saved.tabs.some(t => t.title === c.active) ? c.active : saved.tabs.at(-1)?.title }))
 }
 
-// 하단 버튼 줄: 상단 탭 줄과 같은 둥근 테두리 상자.
-const buttonBar = (Box: ElementConstructor<BoxProps>, buttons: RenderChildren[], border: string) => (
-  <Box flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor={border} paddingX={1}>
-    {buttons.filter(Boolean)}
-  </Box>
-)
-
 // 터미널에서 글자가 차지하는 칸 수. 한글·한자·전각 문자와 체크 칸은 두 칸으로 센다.
 const WIDE = /[ᄀ-ᅟ☐-☒⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/
 const cellWidth = (s: string) => [...s].reduce((w, ch) => w + (WIDE.test(ch) ? 2 : 1), 0)
+
+// 버튼 줄([탭 지우기]·[되돌리기]·[앞으로]): 탭 줄 바로 아래 한 줄. 탭을 고른 자리에서 바로 누르게.
+// 창 폭에 맞춰 글자를 줄인다: 넉넉하면 '↶ 되돌리기: <무엇>', 모자라면 '↶ 되돌리기', 더 좁으면 아이콘만.
+type BarButton = { key: string; icon: string; text: string; detail?: string; onPress: () => void }
+const BAR_ICON = { remove: '✕', undo: '↶', redo: '↷' } as const
+const barLabels = (buttons: BarButton[], cols: number) => {
+  const levels = [
+    buttons.map(x => `${x.icon} ${x.text}${x.detail ? `: ${x.detail}` : ''}`),
+    buttons.map(x => `${x.icon} ${x.text}`),
+    buttons.map(x => x.icon),
+  ]
+  // 테두리 있는 버튼은 '[ 글자 ]' 로 4칸이 붙고, 버튼 사이는 한 칸 띈다.
+  const width = (labels: string[]) => labels.reduce((w, s) => w + cellWidth(s) + 4, 0) + Math.max(0, labels.length - 1)
+  return levels.find(l => width(l) <= cols) ?? levels.at(-1)!
+}
 // 폭 cols 에 접혀 들어갈 때 몇 줄이 되는지(대략).
 const textRows = (s: string, cols: number) => Math.max(1, Math.ceil(cellWidth(s) / Math.max(1, cols)))
 
@@ -632,29 +653,36 @@ export const register: Register = (on, options) => {
     const th = e.surface === 'terminal' ? theme : BASE_THEME
     const b = await read($, book)
     const states = await read($, live)
+    const latest = latestTabs(b.tabs)
     const tab = findTab(b, b.active) ?? b.tabs.at(-1)
     const last = b.history.at(-1)
 
     const nextUp = (b.future ?? []).at(-1)
     const short = (label: string) => (label.length > 16 ? `${label.slice(0, 16)}…` : label)
-    const undoText = last && `${L.undo}: ${short(last.label)}`
-    const redoText = nextUp && `${L.redo}: ${short(nextUp.label)}`
-    const undoButton = undoText && (
-      <Button key="undo" onPress={() => void undo($)}>
-        {undoText}
-      </Button>
-    )
-    const redoButton = redoText && (
-      <Button key="redo" onPress={() => void redo($)}>
-        {redoText}
-      </Button>
-    )
+    const cols = Math.max(10, e.props.bodyColumns - 2 - gutter)
+    const historyButtons: BarButton[] = [
+      last && { key: 'undo', icon: BAR_ICON.undo, text: L.undo, detail: short(last.label), onPress: () => void undo($) },
+      nextUp && { key: 'redo', icon: BAR_ICON.redo, text: L.redo, detail: short(nextUp.label), onPress: () => void redo($) },
+    ].filter((x): x is BarButton => Boolean(x))
+    // 한 줄로만 그린다(테두리 없음). 탭 줄 안쪽 글자와 줄이 맞게 좌우 한 칸 띄운다.
+    const buttonBar = (buttons: BarButton[]) => {
+      const labels = barLabels(buttons, cols)
+      return (
+        <Box key="bar" flexDirection="row" columnGap={1} paddingX={1}>
+          {buttons.map((x, n) => (
+            <Button key={x.key} onPress={x.onPress}>
+              {labels[n]}
+            </Button>
+          ))}
+        </Box>
+      )
+    }
 
     if (tab === undefined) {
       return (
         <Box key="pane-root" flexDirection="column" paddingLeft={gutter} backgroundColor={th.bg}>
+          {historyButtons.length > 0 && buttonBar(historyButtons)}
           <Text dimColor color={th.text}>{L.empty}</Text>
-          {(undoButton || redoButton) && buttonBar(Box, [undoButton, redoButton], th.barBorder)}
         </Box>
       )
     }
@@ -679,7 +707,6 @@ export const register: Register = (on, options) => {
       })
 
     // 구역마다 제목 줄을 두고 빈 줄로 나눈다: 목표·종료 조건 / 할 일 / 결과물 / 메모. 메모는 체크 칸 없이 흐린 글자로 단계와 구별한다.
-    const cols = Math.max(10, e.props.bodyColumns - 2 - gutter)
     // 구역 제목을 누르면 접고 편다. 접으면 제목 줄에 요약(개수 등)만 남는다.
     const foldMap = await read($, folded)
     const isFolded = (id: string) => foldMap[`${tab.title}|${id}`] === true
@@ -819,16 +846,10 @@ export const register: Register = (on, options) => {
           }
         : undefined,
     ].filter((x): x is { el: RenderChildren; rows: number } => x !== undefined)
-    // 아래 버튼 줄([탭 지우기]·[되돌리기])은 본문과 따로 창 맨 아래에 고정한다.
+    // 버튼 줄은 탭 줄 바로 아래, 본문과 따로 고정한다(본문을 내려도 그 자리).
     // 창 닫기 버튼은 두지 않는다([탭 지우기]와 헷갈림). 창은 /notes 를 다시 입력하거나 우상단 × 로 닫는다.
-    const bar = buttonBar(Box, [
-      <Button key="remove" onPress={remove}>
-        {L.removeTab}
-      </Button>,
-      undoButton,
-      redoButton,
-    ], th.barBorder)
-    const barRows = 2 + textRows([L.removeTab, undoText, redoText].filter(Boolean).map(x => `[ ${x} ]`).join(' '), cols - 2)
+    const bar = buttonBar([{ key: 'remove', icon: BAR_ICON.remove, text: L.removeTab, onPress: remove }, ...historyButtons])
+    const barRows = 1
     // 창 높이에서 탭 줄(테두리 2줄 + 접힌 줄 수)·버튼 줄·여유 한 줄을 빼고 남은 만큼이 본문 자리다.
     const tabWidth = b.tabs.reduce((w, t) => w + cellWidth(t.title) + 6, 0)
     const tabRows = 2 + Math.max(1, Math.ceil(tabWidth / cols))
@@ -872,7 +893,7 @@ export const register: Register = (on, options) => {
           {b.tabs.map(t => {
             const isActive = t.title === tab.title
             const name = isActive ? `▶ ${t.title}` : t.title
-            const marked = tabMark(t, states)
+            const marked = tabMark(t, states, latest)
             // 지금 탭 앞 화살표는 탭 줄 테두리와 같은 청록으로 칠한다.
             const arrow = <Text key="arrow" color={th.tabBorder}>▶ </Text>
             // 지금 탭은 기울인 굵은 글씨로 다른 탭과 구별한다. 엔진은 테두리([ ]) 있는 버튼을 통째로 굵게 칠하므로,
@@ -894,6 +915,7 @@ export const register: Register = (on, options) => {
             )
           })}
         </Box>
+        {bar}
         <Box key="body" flexDirection="column" flexGrow={1}>
           {isScrollable ? (
             <Box flexDirection="column">
@@ -911,7 +933,6 @@ export const register: Register = (on, options) => {
             </Box>
           )}
         </Box>
-        {bar}
       </Box>
     )
   })

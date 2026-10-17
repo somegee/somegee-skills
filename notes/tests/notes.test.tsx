@@ -185,18 +185,18 @@ test('창에 다 안 들어가면 본문을 창 높이만큼만 보이고, [▼ 
 
   const small = { ...PANE, scroll: { offset: 0, bodyRows: 15 } }
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: small as never })
-  // 탭 줄 3·버튼 줄 3(탭 지우기 한 줄)·여유 1 → 본문 자리 8줄, 위·아래 표시 2줄을 빼면 창 6줄.
+  // 탭 줄 3·버튼 줄 1(테두리 없는 한 줄)·여유 1 → 본문 자리 10줄, 위·아래 표시 2줄을 빼면 창 8줄.
   // 본문 24줄(제목 1 + 세션 1 + 할 일 2 + 단계 20).
-  expect((await ui.find({ key: 'viewport' }))?.props.height).toBe(6)
+  expect((await ui.find({ key: 'viewport' }))?.props.height).toBe(8)
   expect(await ui.find({ key: 'remove' })).toBeDefined()
   expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-0)
   expect(await ui.find({ key: 'scroll-up' })).toBeUndefined()
-  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (19줄)')
+  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (17줄)')
 
   await ui.press({ key: 'scroll-down' })
-  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-5)
-  expect((await ui.find({ key: 'scroll-up' }))?.text).toContain('▲ 위로 (5줄)')
-  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (14줄)')
+  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-7)
+  expect((await ui.find({ key: 'scroll-up' }))?.text).toContain('▲ 위로 (7줄)')
+  expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (10줄)')
 })
 
 test('창에 다 들어가면 위·아래 표시도 창 자리도 없다', async ($, on) => {
@@ -788,4 +788,88 @@ test('/notes 는 창이 보이면 닫고, 닫혀 있으면 연다', async ($, on
   expect(calls).toEqual(['open', 'close'])
   expect(String((first as { text?: string }).text)).toContain('열었습니다')
   expect(String((second as { text?: string }).text)).toContain('닫았습니다')
+})
+
+test('다 끝난 탭은 그 세션이 일하는 중이어도 ● 대신 ✅ 만 보인다', async ($, on) => {
+  fakeFiles(on)
+  on('classic.PermissionRequest', () => ({ value: {} }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '끝난 일', items: ['A'] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '끝난 일', items: [1] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '하는 일', items: ['B'] } as never)
+  // 허락 창 → 도구 호출 끝 = 이 세션은 일하는 중.
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ type: 'Text', text: /^\[ ✅ 끝난 일 \]$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /● 끝난 일/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^▶ ● 하는 일$/ })).toBeDefined()
+
+  // 허락 창(💬)이 떠도 다 끝난 탭은 ✅ 그대로.
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
+  expect(await ui.find({ type: 'Text', text: /^\[ ✅ 끝난 일 \]$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^▶ 💬 하는 일$/ })).toBeDefined()
+})
+
+test('버튼 줄은 탭 줄 바로 다음 한 줄(테두리 없음)이고, 본문 제목보다 앞에 온다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '버튼 위치', items: ['가'] } as never)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  const bar = await ui.find({ key: 'bar' })
+  expect(bar?.props.borderStyle).toBeUndefined()
+  expect(bar?.props.flexWrap).toBeUndefined()
+  // 그린 순서: 탭 버튼 → [탭 지우기] → 본문의 단계 체크 버튼.
+  const keys = (await ui.findAll({ type: 'Button' })).map(x => x.key)
+  expect(keys.indexOf('remove')).toBeGreaterThan(keys.indexOf('tab-버튼 위치'))
+  expect(keys.indexOf('remove')).toBeLessThan(keys.indexOf('chk-0'))
+})
+
+test('창이 넉넉하면 버튼에 글자와 무엇을 되돌리는지까지, 좁으면 글자만, 더 좁으면 아이콘만 보인다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '폭', items: ['가'] } as never)
+  const at = (bodyColumns: number) =>
+    $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: { ...PANE, bodyColumns } as never })
+
+  const wide = await at(80)
+  expect((await wide.find({ key: 'remove' }))?.text).toContain('✕ 탭 지우기')
+  expect((await wide.find({ key: 'undo' }))?.text).toMatch(/↶ 되돌리기: /)
+  await wide.unmount()
+
+  const mid = await at(36)
+  expect((await mid.find({ key: 'remove' }))?.text).toContain('✕ 탭 지우기')
+  expect((await mid.find({ key: 'undo' }))?.text).toMatch(/↶ 되돌리기(?!:)/)
+  await mid.unmount()
+
+  const narrow = await at(20)
+  expect((await narrow.find({ key: 'remove' }))?.text).not.toContain('탭 지우기')
+  expect((await narrow.find({ key: 'remove' }))?.text).toContain('✕')
+  expect((await narrow.find({ key: 'undo' }))?.text).toContain('↶')
+  expect((await narrow.find({ key: 'undo' }))?.text).not.toContain('되돌리기')
+})
+
+test('●·💬 는 그 세션이 가장 최근에 고친 탭에만 켜지고, 앞서 하던 안 끝난 탭은 꺼진다', async ($, on) => {
+  fakeFiles(on)
+  on('classic.PermissionRequest', () => ({ value: {} }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '하던 일', items: ['A', 'B'] } as never)
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ type: 'Text', text: /^▶ ● 하던 일$/ })).toBeDefined()
+
+  await new Promise(r => setTimeout(r, 5))
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '새 일', items: ['C'] } as never)
+  expect(await ui.find({ type: 'Text', text: /^▶ ● 새 일$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\[ 하던 일 \]$/ })).toBeDefined()
+
+  // 예전 탭을 다시 고치면 그쪽으로 옮겨 간다.
+  await new Promise(r => setTimeout(r, 5))
+  await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '하던 일', items: [1] } as never)
+  expect(await ui.find({ type: 'Text', text: /^▶ ● 하던 일$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\[ 새 일 \]$/ })).toBeDefined()
 })

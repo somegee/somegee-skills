@@ -86,8 +86,8 @@ const ko = {
   // 창
   empty: '아직 노트가 없습니다. 에이전트가 계획을 세우면 여기에 탭이 생깁니다.',
   removeTab: '탭 지우기',
-  undo: '↶ 되돌리기',
-  redo: '↷ 앞으로',
+  undo: '되돌리기',
+  redo: '앞으로',
   scrollUp: (n: number) => `▲ 위로 (${n}줄)`,
   scrollDown: (n: number) => `▼ 아래로 (${n}줄)`,
   // 되돌리기 기록에 남는 이름
@@ -182,8 +182,8 @@ const en: Strings = {
   memoLines: n => `(${n} ${n === 1 ? 'line' : 'lines'})`,
   empty: 'No notes yet. A tab appears here once the agent makes a plan.',
   removeTab: 'Delete tab',
-  undo: '↶ Undo',
-  redo: '↷ Redo',
+  undo: 'Undo',
+  redo: 'Redo',
   scrollUp: n => `▲ Up (${n} ${n === 1 ? 'line' : 'lines'})`,
   scrollDown: n => `▼ Down (${n} ${n === 1 ? 'line' : 'lines'})`,
   logNewTab: tab => `agent: new tab ${tab}`,

@@ -10,11 +10,11 @@
 - **목표·종료 조건·결과물·메모** 구역별 표시. 결과물(커밋·PR·파일·링크)은 따로 모인다.
 - **지금 하는 단계**: 안 끝난 첫 단계 앞에 ▶ 와 서서히 바뀌는 배경색.
 - **막힘·대기**: 단계 아래에 ⛔ 막힘 / ⏳ 대기 사유, 풀리면 ↳ 해결 내역이 남는다. 안 끝난 단계에 막힘이 있으면 탭 이름이 빨강·⛔, 대기만 있으면 노랑·⏳ 으로 바뀌어 다른 탭을 보는 중에도 눈에 띈다.
-- **탭 줄 표시**(제목 앞에 붙음, 예: `⛔ 배포`): 그 탭을 마지막으로 다룬 세션이 일하는 중이면 초록 ●, 허락 창·질문 창을 띄웠으면 청록 💬, 모든 단계가 끝나면 흐린 ✅. 겹치면 ⛔ → 💬 → ⏳ → ● → ✅ 순서로 하나만. 세션 상태는 `<.claude>/notes-data/live/<세션 id>.json` 에 따로 쓰고, 3분 넘게 소식이 없으면 무시한다.
+- **탭 줄 표시**(제목 앞에 붙음, 예: `⛔ 배포`): 그 탭을 마지막으로 다룬 세션이 일하는 중이면 초록 ●(그 세션이 가장 최근에 고친 탭 하나에만), 허락 창·질문 창을 띄웠으면 청록 💬, 모든 단계가 끝나면 흐린 ✅. 겹치면 ✅ → ⛔ → 💬 → ⏳ → ● 순서로 하나만(다 끝난 탭은 그 세션이 다른 일을 하는 중이어도 ✅ 만). 세션 상태는 `<.claude>/notes-data/live/<세션 id>.json` 에 따로 쓰고, 3분 넘게 소식이 없으면 무시한다.
 - **세션·갱신 시각**: 제목 아래에 이 탭을 다룬 세션 이름(/rename 이름, 없으면 자동 제목이나 세션 번호)과 마지막 갱신 시각.
 - **창 열기·닫기**: `/notes` 를 입력할 때마다 창이 열리고 닫힌다. 창 안에는 닫기 버튼을 두지 않는다([탭 지우기]와 헷갈리지 않게). 우상단 × 로도 닫힌다.
 - **구역 접기**: 목표·종료 조건·할 일·결과물·메모 제목을 누르면 접히고(▸ + 개수 요약) 다시 누르면 펴진다.
-- **[↶ 되돌리기] / [↷ 앞으로]**: 최근 변경 20건을 하나씩 되돌리고, 되돌린 것은 다시 할 수 있다(새로 고치면 앞으로 기록은 사라짐)(체크·탭 지우기·에이전트 수정 모두).
+- **버튼 줄 [✕ 탭 지우기] [↶ 되돌리기] [↷ 앞으로]**: 탭 줄 바로 아래 한 줄. 창이 넉넉하면 무엇을 되돌리는지까지, 좁으면 글자만, 더 좁으면 아이콘만 보인다. 최근 변경 20건을 하나씩 되돌리고, 되돌린 것은 다시 할 수 있다(새로 고치면 앞으로 기록은 사라짐)(체크·탭 지우기·에이전트 수정 모두).
 - **세션 간 공유**: 기본은 이 PC의 모든 세션이 작업 폴더와 상관없이 한 노트를 함께 본다(3초마다 반영). 보고 있는 탭은 세션마다 따로. `/config` 의 「노트 공유 범위」로 `전체`(기본) / `같은 폴더` / `세션마다`(공유 안 함) 중 고른다(새 세션부터).
 - **사용 규칙 자동 적용**: 세션마다 지시하지 않아도, 여러 단계 작업이면 에이전트가 알아서 탭을 만든다.
 
@@ -58,5 +58,5 @@ notes is a Claude Code mod: the agent writes its plan, progress and finish line 
 - Language: open `/config`, find notes → "언어 / Language" and pick `English`. The pane, tool descriptions and the agent guide switch to English from the next session.
 - Theme: pick "창 테마 / Pane theme" (`기본` = terminal colors, `어둡게` dark, `밝게` light, `고대비` high contrast) in `/config`; "창 배경색 직접 지정" takes a hex color such as `#1e2230` to override just the background. Terminal pane only, from the next session.
 - Headless sessions (cron, `claude -p`, SDK) leave the notes alone by default. To let them write notes, turn on "Use notes in headless sessions" under notes in `/config` (applies from the next session).
-- By default every session on this PC shares one set of notes, whatever the project folder. Pick `같은 폴더` (same project folder only) or `세션마다` (no sharing, one note per session) under "노트 공유 범위 / Who shares the notes" in `/config` (applies from the next session). A tab whose open steps are blocked turns red with ⛔; waiting only, yellow with ⏳. A green ● means the session that last touched the tab is working, a cyan 💬 that it shows a permission or question dialog, and a dim ✅ that every step is done.
+- By default every session on this PC shares one set of notes, whatever the project folder. Pick `같은 폴더` (same project folder only) or `세션마다` (no sharing, one note per session) under "노트 공유 범위 / Who shares the notes" in `/config` (applies from the next session). A tab whose open steps are blocked turns red with ⛔; waiting only, yellow with ⏳. A green ● means the session that last touched the tab is working (shown only on that session's most recently updated tab), a cyan 💬 that it shows a permission or question dialog, and a dim ✅ that every step is done (a finished tab shows only ✅, even while its session works on something else).
 - Headless runs (`claude -p`, cron, SDK) and subagents never touch the notes.
