@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test, type Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 // 노트 파일을 메모리에 둔다. 쓴 횟수를 돌려준다. 경로는 / 로 맞춰 둔다(엔진이 \ 로 바꿔 넘기기도 한다).
@@ -25,6 +25,24 @@ function fakeFiles(on: On) {
 }
 
 const PANE = { title: 'notes', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 200 } } as const
+
+// 사람이 있는 세션을 시작하고, 등록된 도구 이름 → 설명을 돌려준다. 시계는 넘기면 쓰는 쪽(mock.clock)이 맡는다.
+async function startSession($: Engine, on: On, options: { isInteractive?: boolean; hasClock?: boolean } = {}) {
+  const tools = new Map<string, string>()
+  on('tool.register', (_$, e) => {
+    tools.set(e.name, e.description)
+    return { value: undefined } as never
+  })
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  if (options.hasClock !== true) on('clock.every', () => ({ value: undefined }) as never)
+  on('command.register', () => ({ value: undefined }) as never)
+  const isInteractive = options.isInteractive !== false
+  await $.session.start({ cwd: '/w', surface: isInteractive ? 'terminal' : null, isInteractive } as never)
+  return tools
+}
+// 모델에게는 도구 설명의 앞 4,096자만 간다(Claude Code 가 자른다).
+const TOOL_DESCRIPTION_MAX = 4096
 
 test('에이전트가 만든 탭이 옆 창에 보이고, 체크하면 취소선이 그어진다', async ($, on) => {
   const { writes } = fakeFiles(on)
@@ -87,11 +105,22 @@ test('다른 세션이 파일에 추가한 탭을 덮어쓰지 않는다', async
   expect(saved.tabs.map(t => t.title)).toEqual(['내 작업', '다른 세션 작업'])
 })
 
-test('시스템 프롬프트 끝에 notes 사용 규칙이 붙는다', async ($, on) => {
+// 관리형 설정 PC 에서는 보안 모듈이 prompt.compose 훅을 건너뛰므로 규칙은 도구 설명으로 들어간다.
+test('notes 사용 규칙은 notes_write 도구 설명에 붙고, 시스템 프롬프트에는 넣지 않는다(두 번 들어가지 않게)', async ($, on) => {
+  fakeFiles(on)
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' as const }] }))
-  const { sections } = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [] })
-  expect(sections.map(s => s.id)).toEqual(['intro', 'notes:guide'])
-  expect(sections[1]?.text).toContain('notes_check')
+  const tools = await startSession($, on)
+  const description = tools.get('notes_write') ?? ''
+  expect(description).toContain('첫 작업(도구 호출) 전에 notes_write 로 탭부터 만든다')
+  expect(description).toContain('notes_status')
+  expect(description.length).toBeLessThanOrEqual(TOOL_DESCRIPTION_MAX)
+  // 사용 규칙은 notes_write 한 곳에만.
+  expect([...tools].filter(([, d]) => d.includes('## 쓰는 법')).map(([n]) => n)).toEqual(['notes_write'])
+
+  for (const surfaces of [['terminal'], []] as const) {
+    const { sections } = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces, tools: [], outputStyle: null, traits: [] })
+    expect(sections.map(s => s.id)).toEqual(['intro'])
+  }
 })
 
 test('되돌리기는 체크·탭 지우기를 하나씩 되돌린다', async ($, on) => {
@@ -303,22 +332,26 @@ test('결과물에 주소가 있으면 링크로 그린다', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /^- 커밋 abc$/ })).toBeDefined()
 })
 
-test('세션 이름은 대화 기록의 마지막 /rename 이름을 쓰고, 이름을 바꾸면 다음 프롬프트에 반영된다', async ($, on) => {
+// 세션 이름: classic 훅(관리형 설정 PC 에서 막힘) 없이 <CLAUDE_CONFIG_DIR>/projects/<작업 폴더>/<세션 id>.jsonl 을 읽는다.
+// 키를 / 로 시작하게 두면 엔진이 OS 에 맞는 절대 경로로 바꿔 읽어도 fakeFiles 가 끝부분으로 찾는다.
+const CONFIG_DIR = '/notes-test/.claude'
+const TRANSCRIPT = `${CONFIG_DIR}/projects/-w/s1.jsonl`
+
+test('세션 이름은 대화 기록의 마지막 /rename 이름을 쓰고, 이름을 바꾸면 30초 주기에 반영된다', async ($, on) => {
   const { files, reads } = fakeFiles(on)
-  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
-  on('classic.UserPromptSubmit', () => ({}))
-  // 엔진이 경로를 절대 경로로 바꿔 읽으므로 처음부터 절대 경로로 둔다.
-  const TP = 'C:/notes-test/T.jsonl'
-  files.set(TP, '{"type":"ai-title","aiTitle":"자동 제목"}\n')
-  await $.classic.UserPromptSubmit({ transcript_path: TP, prompt: 'a' } as never)
+  mock.env(on, { CLAUDE_CONFIG_DIR: CONFIG_DIR })
+  const clock = mock.clock(on)
+  files.set(TRANSCRIPT, '{"type":"ai-title","aiTitle":"자동 제목"}\n')
+  await startSession($, on, { hasClock: true })
+  await clock.settle()
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '이름', items: ['가'] } as never)
 
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
-  expect(reads).toContain(TP)
+  expect(reads.some(p => p.endsWith(TRANSCRIPT))).toBe(true)
   expect(await ui.find({ type: 'Text', text: /^자동 제목 · / })).toBeDefined()
 
-  files.set(TP, '{"type":"ai-title","aiTitle":"자동 제목"}\n{"type":"custom-title","customTitle":"mod"}\n')
-  await $.classic.UserPromptSubmit({ transcript_path: TP, prompt: 'b' } as never)
+  files.set(TRANSCRIPT, '{"type":"ai-title","aiTitle":"자동 제목"}\n{"type":"custom-title","customTitle":"mod"}\n')
+  await clock.advance(30000)
   expect(await ui.find({ type: 'Text', text: /^mod · / })).toBeDefined()
 })
 
@@ -332,15 +365,19 @@ test('데스크톱에서는 목표·종료 조건·결과물·메모를 Markdown
   expect((await ui.find({ key: 'memo-md' }))?.props.text).toBe('- 첫\n- 둘')
 })
 
-test('rename 한 이름은 세션 폴더의 custom-title.json 에서 읽는다(대화 기록이 커도)', async ($, on) => {
+test('rename 한 이름은 세션 폴더의 custom-title.json 에서 3초 안에 읽는다(대화 기록이 커도)', async ($, on) => {
   const { files } = fakeFiles(on)
-  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
-  on('classic.UserPromptSubmit', () => ({}))
-  files.set('C:/notes-test/S.jsonl', '{"type":"ai-title","aiTitle":"자동"}\n')
-  files.set('C:/notes-test/S/custom-title.json', '{"customTitle":"mod"}')
-  await $.classic.UserPromptSubmit({ transcript_path: 'C:/notes-test/S.jsonl', prompt: 'a' } as never)
+  mock.env(on, { CLAUDE_CONFIG_DIR: CONFIG_DIR })
+  const clock = mock.clock(on)
+  files.set(TRANSCRIPT, '{"type":"ai-title","aiTitle":"자동"}\n')
+  await startSession($, on, { hasClock: true })
+  await clock.settle()
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '이름2', items: ['가'] } as never)
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ type: 'Text', text: /^자동 · / })).toBeDefined()
+
+  files.set(`${CONFIG_DIR}/projects/-w/s1/custom-title.json`, '{"customTitle":"mod"}')
+  await clock.advance(3000)
   expect(await ui.find({ type: 'Text', text: /^mod · / })).toBeDefined()
 })
 
@@ -468,12 +505,6 @@ test('터미널에서는 왼쪽 구분선과 붙지 않게 창 내용을 한 칸
   expect((await desk.find({ key: 'pane-root' }))?.props.paddingLeft ?? 0).toBe(0)
 })
 
-test('헤드리스(-p·SDK)에서는 notes 사용 규칙을 넣지 않는다', async ($, on) => {
-  on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' as const }] }))
-  const { sections } = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] })
-  expect(sections.map(s => s.id)).toEqual(['intro'])
-})
-
 test('헤드리스 세션에서는 notes 도구를 등록하지 않고, 사람이 있는 세션에서는 등록한다', async ($, on) => {
   fakeFiles(on)
   const registered: string[] = []
@@ -495,21 +526,8 @@ test('헤드리스 세션에서는 notes 도구를 등록하지 않고, 사람�
 
 test('설정에서 헤드리스를 켜면 헤드리스 세션도 notes 규칙과 도구를 받는다', { options: { headless: true } }, async ($, on) => {
   fakeFiles(on)
-  const registered: string[] = []
-  on('tool.register', (_$, e) => {
-    registered.push(e.name)
-    return { value: undefined } as never
-  })
-  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
-  on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  on('clock.every', () => ({ value: undefined }) as never)
-  on('command.register', () => ({ value: undefined }) as never)
-  on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' as const }] }))
-
-  const { sections } = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] })
-  expect(sections.map(s => s.id)).toEqual(['intro', 'notes:guide'])
-  await $.session.start({ cwd: '/w', surface: null, isInteractive: false } as never)
-  expect(registered).toContain('notes_write')
+  const tools = await startSession($, on, { isInteractive: false })
+  expect(tools.get('notes_write')).toContain('## 쓰는 법')
 })
 
 test('서브에이전트가 notes 도구를 부르면 거절하고 노트 파일에 쓰지 않는다', async ($, on) => {
@@ -536,14 +554,17 @@ test('/clear 뒤처럼 세션 상태의 작업 폴더가 비어 있어도 이름
   expect(writes.some(p => p.endsWith('/.json'))).toBe(false)
 })
 
-test('/clear 뒤 SessionStart(clear) 가 오면 노트 파일을 바로 다시 읽어 창에 보인다', { options: { shareScope: '같은 폴더' } }, async ($, on) => {
+// /clear 는 세션 상태(창이 보는 노트)를 비우고 session.start 는 다시 오지 않는다. classic.SessionStart(clear) 는
+// 관리형 설정 PC 에서 막히므로 3초 주기 동기화가 파일을 다시 읽어 채운다(빈 작업 폴더는 위 테스트가 본다).
+test('/clear 뒤처럼 창의 노트가 비어 있어도 3초 주기 동기화가 노트 파일을 다시 읽어 창에 보인다', { options: { shareScope: '같은 폴더' } }, async ($, on) => {
   const { files } = fakeFiles(on)
-  files.set('/w.json', JSON.stringify({ root: '/w', tabs: [{ title: '남은 탭', items: [{ text: '가', isDone: false }], updatedAt: '2026-10-13T00:00:00Z' }], history: [], future: [] }))
-
-  on('classic.SessionStart', () => ({}) as never)
-  await $.classic.SessionStart({ source: 'clear' } as never)
-
+  const clock = mock.clock(on)
+  await startSession($, on, { hasClock: true })
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ type: 'Text', text: /남은 탭/ })).toBeUndefined()
+
+  files.set('/w.json', JSON.stringify({ root: '/w', tabs: [{ title: '남은 탭', items: [{ text: '가', isDone: false }], updatedAt: '2026-10-13T00:00:00Z' }], history: [], future: [] }))
+  await clock.advance(3000)
   expect(await ui.find({ type: 'Text', text: /남은 탭/ })).toBeDefined()
 })
 
@@ -585,10 +606,10 @@ const EN = { options: { language: 'English' } }
 
 test('English: 사용 규칙·도구 결과·창 문구가 영어로 나온다', EN, async ($, on) => {
   fakeFiles(on)
-  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
-  on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' as const }] }))
-  const { sections } = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [] })
-  expect(sections[1]?.text).toContain('short English name')
+  const tools = await startSession($, on)
+  expect(tools.get('notes_write')).toContain('short English name')
+  // 영어 규칙이 더 길다. 잘리지 않고 끝까지 가야 한다.
+  expect(tools.get('notes_write')!.length).toBeLessThanOrEqual(TOOL_DESCRIPTION_MAX)
 
   const wrote = await $.tool.call({
     tool: 'mcp__notes__notes_write',
@@ -638,35 +659,56 @@ test('모든 단계가 끝난 탭은 ✅ 를 붙이고 흐리게, 하나라도 �
   expect(await ui.find({ type: 'Text', text: /^▶ 진행$/ })).toBeDefined()
 })
 
-test('허락 창이 뜨면 이 세션 탭에 💬, 그 도구 호출이 끝나면 일하는 중 ● 으로 바뀌고 상태 파일에 남는다', async ($, on) => {
+// 질문 창(AskUserQuestion). ask(whileOpen) 은 창을 띄우고, 사람이 답하기 전(창이 떠 있는 동안)에 whileOpen 을 부른 뒤 답한다.
+// 허락 창(권한 확인)은 💬 를 켜지 않는다: classic.PermissionRequest 는 관리형 설정 PC 에서 막히고 tool.check 의 ask 는 자동 모드 분류기까지 포함한다.
+function questionDialog(on: On) {
+  let whileOpen = async () => {}
+  on('tool.call', { tool: 'AskUserQuestion' }, async () => {
+    await whileOpen()
+    return { result: 'answered' } as never
+  })
+  return async ($: Engine, during: () => Promise<void> = async () => {}) => {
+    whileOpen = during
+    await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)
+  }
+}
+
+test('질문 창이 떠 있는 동안 이 세션 탭에 💬, 답해서 그 도구 호출이 끝나면 일하는 중 ● 으로 바뀌고 상태 파일에 남는다', async ($, on) => {
   const { files } = fakeFiles(on)
-  on('classic.PermissionRequest', () => ({ value: {} }) as never)
+  const ask = questionDialog(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '배포', items: ['A'] } as never)
-
-  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
-  expect((await ui.find({ type: 'Text', text: /^▶ 💬 배포$/ }))?.props.color).toBe('cyan')
-  const livePath = [...files.keys()].find(k => k.endsWith('/live/s1.json'))
-  expect(JSON.parse(files.get(livePath!)!).state).toBe('ask')
+  const liveState = () => JSON.parse(files.get([...files.keys()].find(k => k.endsWith('/live/s1.json'))!)!).state
 
-  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  let seen: unknown[] = []
+  await ask($, async () => {
+    seen = [(await ui.find({ type: 'Text', text: /^▶ 💬 배포$/ }))?.props.color, liveState()]
+  })
+  expect(seen).toEqual(['cyan', 'ask'])
   expect((await ui.find({ type: 'Text', text: /^▶ ● 배포$/ }))?.props.color).toBe('green')
-  expect(JSON.parse(files.get(livePath!)!).state).toBe('working')
+  expect(liveState()).toBe('working')
+
+  // 다른 도구 호출(허락 창이 뜰 수 있는 Bash 포함)은 💬 를 켜지 않는다.
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  expect(await ui.find({ type: 'Text', text: /💬/ })).toBeUndefined()
 })
 
 test('막힘은 💬 보다, 💬 는 대기보다 먼저 보인다', async ($, on) => {
   fakeFiles(on)
-  on('classic.PermissionRequest', () => ({ value: {} }) as never)
+  const ask = questionDialog(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '배포', items: ['A', 'B'] } as never)
   await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '배포', item: 1, status: 'waiting', note: '확인' } as never)
-  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
-  expect(await ui.find({ type: 'Text', text: /^▶ 💬 배포$/ })).toBeDefined()
-  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '배포', item: 2, status: 'blocked', note: '권한' } as never)
-  expect(await ui.find({ type: 'Text', text: /^▶ ⛔ 배포$/ })).toBeDefined()
+  const marks: unknown[] = []
+  await ask($, async () => {
+    marks.push(await ui.find({ type: 'Text', text: /^▶ 💬 배포$/ }))
+    await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '배포', item: 2, status: 'blocked', note: '권한' } as never)
+    marks.push(await ui.find({ type: 'Text', text: /^▶ ⛔ 배포$/ }))
+  })
+  expect(marks.every(m => m !== undefined)).toBe(true)
 })
 
 // 공유 범위(shareScope): 전체(기본) = _all.json, 같은 폴더 = <작업 폴더>.json, 세션마다 = sessions/<세션 id>.json.
@@ -731,7 +773,7 @@ test('전체: 공유 파일이 없으면 세션 시작 때 폴더별 노트를 �
 })
 
 // 테마(theme·background): 터미널 창에만 칠한다. 기본은 지금까지 색 그대로.
-async function mountWithTab($: Parameters<Parameters<typeof test>[1]>[0], on: On, surface: 'terminal' | 'desktop' = 'terminal') {
+async function mountWithTab($: Engine, on: On, surface: 'terminal' | 'desktop' = 'terminal') {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '테마', items: ['지금 단계', '다음'] } as never)
@@ -792,25 +834,23 @@ test('/notes 는 창이 보이면 닫고, 닫혀 있으면 연다', async ($, on
 
 test('다 끝난 탭은 그 세션이 일하는 중이어도 ● 대신 ✅ 만 보인다', async ($, on) => {
   fakeFiles(on)
-  on('classic.PermissionRequest', () => ({ value: {} }) as never)
+  const ask = questionDialog(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
-  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '끝난 일', items: ['A'] } as never)
   await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '끝난 일', items: [1] } as never)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '하는 일', items: ['B'] } as never)
-  // 허락 창 → 도구 호출 끝 = 이 세션은 일하는 중.
-  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
-  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
-
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+
+  // 질문 창(💬)이 떠도 다 끝난 탭은 ✅ 그대로. 답하고 나면(도구 호출 끝) 이 세션은 일하는 중.
+  const whileOpen: unknown[] = []
+  await ask($, async () => {
+    whileOpen.push(await ui.find({ type: 'Text', text: /^\[ ✅ 끝난 일 \]$/ }), await ui.find({ type: 'Text', text: /^▶ 💬 하는 일$/ }))
+  })
+  expect(whileOpen.every(m => m !== undefined)).toBe(true)
+
   expect(await ui.find({ type: 'Text', text: /^\[ ✅ 끝난 일 \]$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /● 끝난 일/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^▶ ● 하는 일$/ })).toBeDefined()
-
-  // 허락 창(💬)이 떠도 다 끝난 탭은 ✅ 그대로.
-  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
-  expect(await ui.find({ type: 'Text', text: /^\[ ✅ 끝난 일 \]$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^▶ 💬 하는 일$/ })).toBeDefined()
 })
 
 test('버튼 줄은 탭 줄 바로 다음 한 줄(테두리 없음)이고, 본문 제목보다 앞에 온다', async ($, on) => {
@@ -856,12 +896,11 @@ test('창이 넉넉하면 버튼에 글자와 무엇을 되돌리는지까지, �
 
 test('●·💬 는 그 세션이 가장 최근에 고친 탭에만 켜지고, 앞서 하던 안 끝난 탭은 꺼진다', async ($, on) => {
   fakeFiles(on)
-  on('classic.PermissionRequest', () => ({ value: {} }) as never)
+  const ask = questionDialog(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
-  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '하던 일', items: ['A', 'B'] } as never)
-  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
-  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  // 질문 창 → 답함 = 이 세션은 일하는 중.
+  await ask($)
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   expect(await ui.find({ type: 'Text', text: /^▶ ● 하던 일$/ })).toBeDefined()
 
