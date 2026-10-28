@@ -1,5 +1,6 @@
 // 터미널 옆 창의 색 묶음. /config 의 notes.theme 로 고르고, notes.background 로 창 배경색만 따로 덮어쓴다.
-// 기본 = 지금까지 모습(터미널 배경·글자색 그대로). 다른 테마는 배경을 칠하므로 글자색도 함께 정한다.
+// 기본 = Claude Code 테마(/theme)의 색 이름을 써서 본체 화면과 같은 색을 따라간다. 배경·글자는 터미널 것 그대로.
+// 다른 테마는 배경을 칠하므로 글자색도 함께 정한다.
 export const THEME_NAMES = ['기본', '어둡게', '밝게', '고대비'] as const
 export type ThemeName = (typeof THEME_NAMES)[number]
 
@@ -9,18 +10,25 @@ export type NotesTheme = {
   text?: string
   // 지금 하는 단계(안 끝난 첫 단계) 줄.
   current: { bg: string; text: string }
+  // 탭 줄 둘레 테두리. 지금 탭 앞 ▶ 는 arrow, 없으면 이 색.
   tabBorder: string
+  arrow?: string
+  // 버튼 줄 밑 가로줄. 없으면 흐린 글자색.
+  rule?: string
   pagerBg: string
   section: { goal: string; doneWhen: string; todo: string; results: string; memo: string }
   mark: { blocked: string; ask: string; waiting: string; working: string }
 }
 
+// 테두리·가로줄은 본체 입력창 테두리(promptBorder)와 같은 색이라 본체가 그리는 창 틀과 어울린다.
 const BASE: NotesTheme = {
-  current: { bg: '#2e6b3f', text: 'white' },
-  tabBorder: 'cyan',
-  pagerBg: 'gray',
-  section: { goal: 'cyan', doneWhen: 'yellow', todo: 'green', results: 'blue', memo: 'magenta' },
-  mark: { blocked: 'red', ask: 'cyan', waiting: 'yellow', working: 'green' },
+  current: { bg: 'diffAdded', text: 'text' },
+  tabBorder: 'promptBorder',
+  arrow: 'suggestion',
+  rule: 'promptBorder',
+  pagerBg: 'subtle',
+  section: { goal: 'planMode', doneWhen: 'warning', todo: 'success', results: 'ide', memo: 'remember' },
+  mark: { blocked: 'error', ask: 'permission', waiting: 'warning', working: 'success' },
 }
 
 const THEMES: Record<ThemeName, NotesTheme> = {

@@ -307,7 +307,7 @@ test('막힘·대기 사유와 풀린 뒤 처리 내역이 그 단계 바로 아
   expect(await ui.find({ type: 'Text', text: /^- 커밋 abc123$/ })).toBeDefined()
 })
 
-test('지금 하는 단계(안 끝난 첫 단계)는 ▶ 와 고정 배경색으로, 제목 아래엔 세션과 갱신 시각이 보이고, [닫기] 버튼은 없다', async ($, on) => {
+test('지금 하는 단계(안 끝난 첫 단계)는 ▶ 와 테마의 배경색으로, 제목 아래엔 세션과 갱신 시각이 보이고, [닫기] 버튼은 없다', async ($, on) => {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '현재 단계', items: ['가', '나', '다'] } as never)
@@ -315,7 +315,7 @@ test('지금 하는 단계(안 끝난 첫 단계)는 ▶ 와 고정 배경색으
 
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   expect((await ui.find({ key: 'chk-1' }))?.props.label).toBe('▶ 나')
-  expect((await ui.find({ type: 'Text', text: /^나$/ }))?.props.backgroundColor).toBe('#2e6b3f')
+  expect((await ui.find({ type: 'Text', text: /^나$/ }))?.props.backgroundColor).toBe('diffAdded')
   expect((await ui.find({ key: 'chk-2' }))?.props.label).toBe('☐ 다')
   expect(await ui.find({ type: 'Text', text: /· (방금|[0-9]+분 전) 갱신$/ })).toBeDefined()
   expect(await ui.find({ key: 'close' })).toBeUndefined()
@@ -568,7 +568,7 @@ test('/clear 뒤처럼 창의 노트가 비어 있어도 3초 주기 동기화�
   expect(await ui.find({ type: 'Text', text: /남은 탭/ })).toBeDefined()
 })
 
-test('안 끝난 단계에 막힘이 있으면 탭 이름이 빨강·⛔, 대기만 있으면 노랑·⏳, 다 끝나면 원래대로', async ($, on) => {
+test('안 끝난 단계에 막힘이 있으면 탭 이름이 error 색·⛔, 대기만 있으면 warning 색·⏳, 다 끝나면 원래대로', async ($, on) => {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '배포', items: ['A', 'B'] } as never)
@@ -580,8 +580,8 @@ test('안 끝난 단계에 막힘이 있으면 탭 이름이 빨강·⛔, 대기
 
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   // 마지막으로 표시를 단 '조사'가 지금 탭이다.
-  expect((await ui.find({ type: 'Text', text: /^\[ ⛔ 배포 \]$/ }))?.props.color).toBe('red')
-  expect((await ui.find({ type: 'Text', text: /^▶ ⏳ 조사$/ }))?.props.color).toBe('yellow')
+  expect((await ui.find({ type: 'Text', text: /^\[ ⛔ 배포 \]$/ }))?.props.color).toBe('error')
+  expect((await ui.find({ type: 'Text', text: /^▶ ⏳ 조사$/ }))?.props.color).toBe('warning')
   expect(await ui.find({ type: 'Button', text: /^\[ 평범 \]$/ })).toBeDefined()
 
   expect((await ui.find({ type: 'Text', text: /^▶ ⏳ 조사$/ }))?.props.italic).toBe(true)
@@ -591,7 +591,7 @@ test('안 끝난 단계에 막힘이 있으면 탭 이름이 빨강·⛔, 대기
   expect((await ui.find({ type: 'Button', text: /^\[ 평범 \]$/ }))?.props.plain).toBe(true)
 
   await ui.press({ key: 'tab-평범' })
-  expect((await ui.find({ type: 'Text', text: /^\[ ⏳ 조사 \]$/ }))?.props.color).toBe('yellow')
+  expect((await ui.find({ type: 'Text', text: /^\[ ⏳ 조사 \]$/ }))?.props.color).toBe('warning')
   // 지금 탭은 기울인 글씨, 나머지는 바로 선 글씨.
   expect((await ui.find({ type: 'Text', text: /^▶ 평범$/ }))?.props.italic).toBe(true)
   expect((await ui.find({ type: 'Text', text: /^\[ ⏳ 조사 \]$/ }))?.props.italic).toBe(false)
@@ -686,8 +686,8 @@ test('질문 창이 떠 있는 동안 이 세션 탭에 💬, 답해서 그 도�
   await ask($, async () => {
     seen = [(await ui.find({ type: 'Text', text: /^▶ 💬 배포$/ }))?.props.color, liveState()]
   })
-  expect(seen).toEqual(['cyan', 'ask'])
-  expect((await ui.find({ type: 'Text', text: /^▶ ● 배포$/ }))?.props.color).toBe('green')
+  expect(seen).toEqual(['permission', 'ask'])
+  expect((await ui.find({ type: 'Text', text: /^▶ ● 배포$/ }))?.props.color).toBe('success')
   expect(liveState()).toBe('working')
 
   // 다른 도구 호출(허락 창이 뜰 수 있는 Bash 포함)은 💬 를 켜지 않는다.
@@ -772,7 +772,7 @@ test('전체: 공유 파일이 없으면 세션 시작 때 폴더별 노트를 �
   expect(tabs[1]!.memo).toBe('새것')
 })
 
-// 테마(theme·background): 터미널 창에만 칠한다. 기본은 지금까지 색 그대로.
+// 테마(theme·background): 터미널 창에만 칠한다. 기본은 Claude Code 테마(/theme)의 색 이름을 쓴다.
 async function mountWithTab($: Engine, on: On, surface: 'terminal' | 'desktop' = 'terminal') {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
@@ -780,10 +780,28 @@ async function mountWithTab($: Engine, on: On, surface: 'terminal' | 'desktop' =
   return $.ui.mount({ plugin: 'notes', surface, component: 'Pane', requestId: 'notes', props: PANE })
 }
 
-test('기본 테마: 창 배경을 칠하지 않고 지금 단계는 원래 초록 배경', async ($, on) => {
+test('기본 테마: 창 배경을 칠하지 않고 지금 단계는 테마의 diffAdded 배경', async ($, on) => {
   const ui = await mountWithTab($, on)
   expect((await ui.find({ key: 'pane-root' }))?.props.backgroundColor).toBeUndefined()
-  expect((await ui.find({ type: 'Text', text: /^지금 단계$/ }))?.props.backgroundColor).toBe('#2e6b3f')
+  expect((await ui.find({ type: 'Text', text: /^지금 단계$/ }))?.props.backgroundColor).toBe('diffAdded')
+})
+
+test('기본 테마: 탭 줄 테두리와 버튼 밑 가로줄은 본체 입력창 테두리 색(promptBorder), 지금 탭 ▶ 는 suggestion', async ($, on) => {
+  const ui = await mountWithTab($, on)
+  expect((await ui.find({ key: 'tab-strip' }))?.props.borderColor).toBe('promptBorder')
+  const rule = await ui.find({ type: 'Text', text: /^─+$/ })
+  expect(rule?.props.color).toBe('promptBorder')
+  expect(rule?.props.dimColor).toBeFalsy()
+  expect((await ui.find({ type: 'Text', text: /^▶ $/ }))?.props.color).toBe('suggestion')
+})
+
+test('어둡게: 탭 줄 테두리·▶ 는 테마 색 그대로, 버튼 밑 가로줄은 흐린 글자색', { options: { theme: '어둡게' } }, async ($, on) => {
+  const ui = await mountWithTab($, on)
+  expect((await ui.find({ key: 'tab-strip' }))?.props.borderColor).toBe('#7aa2f7')
+  const rule = await ui.find({ type: 'Text', text: /^─+$/ })
+  expect(rule?.props.color).toBe('#e6e9ef')
+  expect(rule?.props.dimColor).toBe(true)
+  expect((await ui.find({ type: 'Text', text: /^▶ $/ }))?.props.color).toBe('#7aa2f7')
 })
 
 test('밝게: 창 배경과 글자색, 지금 단계 색이 테마 색으로 바뀐다', { options: { theme: '밝게' } }, async ($, on) => {

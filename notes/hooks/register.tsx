@@ -621,7 +621,7 @@ export const register: Register = (on, options) => {
     const tail = isErrored ? L.call.failed : isInterrupted ? L.call.interrupted : isRunning ? ' …' : ''
     return (
       <Box key="notes-call">
-        <Text dimColor={!isErrored} color={isErrored ? 'red' : undefined}>
+        <Text dimColor={!isErrored} color={isErrored ? 'error' : undefined}>
           {`${summary}${tail}`}
         </Text>
       </Box>
@@ -669,7 +669,7 @@ export const register: Register = (on, options) => {
             ))}
           </Box>
           <Box key="bar-line" height={1} overflow="hidden">
-            <Text dimColor color={th.text}>{'─'.repeat(Math.max(1, e.props.bodyColumns))}</Text>
+            <Text dimColor={th.rule === undefined} color={th.rule ?? th.text}>{'─'.repeat(Math.max(1, e.props.bodyColumns))}</Text>
           </Box>
         </Box>
       )
@@ -887,13 +887,13 @@ export const register: Register = (on, options) => {
     const isDock = isTerminal && e.props.placement === 'dock'
     return (
       <Box key="pane-root" flexDirection="column" paddingLeft={gutter} height={isDock ? e.props.scroll.bodyRows : undefined} backgroundColor={th.bg}>
-        <Box flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor={th.tabBorder} paddingX={1}>
+        <Box key="tab-strip" flexDirection="row" flexWrap="wrap" columnGap={1} borderStyle="round" borderColor={th.tabBorder} paddingX={1}>
           {b.tabs.map(t => {
             const isActive = t.title === tab.title
             const name = isActive ? `▶ ${t.title}` : t.title
             const marked = tabMark(t, states, latest)
-            // 지금 탭 앞 화살표는 탭 줄 테두리와 같은 청록으로 칠한다.
-            const arrow = <Text key="arrow" color={th.tabBorder}>▶ </Text>
+            // 지금 탭 앞 화살표는 테마의 강조색(없으면 탭 줄 테두리 색)으로 칠한다.
+            const arrow = <Text key="arrow" color={th.arrow ?? th.tabBorder}>▶ </Text>
             // 지금 탭은 기울인 굵은 글씨로 다른 탭과 구별한다. 엔진은 테두리([ ]) 있는 버튼을 통째로 굵게 칠하므로,
             // 다른 탭은 테두리 없는 버튼(plain)에 [ ]를 글자로 넣어 보통 굵기로 그린다.
             if (marked === undefined)
