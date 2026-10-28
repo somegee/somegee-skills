@@ -344,6 +344,13 @@ const textRows = (s: string, cols: number) => Math.max(1, Math.ceil(cellWidth(s)
 // 마지막으로 그린 탭에서 본문을 내릴 수 있는 최대 줄 수. 휠이 끝을 넘지 않게 그릴 때마다 갱신한다.
 let maxScroll = 0
 
+// 창 열기. 본체는 창 안을 제 색(회색)으로 칠하므로, 배경 없는 테마는 투명을 요청해 터미널 바탕이 비치게 한다.
+// 창 바탕 지정(backgroundColor)은 Claude Code 2.1.302 엔 없던 항목이라, 옛 버전이 거절하면 바탕 없이 다시 연다.
+const openPane = ($: EngineInterface) => {
+  const pane = { id: PANE, title: 'notes', backgroundColor: theme.bg ?? 'transparent' }
+  return $.ui.open(pane).catch(() => $.ui.open({ id: PANE, title: 'notes' }))
+}
+
 const ok = (text: string) => ({ result: text })
 const failed = () => ({ deny: L.failed })
 // 노트는 사람이 보는 메인 에이전트만 쓴다. 서브에이전트·팀원 루프에서 부르면 거절한다.
@@ -405,7 +412,7 @@ export const register: Register = (on, options) => {
     $.clock.every(TICK_MS, () => void update($, tick, n => (n + 1) % 100000).then(() => refreshTitle($)))
     void refreshTitle($)
     // 기본은 세션을 열면 창도 연다. /config 의 notes.autoOpen 을 끄면 /notes 로만 연다.
-    if (options.autoOpen !== false && e.isInteractive) void $.ui.open({ id: PANE, title: 'notes' })
+    if (options.autoOpen !== false && e.isInteractive) void openPane($)
 
     await $.command.register({ name: 'notes', description: L.command })
     await $.tool.register({
@@ -479,7 +486,7 @@ export const register: Register = (on, options) => {
       await $.ui.close({ id: PANE })
       return { text: L.paneClosed }
     }
-    await $.ui.open({ id: PANE, title: 'notes' })
+    await openPane($)
     const b = await read($, book)
     return { text: L.opened(b.tabs.length) }
   })
@@ -512,7 +519,7 @@ export const register: Register = (on, options) => {
       const rest = cur.tabs.filter(t => t.title !== title)
       return { ...cur, tabs: (old ? cur.tabs.map(t => (t.title === title ? tab : t)) : [...rest, tab]).slice(-MAX_TABS), active: title }
     })
-    if (isNew) void $.ui.open({ id: PANE, title: 'notes' })
+    if (isNew) void openPane($)
 
     return ok(describeTab(findTab(b, title)!))
   }).catch(failed)
@@ -621,7 +628,7 @@ export const register: Register = (on, options) => {
     const tail = isErrored ? L.call.failed : isInterrupted ? L.call.interrupted : isRunning ? ' …' : ''
     return (
       <Box key="notes-call">
-        <Text dimColor={!isErrored} color={isErrored ? 'error' : undefined}>
+        <Text dimColor={!isErrored} color={isErrored ? 'red' : undefined}>
           {`${summary}${tail}`}
         </Text>
       </Box>
@@ -892,8 +899,8 @@ export const register: Register = (on, options) => {
             const isActive = t.title === tab.title
             const name = isActive ? `▶ ${t.title}` : t.title
             const marked = tabMark(t, states, latest)
-            // 지금 탭 앞 화살표는 테마의 강조색(없으면 탭 줄 테두리 색)으로 칠한다.
-            const arrow = <Text key="arrow" color={th.arrow ?? th.tabBorder}>▶ </Text>
+            // 지금 탭 앞 화살표는 탭 줄 테두리와 같은 색으로 칠한다.
+            const arrow = <Text key="arrow" color={th.tabBorder}>▶ </Text>
             // 지금 탭은 기울인 굵은 글씨로 다른 탭과 구별한다. 엔진은 테두리([ ]) 있는 버튼을 통째로 굵게 칠하므로,
             // 다른 탭은 테두리 없는 버튼(plain)에 [ ]를 글자로 넣어 보통 굵기로 그린다.
             if (marked === undefined)

@@ -1,6 +1,6 @@
 {
   "name": "notes",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "에이전트가 계획·진행상황·종료조건을 탭별 노트로 기록하고, 사용자가 옆 창에서 바로 확인하는 모드",
   "types": "./types/index.d.ts",
   "author": {
@@ -55,7 +55,7 @@
     "theme": {
       "type": "string",
       "title": "창 테마 / Pane theme",
-      "description": "터미널 notes 창의 색. 기본 = 배경·글자는 터미널 그대로, 테두리·제목·표시 색은 Claude Code 테마(/theme)를 따라감. 어둡게 = 짙은 남색 배경. 밝게 = 흰 배경에 어두운 글자. 고대비 = 검정 배경에 진한 원색. 새 세션부터 적용. / Colors of the terminal notes pane. 기본 follows the Claude Code /theme.",
+      "description": "터미널 notes 창의 색. 기본 = 터미널 바탕·글자색과 터미널 팔레트 색(청록 등) 그대로라 터미널 테마를 따라감. 어둡게 = 짙은 남색 배경. 밝게 = 흰 배경에 어두운 글자. 고대비 = 검정 배경에 진한 원색. 새 세션부터 적용. / Colors of the terminal notes pane. 기본 follows the terminal's own background and palette.",
       "options": [
         "기본",
         "어둡게",
