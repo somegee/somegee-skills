@@ -2,7 +2,8 @@ import { expect, mock, test, type Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 // 노트 파일을 메모리에 둔다. 쓴 횟수를 돌려준다. 경로는 / 로 맞춰 둔다(엔진이 \ 로 바꿔 넘기기도 한다).
-function fakeFiles(on: On) {
+// sessionId 를 넘기면 엔진이 물을 때마다 그 값을 세션 id 로 답한다(/resume 처럼 도중에 바뀌는 경우).
+function fakeFiles(on: On, sessionId: () => string = () => 's1') {
   const files = new Map<string, string>()
   const writes: string[] = []
   const reads: string[] = []
@@ -20,7 +21,7 @@ function fakeFiles(on: On) {
     return { value: undefined }
   })
   on('session.root', () => ({ value: '/w' }) as never)
-  on('session.id', () => ({ value: 's1' }) as never)
+  on('session.id', () => ({ value: sessionId() }) as never)
   return { files, writes, reads }
 }
 
@@ -750,6 +751,42 @@ test('세션마다: 세션 id 파일에 쓰고 다른 세션 노트는 보이지
   expect(String(read.result)).toContain('내 탭')
   expect(String(read.result)).not.toContain('전체 탭')
   expect(String(read.result)).not.toContain('폴더 탭')
+})
+
+// 창 안 /resume: 새 세션으로 시작한 뒤(session.start) 같은 프로세스가 고른 세션 id 로 바뀌고 session.start 는 다시 오지 않는다.
+// 엔진이 세션 상태(창이 보는 노트)를 비워 주지 않는 PC 도 있다(2026-10-29 회사 PC, 윈도우).
+test('세션마다: /resume 처럼 세션 id 가 바뀌면 3초 동기화 때 그 세션 노트로 갈아탄다', { options: { shareScope: '세션마다' } }, async ($, on) => {
+  let id = 'fresh'
+  const { files } = fakeFiles(on, () => id)
+  const clock = mock.clock(on)
+  await startSession($, on, { hasClock: true })
+  files.set('/sessions/old.json', saveFile('/w', '이어 할 탭'))
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
+  expect(await ui.find({ type: 'Text', text: /이어 할 탭/ })).toBeUndefined()
+
+  id = 'old'
+  await clock.advance(3000)
+  expect(await ui.find({ type: 'Text', text: /이어 할 탭/ })).toBeDefined()
+})
+
+test('세션마다: 세션 id 가 바뀐 직후 도구로 쓰면 바뀐 세션 노트에 이어 쓰고 상태 표시도 새 id 로 옮긴다', { options: { shareScope: '세션마다' } }, async ($, on) => {
+  let id = 'fresh'
+  const { files, writes } = fakeFiles(on, () => id)
+  const ask = questionDialog(on)
+  await startSession($, on)
+  files.set('/sessions/old.json', saveFile('/w', '이어 할 탭'))
+
+  id = 'old'
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '새 탭', items: ['A'] } as never)
+
+  expect(writes.some(p => p.endsWith('/sessions/fresh.json'))).toBe(false)
+  const saved = JSON.parse(files.get(writes.find(p => p.endsWith('/sessions/old.json'))!)!) as { tabs: { title: string; session?: { id: string } }[] }
+  expect(saved.tabs.map(t => t.title)).toEqual(['이어 할 탭', '새 탭'])
+  expect(saved.tabs[1]!.session?.id).toBe('old')
+
+  await ask($)
+  expect(writes.some(p => p.endsWith('/live/old.json'))).toBe(true)
+  expect(writes.some(p => p.endsWith('/live/fresh.json') && JSON.parse(files.get(p)!).state !== 'idle')).toBe(false)
 })
 
 test('전체: 공유 파일이 없으면 세션 시작 때 폴더별 노트를 모아 만든다(같은 이름은 최근 것)', async ($, on) => {

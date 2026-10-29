@@ -270,15 +270,34 @@ async function seedShared($: EngineInterface, root: string) {
   if (tabs.length > 0) await save($, root, { tabs, history: [], future: [] })
 }
 
-// /clear 하면 세션 상태가 처음 값(root '')으로 돌아가는데 session.start 는 다시 오지 않는다.
-// 그때 root 가 비어 있으면 엔진에 다시 물어 채운다(빈 root 로는 이름 없는 노트 파일 .json 에 쓰게 된다).
+// /clear·/resume 하면 같은 프로세스가 다른 세션 id 로 이어 가는데 session.start 는 다시 오지 않는다.
+// /clear 는 세션 상태를 처음 값(root '')으로 비우지만, /resume 은 비우지 않는 PC 가 있다(2026-10-29 회사 PC, 윈도우).
+// 그래서 노트 파일을 고를 때마다 엔진에 세션 id 를 다시 묻고, 바뀌었으면 그 세션 노트로 갈아탄다.
+// root 가 비어 있으면 다시 물어 채운다(빈 root 로는 이름 없는 노트 파일 .json 에 쓰게 된다).
 async function projectRoot($: EngineInterface) {
+  const id = await $.session.id()
   const { root } = await read($, book)
-  if (root !== '') return root
+  if (id === sessionId && root !== '') return root
   const fresh = await $.session.root()
-  sessionId = await $.session.id()
+  if (sessionId !== '' && id !== sessionId) return switchSession($, id, fresh)
+  sessionId = id
   await update($, book, c => ({ ...c, root: fresh }))
   return fresh
+}
+
+// 다른 세션으로 갈아탄다: 떠난 id 의 상태 파일은 쉼으로 남기고(●·💬 가 남지 않게) 지금 상태는 새 id 로 옮겨 쓴다.
+// 세션 이름은 다음 주기에 새 세션 것으로 다시 찾는다. 창은 그 세션 노트 파일을 보인다.
+async function switchSession($: EngineInterface, id: string, root: string) {
+  // 3초 동기화와 도구 호출이 함께 들어와도 한 번만 갈아탄다(여기서 sessionId 를 바꿀 때까지 기다리는 곳이 없다).
+  if (id === sessionId) return root
+  const left = sessionId
+  sessionId = id
+  sessionTitle = undefined
+  await $.fs.write(livePath($, left), JSON.stringify({ state: 'idle', at: now() })).catch(() => undefined)
+  if (myLive.state !== 'idle') await writeLive($)
+  const saved = await loadFile($, root)
+  await update($, book, c => ({ ...c, root, ...saved, active: saved.tabs.at(-1)?.title }))
+  return root
 }
 
 // 다른 세션이 고친 내용을 덮어쓰지 않도록, 고치기 직전에 파일의 최신본을 다시 읽어 그 위에 반영한다.
