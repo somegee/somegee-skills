@@ -24,6 +24,7 @@ export type Config = {
   contextFormat: ContextFormat
   showCache: boolean
   showLimits: boolean
+  showActionRow: boolean
 }
 
 const DEFAULT_FLOOR: Effort = 'low'
@@ -81,6 +82,7 @@ export function readConfig(options: PluginOptions | undefined): Config {
     // 원래 상태줄에 없던 표시라 기본은 끔(2026-10-30 결정). 켜면 막대에 보인다.
     showCache: flag(o.showCache, false),
     showLimits: flag(o.showLimits, false),
+    showActionRow: flag(o.showActionRow, true),
   }
 }
 

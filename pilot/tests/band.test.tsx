@@ -124,6 +124,31 @@ test('설정에서 캐시·한도 표시를 켜면 상태줄에 나온다', { op
   await ui.unmount()
 })
 
+test('근거·버튼 줄을 끄면 평소엔 그 줄이 없고, 경고가 있을 때만 나온다', { options: { showActionRow: false } }, async ($, on) => {
+  await ready($, on)
+  const ui = await $.ui.mount({ ...BAND(200), surface: 'terminal' } as never)
+  const all = (await ui.findAll({ type: 'Text' })).map(t => t.text).join(' ')
+  expect(all).not.toContain('근거')
+  expect(await ui.find({ type: 'Button', key: 'handoff' })).toBeFalsy()
+  await ui.unmount()
+})
+
+test('근거·버튼 줄을 꺼도 한도 경고는 뜬다', { options: { showActionRow: false } }, async ($, on) => {
+  const f = fakeEngine(on, { judgeReply: '{"effort":"low","why":"짧은 조회"}', limits: [{ kind: 'five_hour', percentUsed: 86 }] })
+  on('ui.render', ($$, e) => {
+    const { Box } = $$.ui.resolve(e)
+    return <Box />
+  })
+  await startHuman($)
+  await submit($, '날씨 알려줘')
+  await step($, f, { effort: 'high' })
+  await f.clock.settle()
+  const ui = await $.ui.mount({ ...BAND(200), surface: 'terminal' } as never)
+  const all = (await ui.findAll({ type: 'Text' })).map(t => t.text).join(' ')
+  expect(all).toContain('5시간 한도 86%')
+  await ui.unmount()
+})
+
 async function withSuggestions($: Engine, on: On) {
   const f = fakeEngine(on)
   on('ui.render', ($$, e) => {

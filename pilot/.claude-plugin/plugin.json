@@ -1,6 +1,6 @@
 {
   "name": "pilot",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "입력창 위 한 막대에 상태줄·질문별 자동 effort·다음 할 일·인계를 한국어로 모은 모드",
   "types": "./types/index.d.ts",
   "author": {
@@ -131,6 +131,12 @@
       "title": "5시간·주간 한도 표시",
       "description": "막대에 5시간·주간 사용 한도(%)를 늘 보인다. 기본은 끔. 꺼도 '한도 경고와 절약 모드'가 켜져 있으면 80% 를 넘을 때 알림은 뜬다.",
       "default": false
+    },
+    "showActionRow": {
+      "type": "boolean",
+      "title": "effort 근거·버튼 줄",
+      "description": "상태줄 아래의 'low 근거: …' 와 [자동]·[인계] 버튼 줄. 끄면 평소엔 줄이 없고 한도·인계 같은 알림이 있을 때만 나온다. 꺼 둔 동안 인계·자동 끄기는 /pilot 인계 · /pilot 자동 으로 한다.",
+      "default": true
     }
   }
 }

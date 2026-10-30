@@ -58,8 +58,14 @@ export async function drawBand($: EngineInterface, e: RenderInput<'AbovePrompt'>
   const left = alert ? alertText(alert) : { text: reasonText(p, auto, s.modelId, isSaving && save !== null ? clockText(save) : null) }
   const act = makeActions($, ctx)
   const handoffNote = { after: ctx.config.handoffAfter, model: ctx.config.handoffModel === 'session' ? null : choiceLabel(HANDOFF_MODELS, ctx.config.handoffModel) }
+  // 근거·버튼 줄을 꺼 두면 경고가 있을 때만 그 줄을 보인다(인계·자동은 /pilot 명령으로).
+  const isRowShown = ctx.config.showActionRow || alert !== null
   const middle =
-    open === 'handoff' ? handoffPanel(els, handoffNote, act) : actionRow(els, { left, isAuto: auto, alert, isBusy: stage !== null }, act)
+    open === 'handoff'
+      ? handoffPanel(els, handoffNote, act)
+      : isRowShown
+        ? actionRow(els, { left, isAuto: auto, alert, isBusy: stage !== null }, act)
+        : null
   const next = e.props.isWorking || open !== null ? null : nextRow(els, view, act.take, act.dismissNext)
 
   return (
@@ -67,7 +73,7 @@ export async function drawBand($: EngineInterface, e: RenderInput<'AbovePrompt'>
       {below}
       <Box key="pilot-frame" flexDirection="column" borderStyle="round" borderColor={C.border} paddingX={1}>
         {statusRows(els, segs, inner)}
-        {rule(els, inner)}
+        {middle ? rule(els, inner) : null}
         {middle}
         {next ? rule(els, inner) : null}
         {next}
