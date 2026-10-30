@@ -1,6 +1,6 @@
 {
   "name": "pilot",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "입력창 위 한 막대에 상태줄·질문별 자동 effort·다음 할 일·인계를 한국어로 모은 모드",
   "types": "./types/index.d.ts",
   "author": {

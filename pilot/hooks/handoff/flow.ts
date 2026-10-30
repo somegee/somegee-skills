@@ -101,9 +101,10 @@ async function writeHandoff($: EngineInterface, ctx: Ctx): Promise<void> {
   return submitHandoffTurn($, HANDOFF_PROMPT)
 }
 
-/** 턴이 시작될 때: 우리가 보낸 메모 턴이면 그 id 를 기억한다. */
+/** 턴이 시작될 때: 우리가 보낸 메모 턴이면 그 id 를 기억한다.
+ * 플러그인이 보낸 글은 앞에 "The <plugin> plugin sent a message" 안내가 붙어 오므로 시작이 아니라 포함으로 본다. */
 export function noteHandoffTurn(e: TurnStartInput): void {
-  if (sentPrompt && handoffTurnId === null && e.agentId === undefined && e.text.startsWith(sentPrompt.slice(0, MATCH_CHARS))) {
+  if (sentPrompt && handoffTurnId === null && e.agentId === undefined && e.text.includes(sentPrompt.slice(0, MATCH_CHARS))) {
     handoffTurnId = e.turnId
   }
 }

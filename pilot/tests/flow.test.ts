@@ -199,7 +199,8 @@ test('꼼꼼한 인계는 자기가 보낸 턴의 답만 메모로 받는다', a
   await turnEnd($, 'other', '딴 답')
   await f.clock.advance(1000)
   expect(f.commands).not.toContain('clear')
-  await turnStart($, 'mine', sent)
+  // 엔진은 플러그인이 보낸 글 앞에 안내를 붙여 턴을 시작한다.
+  await turnStart($, 'mine', `The pilot plugin sent a message:\n${sent}`)
   await turnEnd($, 'mine', '- 목표: 막대 만들기')
   await f.clock.advance(1000)
   await f.clock.settle()
