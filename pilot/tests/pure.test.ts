@@ -50,13 +50,21 @@ test('판정 답에서 effort 와 이유를 꺼내고, 이상한 답은 버린�
 })
 
 test('설정 선택지를 안쪽 값으로 바꾸고, 모르는 값은 기본값', async () => {
-  const c = readConfig({ effortRange: '똑똑하게 (medium~xhigh)', handoffAfter: '정리 후 계속', compactModel: 'Sonnet', handoffModel: 'Opus' })
-  expect([c.floor, c.ceiling]).toEqual(['medium', 'xhigh'])
+  const c = readConfig({ effortFloor: 'medium', effortCeiling: 'max', handoffAfter: '정리 후 계속', compactModel: 'Sonnet', handoffModel: 'Opus' })
+  expect([c.floor, c.ceiling]).toEqual(['medium', 'max'])
   expect(c.handoffAfter).toBe('continue')
   expect([c.compactModel, c.handoffModel]).toEqual(['sonnet', 'opus'])
-  const d = readConfig({ effortRange: '없는 값' })
+  const d = readConfig({ effortFloor: '없는 값', effortCeiling: 'huge' })
   expect([d.floor, d.ceiling, d.handoffAfter, d.autoEffort, d.compactModel, d.handoffModel]).toEqual(['low', 'high', 'confirm', true, 'session', 'session'])
   expect(choiceLabel(AFTERS, 'copy')).toBe('복사만')
+})
+
+test('자동 effort 최저·최고를 따로 고르고, 거꾸로 고르면 맞바꾼다', async () => {
+  const one = readConfig({ effortFloor: 'xhigh', effortCeiling: 'xhigh' })
+  expect([one.floor, one.ceiling]).toEqual(['xhigh', 'xhigh'])
+  const flipped = readConfig({ effortFloor: 'max', effortCeiling: 'medium' })
+  expect([flipped.floor, flipped.ceiling]).toEqual(['medium', 'max'])
+  expect(clamp('low', flipped.floor, flipped.ceiling)).toBe('medium')
 })
 
 test('상태줄 이름들: 모델·한도·폴더·k 단위', async () => {

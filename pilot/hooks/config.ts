@@ -2,6 +2,7 @@
 import type { PluginOptions } from 'claude-code'
 
 import type { Effort } from '../types'
+import { EFFORTS, isEffort } from './effort/levels'
 import type { ModelKey } from './haiku'
 
 export type HandoffAfter = 'confirm' | 'continue' | 'copy'
@@ -25,12 +26,15 @@ export type Config = {
   showLimits: boolean
 }
 
-export const RANGES: Readonly<Record<string, readonly [Effort, Effort]>> = {
-  '아끼기 (low~medium)': ['low', 'medium'],
-  '균형 (low~high)': ['low', 'high'],
-  '똑똑하게 (medium~xhigh)': ['medium', 'xhigh'],
+const DEFAULT_FLOOR: Effort = 'low'
+const DEFAULT_CEILING: Effort = 'high'
+
+/** 최저·최고를 읽는다. 최저가 최고보다 높으면 맞바꾼다. */
+function readLevels(floorValue: unknown, ceilingValue: unknown): readonly [Effort, Effort] {
+  const floor = isEffort(floorValue) ? floorValue : DEFAULT_FLOOR
+  const ceiling = isEffort(ceilingValue) ? ceilingValue : DEFAULT_CEILING
+  return EFFORTS.indexOf(floor) <= EFFORTS.indexOf(ceiling) ? [floor, ceiling] : [ceiling, floor]
 }
-const DEFAULT_LEVELS: readonly [Effort, Effort] = ['low', 'high']
 
 export const AFTERS: Readonly<Record<string, HandoffAfter>> = {
   '정리 후 대기': 'confirm',
@@ -61,11 +65,11 @@ const flag = (value: unknown, fallback: boolean) => (typeof value === 'boolean' 
 
 export function readConfig(options: PluginOptions | undefined): Config {
   const o = options ?? {}
-  const range = RANGES[String(o.effortRange)] ?? DEFAULT_LEVELS
+  const [floor, ceiling] = readLevels(o.effortFloor, o.effortCeiling)
   return {
     autoEffort: flag(o.autoEffort, true),
-    floor: range[0],
-    ceiling: range[1],
+    floor,
+    ceiling,
     subagentEffort: flag(o.subagentEffort, true),
     nextSteps: flag(o.nextSteps, true),
     handoffHint: flag(o.handoffHint, true),

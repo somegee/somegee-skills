@@ -50,7 +50,8 @@ Claude Code 입력창 위에 막대 하나를 띄워서, 흩어져 있던 것들
 | 설정 | 기본 |
 |---|---|
 | 질문마다 effort 자동 | 켬 |
-| 자동 effort 범위 (아끼기 low~medium / 균형 low~high / 똑똑하게 medium~xhigh) | 균형 |
+| 자동 effort 최저 (low / medium / high / xhigh / max) | low |
+| 자동 effort 최고 (low / medium / high / xhigh / max, 최저보다 낮으면 맞바꿈) | high |
 | 하위 에이전트도 자동 | 켬 |
 | 다음 할 일 제안 | 켬 |
 | 인계 추천 알림 | 켬 |
