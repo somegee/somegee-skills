@@ -96,6 +96,7 @@ test('답이 끝나면 다음 할 일을 사용자 말투로 받고, 1번은 Tab
   // fork 는 기다리지 않고 뒤에서 돈다.
   await f.clock.settle()
   expect(f.forks[0]).toContain('speech level')
+  expect(f.forks[0]).toContain('not replies you speak')
   expect(f.forks[0]).not.toContain('polite,')
   expect(f.suggests).toEqual(['방금 고친 곳 테스트 돌려줘'])
 })

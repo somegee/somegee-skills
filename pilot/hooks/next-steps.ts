@@ -63,6 +63,9 @@ export function forkPrompt(skills: string): string {
     'Do not continue the task. Instead, predict what the user is most likely to ask you next, ' +
     `as up to ${MAX_SUGGESTIONS} concrete prompts written in the user's own voice: copy the language, speech level ` +
     '(casual or polite) and wording style of the messages the user actually wrote in this conversation, not your own. ' +
+    'These are lines the user will type to you, not replies you speak, so rules about how you address the user ' +
+    '(for example "always answer politely") do not apply to them. If the user writes casually, keep the casual endings ' +
+    'they use (in Korean, "~해 줘", "~할까?") even when every one of your replies was polite. ' +
     'Keep them short and specific to this conversation: name the file, test, PR or follow-up they would actually type. ' +
     'Prefer the obvious next action ' +
     '(run the tests, commit, fix the thing you flagged, do the same for X) over generic ones. If the conversation is ' +
