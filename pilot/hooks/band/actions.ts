@@ -1,4 +1,5 @@
-// 막대 버튼이 하는 일. 프롬프트·명령을 보내는 일은 타이머로 미룬다(버튼 처리 중엔 거절될 수 있다).
+// 막대 버튼이 하는 일.
+// 압축 버튼은 두지 않는다: /compact 를 입력하는 것과 같아서(2026-10-30 결정).
 // 설정은 /config 에서만 바꾼다(막대에 설정 띠를 두지 않는다).
 import type { EngineInterface } from 'claude-code'
 
@@ -9,8 +10,6 @@ import { takeSuggestion } from '../next-steps'
 import { writeNext, writePanel } from '../state'
 import type { Ctx } from '../state'
 import type { Actions } from './controls'
-
-const KICK_MS = 200
 
 export type BandActions = Actions & {
   take: (index: number) => void
@@ -25,9 +24,6 @@ export function makeActions($: EngineInterface, ctx: Ctx): BandActions {
     openHandoff: () => void writePanel($, 'handoff'),
     closePanel: () => void writePanel($, null),
     startHandoff: full => void startHandoff($, ctx, full),
-    compact: () => {
-      $.clock.after(KICK_MS, () => void $.command.run({ command: 'compact', args: '' }).catch((error: unknown) => toast(String(error))))
-    },
     take: index => void takeSuggestion($, index),
     dismissNext: () => void writeNext($, { kind: 'hidden' }),
   }

@@ -83,6 +83,17 @@ test('인계 버튼을 누르면 빠르게·꼼꼼히 띠가 뜬다', async ($, 
   await ui.press({ key: 'handoff' } as never)
   expect((await ui.find({ type: 'Button', key: 'handoff-quick' }))?.text).toContain('빠르게')
   expect((await ui.find({ type: 'Button', key: 'handoff-full' }))?.props.label).toBe('꼼꼼히')
+  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+  expect(texts).toContain('· 빠르게 — 지금 대화 중인 모델이 지금까지의 대화를 메모로 정리합니다')
+  expect(texts.some(t => t.includes('새 대화를 처음부터 시작합니다'))).toBe(true)
+  expect(texts.some(t => t.includes('내 입력을 기다립니다'))).toBe(true)
+  await ui.unmount()
+})
+
+test('압축 버튼은 없다 (/compact 와 같아서)', async ($, on) => {
+  await ready($, on)
+  const ui = await $.ui.mount({ ...BAND(200), surface: 'terminal' } as never)
+  expect(await ui.find({ type: 'Button', key: 'compact' })).toBeFalsy()
   await ui.unmount()
 })
 

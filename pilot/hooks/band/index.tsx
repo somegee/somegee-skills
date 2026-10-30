@@ -1,7 +1,7 @@
 // 입력창 위 막대 하나(notes 처럼 둥근 테두리): 상태줄 ─ 이유·버튼(또는 인계 띠) ─ 다음 할 일.
 import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 
-import { AFTERS, HANDOFF_MODELS, choiceLabel } from '../config'
+import { HANDOFF_MODELS, choiceLabel } from '../config'
 import { clockText } from '../limits'
 import { readAppEffort, readAuto, readCacheUntil, readHint, readJudgeDown, readJudging, readNext, readPanel, readPick, readSaveUntil, readStage, readStatus } from '../state'
 import type { Ctx } from '../state'
@@ -57,7 +57,7 @@ export async function drawBand($: EngineInterface, e: RenderInput<'AbovePrompt'>
   })
   const left = alert ? alertText(alert) : { text: reasonText(p, auto, s.modelId, isSaving && save !== null ? clockText(save) : null) }
   const act = makeActions($, ctx)
-  const handoffNote = { after: choiceLabel(AFTERS, ctx.config.handoffAfter), model: choiceLabel(HANDOFF_MODELS, ctx.config.handoffModel) }
+  const handoffNote = { after: ctx.config.handoffAfter, model: ctx.config.handoffModel === 'session' ? null : choiceLabel(HANDOFF_MODELS, ctx.config.handoffModel) }
   const middle =
     open === 'handoff' ? handoffPanel(els, handoffNote, act) : actionRow(els, { left, isAuto: auto, alert, isBusy: stage !== null }, act)
   const next = e.props.isWorking || open !== null ? null : nextRow(els, view, act.take, act.dismissNext)

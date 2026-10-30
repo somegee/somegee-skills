@@ -1,5 +1,6 @@
 // 2줄: 판정 이유(또는 경고) + 버튼. 인계 띠도 여기.
 import type { HandoffStage, LimitRow, Pick } from '../../types'
+import type { HandoffAfter } from '../config'
 import { cacheSafe } from '../effort/levels'
 import { hottest } from '../limits'
 import { T } from '../text'
@@ -66,7 +67,6 @@ export type Actions = {
   toggleAuto: () => void
   openHandoff: () => void
   startHandoff: (full: boolean) => void
-  compact: () => void
   closePanel: () => void
   toggleSave: () => void
 }
@@ -98,27 +98,32 @@ export function actionRow({ Box, Text, Button }: Els, r: RowInput, act: Actions)
               {T.handoff}
             </Text>
           </Button>
-          <Button key="compact" label={T.compact} onPress={act.compact} />
         </Box>
       )}
     </Box>
   )
 }
 
-export function handoffPanel({ Box, Text, Button }: Els, note: { after: string; model: string }, act: Actions) {
+export function handoffPanel({ Box, Text, Button }: Els, note: { after: HandoffAfter; model: string | null }, act: Actions) {
+  // 인계가 무엇인지(새 대화에서 다시 시작)를 맨 위에, 버튼 아래엔 두 방식의 차이만.
+  const ways = [`${T.handoffQuick} — ${T.handoffQuickNote(note.model ?? T.handoffSessionModel)}`, `${T.handoffFull} — ${T.handoffFullNote}`]
   return (
     <Box key="handoff-panel" flexDirection="column">
-      <Box columnGap={1}>
-        <Text color={C.accent}>{T.handoff}:</Text>
+      <Text>
+        <Text color={C.accent} bold>{`${T.handoff}: `}</Text>
+        {T.handoffAbout}
+      </Text>
+      <Text dimColor>{T.handoffAfterNote[note.after]}</Text>
+      <Box columnGap={1} marginTop={1}>
         <Button key="handoff-quick" onPress={() => act.startHandoff(false)}>
           <Text bold>{T.handoffQuick}</Text>
         </Button>
         <Button key="handoff-full" label={T.handoffFull} onPress={() => act.startHandoff(true)} />
         <Button key="handoff-close" role="dismiss" label={T.close} onPress={act.closePanel} />
       </Box>
-      <Text dimColor wrap="truncate-end">
-        {`${T.handoffQuick} = ${note.model}가 메모 씀 · ${T.handoffFull} = ${T.handoffFullNote} · ${T.handoffAfterNote(note.after)}`}
-      </Text>
+      {ways.map(line => (
+        <Text dimColor>{`· ${line}`}</Text>
+      ))}
     </Box>
   )
 }
