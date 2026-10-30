@@ -103,6 +103,7 @@ Claude Code의 서브에이전트(Sub-agent)가 대표적인 예다. 메인 에�
 | Skill | Description |
 |-------|-------------|
 | [terminal-swarm](./terminal-swarm/) | Agent Swarm을 위한 headless 터미널 세션 관리. 웹 대시보드에서 여러 Claude Code 에이전트를 동시에 모니터링하고 제어합니다. |
+| [pilot](./pilot/) | (mod) 입력창 위 한 막대에 상태줄·질문별 자동 effort·다음 할 일·인계를 한국어로 모읍니다. |
 
 ## Installation
 
@@ -111,6 +112,7 @@ Claude Code의 서브에이전트(Sub-agent)가 대표적인 예다. 메인 에�
 ```bash
 /plugin marketplace add somegee/somegee-skills
 /plugin install terminal-swarm@somegee-skills
+/plugin install pilot@somegee-skills
 ```
 
 ### Manual

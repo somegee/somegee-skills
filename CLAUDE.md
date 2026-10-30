@@ -1,6 +1,6 @@
 # somegee-skills
 
-개인 Claude Code 플러그인 마켓플레이스. 현재 `terminal-swarm`, `notes`(mod — 옆 창 노트) 플러그인 관리.
+개인 Claude Code 플러그인 마켓플레이스. 현재 `terminal-swarm`, `notes`(mod — 옆 창 노트), `pilot`(mod — 입력창 위 막대) 플러그인 관리.
 
 ## 구조
 
@@ -17,6 +17,13 @@ notes/                 # mod 플러그인 (옆 창 노트)
   hooks/register.tsx   # mod 본체
   tests/notes.test.tsx
   types/index.d.ts
+pilot/                 # mod 플러그인 (입력창 위 막대: 상태줄·자동 effort·다음 할 일·인계)
+  .claude-plugin/plugin.json
+  hooks/register.tsx   # 이벤트마다 훅 하나 → 기능 함수 호출
+  hooks/state.ts       # $.state atom + readX/writeX (검사기가 다른 파일의 atom 을 못 읽음)
+  tests/*.test.ts(x)
+  types/index.d.ts
+  NOTICE               # effortless·next-steps MIT 고지 — 빌려 온 코드가 남아 있는 한 지우지 않는다
 ```
 
 **이 저장소는 PUBLIC이다.** 비밀값·업무 내용을 올리지 않는다.
@@ -54,6 +61,16 @@ _swarm_py="$(ls ~/.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm
 - 테스트: `claude plugin test notes`, 검증: `claude plugin validate notes` (저장소 루트에서 `claude plugin validate .` 도)
 - 개발 중 실행: `claude --plugin-dir notes` 로 띄우고 고친 뒤 `/reload-plugins`
 - 데이터는 `$.plugin.root` 아래에 두지 않는다 — 마켓플레이스 설치본은 버전마다 폴더가 바뀌어 사라진다. 노트는 `~/.claude/notes-data/` 에 둔다.
+
+## pilot (mod) 규칙
+
+- 테스트: `claude plugin test pilot`, 검증: `claude plugin validate pilot`
+- `read`/`update` 는 `hooks/state.ts` 안에서만 부른다. 다른 파일은 `readX($)`/`writeX($, v)` 를 쓴다(검사기가 import 한 atom 을 거절).
+- `$` 는 화살표 함수에 넘기지 않는다(검사기 거절). 넘길 땐 `function` 선언으로.
+- 사람이 보지 않는 세션(`isInteractive` 거짓)에선 아무것도 하지 않는다 — 크론 `claude -p` 비용·동작 보호.
+- `session.compact` 훅은 `compactModel` 이 '원래대로'가 아닐 때만 단다(회사 PC 보안 모듈이 막으면 세션마다 알림).
+- 설정은 `/config`(userConfig)로만 바꾼다 — 막대에 설정 띠를 두지 않는다(2026-10-30 결정).
+- 공개 저장소다: 문구에 개인 이름·호칭을 넣지 않는다.
 
 ## Hook 설정 규칙 (terminal-swarm)
 

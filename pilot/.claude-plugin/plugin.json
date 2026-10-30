@@ -1,0 +1,121 @@
+{
+  "name": "pilot",
+  "version": "0.1.0",
+  "description": "입력창 위 한 막대에 상태줄·질문별 자동 effort·다음 할 일·인계를 한국어로 모은 모드",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "somegee",
+    "email": "somegee@users.noreply.github.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "effort",
+    "statusline",
+    "next-steps",
+    "handoff",
+    "korean",
+    "function-hooks",
+    "ui"
+  ],
+  "userConfig": {
+    "autoEffort": {
+      "type": "boolean",
+      "title": "질문마다 effort 자동",
+      "description": "질문을 보낼 때마다 Haiku 가 읽고 effort(생각하는 강도)를 고른다. 앱의 effort 설정은 그대로 두고 그 요청 하나만 바꾼다. /effort 로 직접 바꾸면 그 세션은 자동이 꺼진다.",
+      "default": true
+    },
+    "effortRange": {
+      "type": "string",
+      "title": "자동 effort 범위",
+      "description": "자동이 고를 수 있는 가장 낮은 값과 높은 값. 아끼기 = low~medium, 균형 = low~high, 똑똑하게 = medium~xhigh.",
+      "options": [
+        "아끼기 (low~medium)",
+        "균형 (low~high)",
+        "똑똑하게 (medium~xhigh)"
+      ],
+      "default": "균형 (low~high)"
+    },
+    "subagentEffort": {
+      "type": "boolean",
+      "title": "하위 에이전트도 자동",
+      "description": "Agent 로 띄운 하위 에이전트도 맡은 일을 읽고 effort 를 고른다(최소 medium). 끄면 하위 에이전트는 앱 설정을 그대로 쓴다.",
+      "default": true
+    },
+    "nextSteps": {
+      "type": "boolean",
+      "title": "다음 할 일 제안",
+      "description": "답이 끝나면 다음에 할 만한 질문을 3개까지 띄운다. 숫자 1·2·3 을 누르면 입력창에 초안으로만 들어가고 보내지는 않는다.",
+      "default": true
+    },
+    "handoffHint": {
+      "type": "boolean",
+      "title": "인계 추천 알림",
+      "description": "대화가 30% 넘게 차면 질문 두 번마다 Haiku 가 '새 대화로 넘기는 게 낫나'를 보고, 그렇다면 [인계] 버튼을 밝힌다.",
+      "default": true
+    },
+    "handoffAfter": {
+      "type": "string",
+      "title": "인계한 다음",
+      "description": "인계 메모를 쓴 뒤. 정리 후 대기 = 대화를 비우고 메모를 넣은 뒤 두 줄로 상황만 말하고 기다림. 정리 후 계속 = 비우고 다음 할 일을 바로 이어서 함. 복사만 = 대화는 두고 메모만 복사.",
+      "options": [
+        "정리 후 대기",
+        "정리 후 계속",
+        "복사만"
+      ],
+      "default": "정리 후 대기"
+    },
+    "handoffModel": {
+      "type": "string",
+      "title": "인계 메모 모델",
+      "description": "[빠르게] 인계 메모를 누가 쓸지. 대화 모델 = 지금 대화를 fork(프롬프트 캐시를 같이 써서 가장 쌈, 캐시가 식었으면 Haiku). Haiku·Sonnet·Opus = 그 모델이 대화 전체를 새로 읽고 씀. [꼼꼼히]는 도구를 써야 해서 항상 대화 모델이 쓴다.",
+      "options": [
+        "대화 모델",
+        "Haiku",
+        "Sonnet",
+        "Opus"
+      ],
+      "default": "대화 모델"
+    },
+    "limitGuard": {
+      "type": "boolean",
+      "title": "한도 경고와 절약 모드",
+      "description": "5시간·주간 사용 한도가 80% 를 넘으면 막대가 알려 주고, [절약] 을 누르면 한도가 풀릴 때까지 자동 effort 를 medium 이하로 묶는다.",
+      "default": true
+    },
+    "compactModel": {
+      "type": "string",
+      "title": "압축 모델",
+      "description": "/compact 와 자동 압축의 요약을 누가 쓸지. 원래대로 = 지금 대화 모델(Claude Code 기본). Haiku 가 가장 싸고 Opus 가 가장 꼼꼼하다. 실패하면 원래대로 압축한다. 회사 PC 처럼 관리형 설정이 있는 곳에선 보안 모듈이 막아서 원래대로만 된다.",
+      "options": [
+        "원래대로",
+        "Haiku",
+        "Sonnet",
+        "Opus"
+      ],
+      "default": "원래대로"
+    },
+    "contextFormat": {
+      "type": "string",
+      "title": "컨텍스트 표시",
+      "description": "막대의 컨텍스트 사용량을 어떻게 보일지. 토큰 = 100k/1000k, 퍼센트 = 10%, 둘 다 = 100k/1000k 10%.",
+      "options": [
+        "토큰 (100k/1000k)",
+        "퍼센트 (10%)",
+        "둘 다"
+      ],
+      "default": "토큰 (100k/1000k)"
+    },
+    "showCache": {
+      "type": "boolean",
+      "title": "캐시 남은 시간 표시",
+      "description": "막대에 프롬프트 캐시 남은 시간(캐시 59분 / 캐시 만료)을 보이고, 긴 대화에서 캐시가 만료되면 [압축]·[인계]를 권하는 알림을 낸다. 원래 상태줄에 없던 표시라 기본은 끔.",
+      "default": false
+    },
+    "showLimits": {
+      "type": "boolean",
+      "title": "5시간·주간 한도 표시",
+      "description": "막대에 5시간·주간 사용 한도(%)를 늘 보인다. 기본은 끔. 꺼도 '한도 경고와 절약 모드'가 켜져 있으면 80% 를 넘을 때 알림은 뜬다.",
+      "default": false
+    }
+  }
+}
