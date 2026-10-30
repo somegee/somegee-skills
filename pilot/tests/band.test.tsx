@@ -40,7 +40,7 @@ test('상태줄에 폴더·브랜치·모델과 실제 effort·컨텍스트·버
   expect(all).not.toContain('5시간 42%')
   expect(all).not.toContain('캐시')
   expect(all).toContain('2.1.314')
-  expect(all).toContain('Haiku: 짧은 조회')
+  expect(all).toContain('low 근거: 짧은 조회')
   await ui.unmount()
 })
 

@@ -89,13 +89,15 @@ test('설정에서 자동을 끄면 판정하지 않는다', { options: { autoEf
   expect((await step($, f, { effort: 'medium' })).sentEffort).toBe('medium')
 })
 
-test('답이 끝나면 다음 할 일을 fork 로 받는다(한국어로 부탁)', async ($, on) => {
+test('답이 끝나면 다음 할 일을 사용자 말투로 받고, 1번은 Tab 미리보기로 띄운다', async ($, on) => {
   const f = fakeEngine(on)
   await startHuman($)
   await $.turn.complete({ reason: 'answer', answer: '다 고쳤습니다. '.repeat(10), durationMs: 1000, isAborted: false, turnId: 't9' } as never)
   // fork 는 기다리지 않고 뒤에서 돈다.
   await f.clock.settle()
-  expect(f.forks[0]).toContain('in Korean')
+  expect(f.forks[0]).toContain('speech level')
+  expect(f.forks[0]).not.toContain('polite,')
+  expect(f.suggests).toEqual(['방금 고친 곳 테스트 돌려줘'])
 })
 
 test('/pilot 상태 는 앱 값과 실제로 보낸 값을 보여 준다', async ($, on) => {

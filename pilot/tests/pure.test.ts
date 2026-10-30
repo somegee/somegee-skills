@@ -154,7 +154,7 @@ test('경고는 가장 급한 것 하나: 인계 중 > 한도 > 캐시 식음 > 
   expect(pickAlert({ ...base, limits: [{ label: '5시간', percent: 90 }], isSaving: true })).toBeNull()
   expect(pickAlert({ ...base, cacheMin: 0 })?.kind).toBe('cold')
   expect(pickAlert({ ...base, hint: '주제가 바뀜' })?.kind).toBe('hint')
-  expect(reasonText({ effort: 'low', why: '짧은 조회', by: 'judge' }, true, 'claude-opus-5-5', null)).toBe('Haiku: 짧은 조회')
+  expect(reasonText({ effort: 'low', why: '짧은 조회', by: 'judge' }, true, 'claude-opus-5-5', null)).toBe('low 근거: 짧은 조회')
 })
 
 test('판정 답이 잘리거나 다른 글이 섞여도 effort 를 읽는다', async () => {

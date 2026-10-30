@@ -12,6 +12,8 @@ export type Fake = {
   submits: string[]
   commands: string[]
   fills: string[]
+  /** 입력창 흐린 미리보기로 띄운 글. */
+  suggests: string[]
   /** 가짜 입력창에 지금 들어 있는 글. */
   box: string
   toasts: string[]
@@ -32,6 +34,7 @@ export function fakeEngine(on: On, over: Partial<Fake> = {}): Fake {
     submits: [],
     commands: [],
     fills: [],
+    suggests: [],
     box: '',
     toasts: [],
     messages: [],
@@ -71,7 +74,10 @@ export function fakeEngine(on: On, over: Partial<Fake> = {}): Fake {
     return { value: { isAnswered: true, text: f.forkReply, usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } } as never
   })
   on('command.list', () => ({ value: [] }) as never)
-  on('prompt.suggest', () => ({ isShown: true }) as never)
+  on('prompt.suggest', (_$, e) => {
+    f.suggests.push(e.text)
+    return { isShown: true } as never
+  })
   on('prompt.fill', (_$, e) => {
     f.fills.push(e.text)
     f.box = (e as { mode?: string }).mode === 'append' ? f.box + e.text : e.text
