@@ -1,6 +1,6 @@
 {
   "name": "tree",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "오른쪽 창에 프로젝트 파일 트리 — 마우스로 열기·절대 경로 복사·미리보기·바뀐 내용·폴더 크기 그림, Claude 의 읽기·쓰기·커밋과 git 상태 표시",
   "types": "./types/index.d.ts",
   "author": {

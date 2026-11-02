@@ -292,6 +292,13 @@ export function refreshGit($: EngineInterface): Promise<void> {
 
 // ── Claude 의 작업 표시 ──
 
+/** 마지막 활동 시각: 물결 반짝임을 그리는 동안만 빠른 타이머가 다시 그리게 한다. */
+let lastTouchAt = 0
+
+export function isShimmering(now: number): boolean {
+  return now - lastTouchAt < TOUCH_FRESH_MS
+}
+
 /** 파일들에 활동 표시를 단다. reveal 이면 트리에서 그 자리를 펼쳐 보여 준다. */
 export async function touch($: EngineInterface, paths: readonly string[], kind: TouchKind, follow: boolean): Promise<void> {
   if (paths.length === 0) return
@@ -299,6 +306,7 @@ export async function touch($: EngineInterface, paths: readonly string[], kind: 
   const now = Date.now()
   const inside = paths.map(norm).filter(path => isUnder(root, path))
   if (inside.length === 0) return
+  lastTouchAt = now
   await editTouches($, all => {
     const kept: Record<string, { kind: TouchKind; at: number }> = {}
     for (const [id, t] of Object.entries(all)) if (now - t.at < TOUCH_KEEP_MS) kept[id] = t

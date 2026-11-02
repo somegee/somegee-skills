@@ -4,7 +4,7 @@ import type { RenderSurface } from 'claude-code'
 import type { Entry, GitInfo, Touch } from '../../types'
 import { rowKey } from '../actions'
 import { baseName, cells, fit, idOf, isUnder, join, parentOf, relativeTo } from '../paths'
-import { C, MARK_CELLS, TOUCH_COLOR, gitColor } from './look'
+import { C, MARK_CELLS, TOUCH_COLOR, gitColor, shimmerParts } from './look'
 import type { Acts, Els } from './look'
 
 export type TreeRow = { path: string; name: string; depth: number; isDir: boolean; isOpen: boolean }
@@ -35,6 +35,8 @@ export type Marks = {
   fresh: ReadonlyMap<string, Touch>
   selected: string | null
   width: number
+  /** 그리는 시각(물결 반짝임 위치). */
+  now: number
 }
 
 /** 바뀐 파일들을 품은 폴더 집합(root 아래만). */
@@ -88,7 +90,7 @@ export function treeRow(els: Els, row: TreeRow, m: Marks, acts: Acts) {
   const name = fit(label, nameCells)
   const tagText = tag ? fit(tag, nameWidth - nameCells) : ''
   const mark = markOf(row, m)
-  const nameColor = isSelected ? C.accent : touch && !row.isDir ? TOUCH_COLOR[touch.kind] : undefined
+  const nameColor = isSelected ? C.accent : undefined
   return (
     <Box key={rowKey(row.path)} flexDirection="column">
       <Button key={`b:${id}`} plain onPress={() => acts.press(row.path, row.isDir)}>
@@ -97,9 +99,17 @@ export function treeRow(els: Els, row: TreeRow, m: Marks, acts: Acts) {
         <Text color={touch && row.isDir ? TOUCH_COLOR[touch.kind] : undefined} dimColor={!touch}>
           {caret}
         </Text>
-        <Text color={nameColor} bold={isSelected || Boolean(touch)} dimColor={row.isDir && !isSelected && !touch}>
-          {name}
-        </Text>
+        {touch && !isSelected ? (
+          shimmerParts(name, touch.kind, m.now - touch.at).map(p => (
+            <Text color={p.color} bold={p.bold}>
+              {p.text}
+            </Text>
+          ))
+        ) : (
+          <Text color={nameColor} bold={isSelected} dimColor={row.isDir && !isSelected}>
+            {name}
+          </Text>
+        )}
         {tagText ? <Text color={C.commit} dimColor>{tagText}</Text> : null}
         <Text> </Text>
         <Text color={mark.claudeColor}>{mark.claude}</Text>

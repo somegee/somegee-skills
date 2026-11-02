@@ -98,6 +98,7 @@ export async function drawPane($: EngineInterface, els: ElementTable<'terminal'>
     fresh,
     selected,
     width,
+    now,
   }
   const e: Els = els
   let body

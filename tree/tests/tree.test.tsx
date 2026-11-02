@@ -5,6 +5,7 @@ import type { On } from 'claude-code'
 import { codeOf, gitVerbs, parseNumstat, parseStatus, splitDiff } from '../hooks/git'
 import { cells, fit, idOf, nativePath, norm, relativeTo, resolvePath } from '../hooks/paths'
 import { layout, paint } from '../hooks/treemap'
+import { SHIMMER_STEP_MS, shimmerParts } from '../hooks/view/look'
 
 test('경로를 맞추고 윈도우 경로는 \\ 로 복사한다', () => {
   expect(norm('C:\\Users\\me\\proj\\')).toBe('C:/Users/me/proj')
@@ -221,4 +222,21 @@ test('바깥 저장소가 안쪽 저장소 폴더를 새 폴더(?)로 보고한 
   expect(shown).toContain(`f:${ROOT}/inner/y.ts`)
   expect(shown).not.toContain(`f:${ROOT}/inner"`)
   await ui.unmount()
+})
+
+test('물결 반짝임은 띠가 흐르고 자리 맞춤 빈칸은 칠하지 않는다', () => {
+  const at0 = shimmerParts('app.ts   ', 'write', 0)
+  const at3 = shimmerParts('app.ts   ', 'write', SHIMMER_STEP_MS * 3)
+  expect(at0.map(p => p.text).join('')).toBe('app.ts   ')
+  expect(at0[at0.length - 1]).toEqual({ text: '   ', color: '#f59e42', bold: false })
+  // 시간이 지나면 가장 밝은 글자 위치가 바뀐다
+  const brightest = (parts: { text: string; color: string }[]) => {
+    let i = 0
+    for (const p of parts) {
+      if (p.color === '#fff3e0') return i
+      i += [...p.text].length
+    }
+    return -1
+  }
+  expect(brightest(at3)).toBeGreaterThan(brightest(at0))
 })

@@ -4,7 +4,7 @@
 // 이벤트마다 훅은 하나씩만 달고 기능 함수를 부른다. 사람이 보지 않는 세션(claude -p)에선 아무것도 하지 않는다.
 import type { EngineInterface, Register } from 'claude-code'
 
-import { PANE, TOUCH_FRESH_MS, refreshGit, refreshListings } from './actions'
+import { PANE, TOUCH_FRESH_MS, isShimmering, refreshGit, refreshListings } from './actions'
 import { afterFileTool, afterShell, beforeShell, beforeWrite } from './activity'
 import { readConfig } from './config'
 import { setHidden } from './fsx'
@@ -18,6 +18,8 @@ const SHELL_TOOLS = new Set(['Bash', 'PowerShell'])
 
 const POLL_MS = 3_000
 const TICK_MS = 1_000
+/** 물결 반짝임 한 장면 간격. 활동이 있는 8초 동안만 이 간격으로 다시 그린다. */
+const SHIMMER_FRAME_MS = 90
 const OP_TICK_MS = 30_000
 const PANE_COLUMNS = 48
 
@@ -77,6 +79,9 @@ export const register: Register = (on, options) => {
     if (config.autoOpen) void openPane($, false).catch(() => undefined)
     $.clock.every(POLL_MS, () => void poll($).catch(() => undefined))
     $.clock.every(TICK_MS, () => void tick($).catch(() => undefined))
+    $.clock.every(SHIMMER_FRAME_MS, () => {
+      if (isShimmering(Date.now())) void bumpTick($).catch(() => undefined)
+    })
     return result
   })
 
