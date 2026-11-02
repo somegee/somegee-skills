@@ -18,13 +18,13 @@ const SHELL_TOOLS = new Set(['Bash', 'PowerShell'])
 
 const POLL_MS = 3_000
 const TICK_MS = 1_000
-/** 물결 반짝임 한 장면 간격. 활동이 있는 8초 동안만 이 간격으로 다시 그린다. */
-const SHIMMER_FRAME_MS = 90
+/** 물결 반짝임 한 장면 간격(1초에 2번). 활동이 있는 8초 동안만 이 간격으로 다시 그린다. */
+const SHIMMER_FRAME_MS = 500
 const OP_TICK_MS = 30_000
 const PANE_COLUMNS = 48
 
 async function openPane($: EngineInterface, focus: boolean): Promise<boolean> {
-  const base = { id: PANE, title: '파일', columns: PANE_COLUMNS, ...(focus ? { focus: true as const } : {}) }
+  const base = { id: PANE, title: 'tree', columns: PANE_COLUMNS, ...(focus ? { focus: true as const } : {}) }
   try {
     const opened = await $.ui.open({ ...base, backgroundColor: 'transparent' })
     return opened.isPlaced

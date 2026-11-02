@@ -58,7 +58,7 @@ const SHIMMER: Record<TouchKind, readonly [string, string, string, string]> = {
 }
 
 /** 띠가 한 칸 움직이는 시간과 띠의 반지름(칸). */
-export const SHIMMER_STEP_MS = 45
+export const SHIMMER_STEP_MS = 250
 const SHIMMER_RADIUS = 3
 /** 띠가 이름을 다 지나간 뒤 다음 물결까지 비우는 칸. */
 const SHIMMER_GAP = 10

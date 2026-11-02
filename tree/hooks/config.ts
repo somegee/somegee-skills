@@ -14,7 +14,7 @@ const DEFAULT_HIDDEN = 'node_modules __pycache__ .venv .pytest_cache .mypy_cache
 
 export function readConfig(options: Readonly<Record<string, unknown>> | undefined): Config {
   const o = options ?? {}
-  const follow = o.follow === 'all' || o.follow === 'off' ? o.follow : 'writes'
+  const follow = o.follow === 'all' || o.follow === 'writes' ? o.follow : 'off'
   const hiddenText = typeof o.hidden === 'string' ? o.hidden : DEFAULT_HIDDEN
   const limit = Number(o.recentLimit ?? 8)
   return {

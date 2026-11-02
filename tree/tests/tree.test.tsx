@@ -140,7 +140,7 @@ const PANE = {
   plugin: 'tree',
   component: 'Pane',
   requestId: 'tree',
-  props: { title: '파일', isFocused: false, bodyColumns: 48, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+  props: { title: 'tree', isFocused: false, bodyColumns: 48, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
 } as const
 
 test('폴더를 누르면 펼치고, 파일을 누르면 버튼 줄이 생기고, 경로 복사는 절대 경로', async ($, on) => {

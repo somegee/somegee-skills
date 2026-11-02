@@ -1,6 +1,6 @@
 {
   "name": "tree",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "오른쪽 창에 프로젝트 파일 트리 — 마우스로 열기·절대 경로 복사·미리보기·바뀐 내용·폴더 크기 그림, Claude 의 읽기·쓰기·커밋과 git 상태 표시",
   "types": "./types/index.d.ts",
   "author": {
@@ -19,9 +19,9 @@
     "follow": {
       "type": "string",
       "title": "Claude 가 만지는 파일 따라가기",
-      "description": "writes: Claude 가 파일을 만들거나 고치면 트리에서 그 자리를 펼쳐 보여 준다(기본). all: 읽을 때도. off: 따라가지 않는다(색 표시만).",
+      "description": "off: 따라가지 않는다 — 폴더를 펼치거나 스크롤하지 않고 반짝임·표시만(기본). writes: Claude 가 파일을 만들거나 고치면 트리에서 그 자리를 펼쳐 보여 준다. all: 읽을 때도.",
       "options": ["writes", "all", "off"],
-      "default": "writes"
+      "default": "off"
     },
     "showReads": {
       "type": "boolean",
