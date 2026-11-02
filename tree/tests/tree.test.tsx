@@ -5,7 +5,7 @@ import type { On } from 'claude-code'
 import { codeOf, gitVerbs, parseNumstat, parseStatus, splitDiff } from '../hooks/git'
 import { cells, fit, idOf, nativePath, norm, relativeTo, resolvePath } from '../hooks/paths'
 import { layout, paint } from '../hooks/treemap'
-import { SHIMMER_STEP_MS, shimmerParts } from '../hooks/view/look'
+import { SHIMMER_STEP_MS, shimmerParts, shimmerTone } from '../hooks/view/look'
 
 test('경로를 맞추고 윈도우 경로는 \\ 로 복사한다', () => {
   expect(norm('C:\\Users\\me\\proj\\')).toBe('C:/Users/me/proj')
@@ -224,21 +224,20 @@ test('바깥 저장소가 안쪽 저장소 폴더를 새 폴더(?)로 보고한 
   await ui.unmount()
 })
 
-test('물결 반짝임은 띠가 흐르고 자리 맞춤 빈칸은 칠하지 않는다', () => {
-  const at0 = shimmerParts('app.ts   ', 'write', 0)
-  const at3 = shimmerParts('app.ts   ', 'write', SHIMMER_STEP_MS * 3)
-  expect(at0.map(p => p.text).join('')).toBe('app.ts   ')
-  expect(at0[at0.length - 1]).toEqual({ text: '   ', color: '#f59e42', bold: false })
-  // 시간이 지나면 가장 밝은 글자 위치가 바뀐다
-  const brightest = (parts: { text: string; color: string }[]) => {
-    let i = 0
-    for (const p of parts) {
-      if (p.color === '#fff3e0') return i
-      i += [...p.text].length
-    }
-    return -1
-  }
-  expect(brightest(at3)).toBeGreaterThan(brightest(at0))
+test('물결 반짝임은 넓고 부드러운 띠가 흐르고 자리 맞춤 빈칸은 칠하지 않는다', () => {
+  const name = 'some-long-file-name.ts   '
+  const colorsAt = (ms: number) => shimmerParts(name, 'write', ms).flatMap(p => [...p.text].map(() => p.color))
+  const peak = shimmerTone('write', 5)
+  const at = (ms: number) => colorsAt(ms).indexOf(peak)
+  // 빈칸은 바탕색
+  expect(colorsAt(0).slice(-3)).toEqual([shimmerTone('write', 0), shimmerTone('write', 0), shimmerTone('write', 0)])
+  // 한가운데가 한 장면(0.5초)에 2칸씩 오른쪽으로
+  const p1 = at(SHIMMER_STEP_MS * 12)
+  const p2 = at(SHIMMER_STEP_MS * 14)
+  expect(p2 - p1).toBe(2)
+  // 한가운데 양옆으로 밝기가 점점 줄어든다(단계가 여럿)
+  const shown = new Set(colorsAt(SHIMMER_STEP_MS * 14).slice(p2 - 6, p2 + 1))
+  expect(shown.size).toBeGreaterThan(3)
 })
 
 test('셸 명령으로 덮어쓴 파일도 쓰기로 표시하고 최근 작업에 올린다', async ($, on) => {
