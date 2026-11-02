@@ -240,3 +240,37 @@ test('물결 반짝임은 띠가 흐르고 자리 맞춤 빈칸은 칠하지 않
   }
   expect(brightest(at3)).toBeGreaterThan(brightest(at0))
 })
+
+test('셸 명령으로 덮어쓴 파일도 쓰기로 표시하고 최근 작업에 올린다', async ($, on) => {
+  mock.clock(on)
+  let written = 0
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.root', () => ({ value: ROOT }) as never)
+  on('session.cwd', () => ({ value: ROOT }) as never)
+  on('command.register', () => ({ value: undefined }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+  on('ui.panes', () => ({ value: [] }) as never)
+  on('ui.scroll', () => ({ value: undefined }) as never)
+  on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }) as never)
+  on('fs.exists', () => ({ value: false }) as never)
+  on('fs.list', () =>
+    ({
+      value: [
+        { name: 'old.md', kind: 'file', size: 1, mtimeMs: 1, isLink: false },
+        { name: 'CLAUDE.md', kind: 'file', size: 1, mtimeMs: written, isLink: false },
+      ],
+    }) as never,
+  )
+  on('tool.call', () => {
+    written = Date.now()
+    return { result: { stdout: '' } } as never
+  })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await $.tool.call({ tool: 'Bash', command: `cp /tmp/x.md ${ROOT}/CLAUDE.md` })
+  await ui.press({ key: 'tab:tree' })
+  const shown = JSON.stringify(await ui.drawn())
+  expect(shown).toContain(`recent:${ROOT}/CLAUDE.md`)
+  expect(shown).not.toContain(`recent:${ROOT}/old.md`)
+  await ui.unmount()
+})

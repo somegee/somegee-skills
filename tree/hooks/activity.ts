@@ -4,8 +4,9 @@ import type { EngineInterface } from 'claude-code'
 import { innerRepos, refreshGit, refreshListings, remember, rootOf, touch } from './actions'
 import type { Config } from './config'
 import { gitVerbs, headOf, lastCommitFiles, repoTop } from './git'
-import { resolvePath } from './paths'
-import { writeGitOp } from './state'
+import { isHidden } from './fsx'
+import { idOf, isUnder, join, resolvePath } from './paths'
+import { readGit, readOpened, writeGitOp } from './state'
 
 type Call = { tool: string; input: Record<string, unknown> }
 type Outcome = { isFailed: boolean; result: unknown }
@@ -61,14 +62,15 @@ export async function afterFileTool($: EngineInterface, call: Call, outcome: Out
   scheduleRefresh($)
 }
 
-export type ShellStart = { verbs: string[]; heads: Record<string, string> }
+export type ShellStart = { verbs: string[]; heads: Record<string, string>; startAt: number }
 
-/** 셸 명령 전에: git 동작이면 '○○ 중…' 을 띄우고, 커밋이면 아는 저장소마다 지금 HEAD 를 기억한다. */
-export async function beforeShell($: EngineInterface, call: Call): Promise<ShellStart | null> {
+/** 셸 명령 전에: 시작 시각을 기억하고, git 동작이면 '○○ 중…' 을 띄우고, 커밋이면 저장소마다 HEAD 를 기억한다. */
+export async function beforeShell($: EngineInterface, call: Call): Promise<ShellStart> {
+  const startAt = Date.now()
   const verbs = gitVerbs(textField(call.input, 'command'))
-  if (verbs.length === 0) return null
+  if (verbs.length === 0) return { verbs, heads: {}, startAt }
   await writeGitOp($, { label: `${verbs.join('·')} 중…`, state: 'running', at: Date.now() })
-  return { verbs, heads: verbs.includes('커밋') ? await repoHeads($) : {} }
+  return { verbs, heads: verbs.includes('커밋') ? await repoHeads($) : {}, startAt }
 }
 
 /** 루트 저장소 + 트리에 보이는 안쪽 저장소의 HEAD. */
@@ -82,9 +84,46 @@ async function repoHeads($: EngineInterface): Promise<Record<string, string>> {
   return heads
 }
 
-export async function afterShell($: EngineInterface, start: ShellStart | null, outcome: Outcome): Promise<void> {
+const SHELL_TOUCH_LIMIT = 30
+const STAT_LIMIT = 400
+/** 파일 시각이 명령 시작보다 조금 이르게 찍히는 경우(파일 시스템 시각 단위)를 봐준다. */
+const MTIME_SLACK_MS = 1_500
+
+/**
+ * 셸 명령이 바꾼 파일 찾기: 트리에 보이는 폴더(루트·펼친 폴더)의 파일과 git 이 바뀌었다고 보는 파일 중
+ * 수정 시각이 명령 시작 뒤인 것. (cp·sed -i·리다이렉트처럼 Write/Edit 를 안 거친 쓰기)
+ */
+async function changedSince($: EngineInterface, startAt: number): Promise<string[]> {
+  const since = startAt - MTIME_SLACK_MS
+  const root = await rootOf($)
+  const dirs = [root, ...(await readOpened($)).filter(dir => isUnder(root, dir))]
+  const hits = new Map<string, string>()
+  for (const dir of dirs) {
+    const entries = await $.fs.list(dir).catch(() => [])
+    for (const one of entries) {
+      if (one.kind === 'file' && one.mtimeMs >= since && !isHidden(one.name)) hits.set(idOf(join(dir, one.name)), join(dir, one.name))
+    }
+  }
+  const git = await readGit($)
+  const changed = git ? Object.entries(git.paths).filter(([id]) => !hits.has(id) && isUnder(root, id)) : []
+  for (const [id, abs] of changed.slice(0, STAT_LIMIT)) {
+    const stat = await $.fs.stat(abs).catch(() => null)
+    if (stat && stat.kind === 'file' && stat.mtimeMs >= since) hits.set(id, abs)
+  }
+  return [...hits.values()].slice(0, SHELL_TOUCH_LIMIT)
+}
+
+export async function afterShell($: EngineInterface, start: ShellStart, outcome: Outcome, config: Config): Promise<void> {
+  // 셸이 쓴 파일: git 을 먼저 다시 읽어 새 파일도 후보에 넣는다
+  await refreshGit($).catch(() => undefined)
+  const written = await changedSince($, start.startAt).catch(() => [])
+  if (written.length > 0) {
+    await touch($, written, 'write', config.follow !== 'off')
+    const git = await readGit($)
+    for (const path of written) await remember($, path, git?.files[idOf(path)] === '?', config)
+  }
   scheduleRefresh($)
-  if (!start) return
+  if (start.verbs.length === 0) return
   const label = start.verbs.join('·')
   if (outcome.isFailed) {
     await writeGitOp($, { label: `${label} 실패`, state: 'failed', at: Date.now() })

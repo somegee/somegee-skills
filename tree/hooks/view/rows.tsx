@@ -99,7 +99,7 @@ export function treeRow(els: Els, row: TreeRow, m: Marks, acts: Acts) {
         <Text color={touch && row.isDir ? TOUCH_COLOR[touch.kind] : undefined} dimColor={!touch}>
           {caret}
         </Text>
-        {touch && !isSelected ? (
+        {touch ? (
           shimmerParts(name, touch.kind, m.now - touch.at).map(p => (
             <Text color={p.color} bold={p.bold}>
               {p.text}

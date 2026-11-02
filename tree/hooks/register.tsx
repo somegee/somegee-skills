@@ -112,13 +112,13 @@ export const register: Register = (on, options) => {
       return result
     }
     if (SHELL_TOOLS.has(tool)) {
-      const start = await beforeShell($, call).catch(() => null)
+      const start = await beforeShell($, call).catch(() => ({ verbs: [], heads: {}, startAt: Date.now() }))
       try {
         const result = await next(e)
-        void afterShell($, start, { isFailed: failed(result), result: result.result }).catch(() => undefined)
+        void afterShell($, start, { isFailed: failed(result), result: result.result }, config).catch(() => undefined)
         return result
       } catch (err) {
-        void afterShell($, start, { isFailed: true, result: undefined }).catch(() => undefined)
+        void afterShell($, start, { isFailed: true, result: undefined }, config).catch(() => undefined)
         throw err
       }
     }
