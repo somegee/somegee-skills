@@ -17,7 +17,7 @@ notes/                 # mod 플러그인 (옆 창 노트)
   hooks/register.tsx   # mod 본체
   tests/notes.test.tsx
   types/index.d.ts
-pilot/                 # mod 플러그인 (입력창 위 막대: 상태줄·자동 effort·다음 할 일·인계)
+pilot/                 # mod 플러그인 (입력창 위 막대: 자동 effort·근거·다음 할 일·인계)
   .claude-plugin/plugin.json
   hooks/register.tsx   # 이벤트마다 훅 하나 → 기능 함수 호출
   hooks/state.ts       # $.state atom + readX/writeX (검사기가 다른 파일의 atom 을 못 읽음)

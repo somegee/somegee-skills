@@ -6,7 +6,6 @@ import { EFFORTS, isEffort } from './effort/levels'
 import type { ModelKey } from './haiku'
 
 export type HandoffAfter = 'confirm' | 'continue' | 'copy'
-export type ContextFormat = 'tokens' | 'percent' | 'both'
 /** session = 지금 대화 모델(엔진 기본 동작). */
 export type ModelChoice = 'session' | ModelKey
 
@@ -21,9 +20,7 @@ export type Config = {
   handoffModel: ModelChoice
   limitGuard: boolean
   compactModel: ModelChoice
-  contextFormat: ContextFormat
   showCache: boolean
-  showLimits: boolean
   showActionRow: boolean
 }
 
@@ -56,12 +53,6 @@ export const COMPACT_MODELS: Readonly<Record<string, ModelChoice>> = {
   Opus: 'opus',
 }
 
-export const CONTEXT_FORMATS: Readonly<Record<string, ContextFormat>> = {
-  '토큰 (100k/1000k)': 'tokens',
-  '퍼센트 (10%)': 'percent',
-  '둘 다': 'both',
-}
-
 const flag = (value: unknown, fallback: boolean) => (typeof value === 'boolean' ? value : fallback)
 
 export function readConfig(options: PluginOptions | undefined): Config {
@@ -78,10 +69,8 @@ export function readConfig(options: PluginOptions | undefined): Config {
     handoffModel: HANDOFF_MODELS[String(o.handoffModel)] ?? 'session',
     limitGuard: flag(o.limitGuard, true),
     compactModel: COMPACT_MODELS[String(o.compactModel)] ?? 'session',
-    contextFormat: CONTEXT_FORMATS[String(o.contextFormat)] ?? 'tokens',
-    // 원래 상태줄에 없던 표시라 기본은 끔(2026-10-30 결정). 켜면 막대에 보인다.
+    // 기본은 끔(2026-10-30 결정).
     showCache: flag(o.showCache, false),
-    showLimits: flag(o.showLimits, false),
     showActionRow: flag(o.showActionRow, true),
   }
 }

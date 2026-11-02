@@ -1,7 +1,7 @@
 {
   "name": "pilot",
-  "version": "0.1.7",
-  "description": "입력창 위 한 막대에 상태줄·질문별 자동 effort·다음 할 일·인계를 한국어로 모은 모드",
+  "version": "0.1.8",
+  "description": "입력창 위 한 막대에 질문별 자동 effort·근거·다음 할 일·인계를 한국어로 모은 모드",
   "types": "./types/index.d.ts",
   "author": {
     "name": "somegee",
@@ -10,7 +10,6 @@
   "license": "MIT",
   "keywords": [
     "effort",
-    "statusline",
     "next-steps",
     "handoff",
     "korean",
@@ -109,33 +108,16 @@
       ],
       "default": "원래대로"
     },
-    "contextFormat": {
-      "type": "string",
-      "title": "컨텍스트 표시",
-      "description": "막대의 컨텍스트 사용량을 어떻게 보일지. 토큰 = 100k/1000k, 퍼센트 = 10%, 둘 다 = 100k/1000k 10%.",
-      "options": [
-        "토큰 (100k/1000k)",
-        "퍼센트 (10%)",
-        "둘 다"
-      ],
-      "default": "토큰 (100k/1000k)"
-    },
     "showCache": {
       "type": "boolean",
-      "title": "캐시 남은 시간 표시",
-      "description": "막대에 프롬프트 캐시 남은 시간(캐시 59분 / 캐시 만료)을 보이고, 긴 대화에서 캐시가 만료되면 [압축]·[인계]를 권하는 알림을 낸다. 원래 상태줄에 없던 표시라 기본은 끔.",
-      "default": false
-    },
-    "showLimits": {
-      "type": "boolean",
-      "title": "5시간·주간 한도 표시",
-      "description": "막대에 5시간·주간 사용 한도(%)를 늘 보인다. 기본은 끔. 꺼도 '한도 경고와 절약 모드'가 켜져 있으면 80% 를 넘을 때 알림은 뜬다.",
+      "title": "캐시 만료 알림",
+      "description": "긴 대화에서 프롬프트 캐시가 만료되면 막대에 알림을 내고 [인계]를 권한다. 기본은 끔.",
       "default": false
     },
     "showActionRow": {
       "type": "boolean",
-      "title": "effort 근거·버튼 줄",
-      "description": "상태줄 아래의 'low 근거: …' 와 [자동]·[인계] 버튼 줄. 끄면 평소엔 줄이 없고 한도·인계 같은 알림이 있을 때만 나온다. 꺼 둔 동안 인계·자동 끄기는 /pilot 인계 · /pilot 자동 으로 한다.",
+      "title": "[자동]·[인계] 버튼",
+      "description": "맨 윗줄 'low 자동 · 근거: …' 오른쪽의 [자동]·[인계] 버튼. 끄면 평소엔 버튼이 없고 한도·인계 같은 알림이 있을 때만 나온다. 꺼 둔 동안 인계·자동 끄기는 /pilot 인계 · /pilot 자동 으로 한다.",
       "default": true
     }
   }

@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { pickAlert, reasonText } from '../hooks/band/controls'
 import { cells } from '../hooks/band/look'
-import { contextText, effortText, statusSegments, wrapSegments } from '../hooks/band/status-row'
+import { effortParts, effortText } from '../hooks/band/effort-row'
 import { AFTERS, choiceLabel, readConfig } from '../hooks/config'
 import { parseVerdict } from '../hooks/effort/judge'
 import { cacheSafe, capForSave, clamp, helperFloor, isFollowUp, namedEffort } from '../hooks/effort/levels'
@@ -12,7 +12,6 @@ import { hottest, resetTime } from '../hooks/limits'
 import { clean, parseSuggestions } from '../hooks/next-steps'
 import { cacheTtlOf, minutesLeft } from '../hooks/status/cache'
 import { folderOf, kilo, limitLabel, modelLabel } from '../hooks/status/statusline'
-import type { StatusData } from '../types'
 
 test('effort 를 범위 안으로 넣고, 절약 모드는 중간을 넘지 않는다', async () => {
   expect(clamp('max', 'low', 'high')).toBe('high')
@@ -116,19 +115,7 @@ test('인계 메시지와 인계 추천 판정', async () => {
   expect(parseHint('몰라')).toBeUndefined()
 })
 
-const STATUS: StatusData = {
-  folder: 'projects',
-  branch: 'main',
-  model: 'Opus 5.5',
-  modelId: 'claude-opus-5-5',
-  version: '2.1.314',
-  contextTokens: 74_000,
-  contextWindow: 1_000_000,
-  contextPercent: 7,
-  limits: [{ label: '5시간', percent: 42 }],
-}
-
-test('모델 옆 effort 글자: 자동이면 고른 값, 직접이면 앱 값, 캐시 안전하지 않으면 쉼', async () => {
+test('맨 윗줄 effort 글자: 자동이면 고른 값, 직접이면 앱 값, 캐시 안전하지 않으면 쉼', async () => {
   const base = { isAuto: true, isJudging: false, isSaving: false, appEffort: 'high' }
   expect(effortText({ ...base, pick: { effort: 'low', why: '', by: 'judge' } }, 'claude-opus-5-5').text).toBe('low 자동')
   expect(effortText({ ...base, pick: { effort: 'low', why: '', by: 'judge' } }, 'claude-fable-5-1').text).toBe('high (자동 쉼)')
@@ -136,14 +123,12 @@ test('모델 옆 effort 글자: 자동이면 고른 값, 직접이면 앱 값, �
   expect(effortText({ ...base, isJudging: true, pick: null }, 'claude-opus-5-5').text).toBe('판단 중…')
 })
 
-test('좁으면 상태줄 조각을 다음 줄로 넘기고, 한글은 두 칸으로 센다', async () => {
+test('맨 윗줄은 effort 뒤에 근거가 이어지고, 판단 중엔 근거를 붙이지 않는다', async () => {
   expect(cells('캐시 59분')).toBe(9)
-  const view = { pick: null, isAuto: true, isJudging: false, isSaving: false, appEffort: 'high' }
-  const all = { withIcons: false, format: 'both', showCache: true, showLimits: true } as const
-  const segs = statusSegments(STATUS, view, 59, all)
-  expect(segs.map(s => s.key)).toEqual(['place', 'model', 'context', 'cache', 'limits', 'version'])
-  expect(wrapSegments(segs, 200)).toHaveLength(1)
-  expect(wrapSegments(segs, 40).length).toBeGreaterThan(1)
+  const low = { text: 'low 자동', color: '#d7afff' }
+  expect(effortParts(low, '근거: 짧은 조회', false).map(p => p.text).join('')).toBe('low 자동 · 근거: 짧은 조회')
+  expect(effortParts({ text: '판단 중…', dim: true }, '근거: 짧은 조회', true).map(p => p.text).join('')).toBe('판단 중…')
+  expect(effortParts({ text: '' }, '자동 꺼짐 — 앱 설정대로 보냄', false).map(p => p.text).join('')).toBe('자동 꺼짐 — 앱 설정대로 보냄')
 })
 
 test('경고는 가장 급한 것 하나: 인계 중 > 한도 > 캐시 식음 > 인계 추천 > 판정자 응답 없음', async () => {
@@ -154,7 +139,7 @@ test('경고는 가장 급한 것 하나: 인계 중 > 한도 > 캐시 식음 > 
   expect(pickAlert({ ...base, limits: [{ label: '5시간', percent: 90 }], isSaving: true })).toBeNull()
   expect(pickAlert({ ...base, cacheMin: 0 })?.kind).toBe('cold')
   expect(pickAlert({ ...base, hint: '주제가 바뀜' })?.kind).toBe('hint')
-  expect(reasonText({ effort: 'low', why: '짧은 조회', by: 'judge' }, true, 'claude-opus-5-5', null)).toBe('low 근거: 짧은 조회')
+  expect(reasonText({ effort: 'low', why: '짧은 조회', by: 'judge' }, true, 'claude-opus-5-5', null)).toBe('근거: 짧은 조회')
 })
 
 test('판정 답이 잘리거나 다른 글이 섞여도 effort 를 읽는다', async () => {
@@ -164,21 +149,7 @@ test('판정 답이 잘리거나 다른 글이 섞여도 effort 를 읽는다', 
   expect(parseVerdict('{"effort":"giant"}')).toBeUndefined()
 })
 
-test('컨텍스트 표시: 토큰(기본) · 퍼센트 · 둘 다', async () => {
-  expect(contextText(STATUS, 'tokens')).toBe('74k/1000k')
-  expect(contextText(STATUS, 'percent')).toBe('7%')
-  expect(contextText(STATUS, 'both')).toBe('74k/1000k 7%')
-  expect(readConfig({}).contextFormat).toBe('tokens')
-  expect(readConfig({ contextFormat: '둘 다' }).contextFormat).toBe('both')
-})
-
-test('캐시·한도 표시는 기본으로 숨기고, 켜면 보인다', async () => {
-  const view = { pick: null, isAuto: true, isJudging: false, isSaving: false, appEffort: 'high' }
-  const c = readConfig({})
-  expect([c.showCache, c.showLimits]).toEqual([false, false])
-  const hidden = statusSegments(STATUS, view, 59, { withIcons: false, format: c.contextFormat, showCache: c.showCache, showLimits: c.showLimits })
-  expect(hidden.map(s => s.key)).toEqual(['place', 'model', 'context', 'version'])
-  const shown = statusSegments(STATUS, view, 59, { withIcons: false, format: 'tokens', showCache: true, showLimits: true })
-  expect(shown.map(s => s.key)).toContain('cache')
-  expect(shown.map(s => s.key)).toContain('limits')
+test('캐시 알림은 기본으로 끔', async () => {
+  expect(readConfig({}).showCache).toBe(false)
+  expect(readConfig({ showCache: true }).showCache).toBe(true)
 })

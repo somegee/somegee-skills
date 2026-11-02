@@ -1,4 +1,4 @@
-// 입력창 위 막대: 상태줄 글자, 버튼, 좁은 폭, 설정 띠.
+// 입력창 위 막대: effort·근거 줄, 버튼, 좁은 폭, 경고, 다음 할 일.
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
@@ -27,20 +27,15 @@ async function ready($: Engine, on: On) {
   await f.clock.settle()
 }
 
-test('상태줄에 폴더·브랜치·모델과 실제 effort·컨텍스트·버전이 보이고, 캐시·한도는 기본으로 숨는다', async ($, on) => {
+test('맨 윗줄은 실제 effort 뒤에 근거가 이어지고, 폴더·모델·컨텍스트는 막대에 없다(상태줄 몫)', async ($, on) => {
   await ready($, on)
   const ui = await $.ui.mount({ ...BAND(200), surface: 'terminal' } as never)
   const all = (await ui.findAll({ type: 'Text' })).map(t => t.text).join(' ')
-  expect(all).toContain('projects')
-  expect(all).toContain('main')
-  expect(all).toContain('Opus 5.5')
-  expect(all).toContain('low 자동')
-  expect(all).toContain('70k/1000k')
-  expect(all).not.toContain('70k/1000k 7%')
-  expect(all).not.toContain('5시간 42%')
+  expect(all).toContain('low 자동 · 근거: 짧은 조회')
+  expect(all).not.toContain('Opus 5.5')
+  expect(all).not.toContain('70k/1000k')
+  expect(all).not.toContain('2.1.314')
   expect(all).not.toContain('캐시')
-  expect(all).toContain('2.1.314')
-  expect(all).toContain('low 근거: 짧은 조회')
   await ui.unmount()
 })
 
@@ -62,17 +57,15 @@ test('notes 처럼 둥근 테두리 안에 그리고, 설정 버튼은 없다(�
   const boxes = await ui.findAll({ type: 'Box' })
   expect(boxes.some(b => b.props.borderStyle === 'round')).toBe(true)
   expect(await ui.find({ type: 'Button', key: 'settings' })).toBeFalsy()
-  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
-  expect(texts.some(t => /^─{10,}$/.test(t))).toBe(true)
   await ui.unmount()
 })
 
-test('좁은 폭(60칸)에서도 그려지고 상태줄이 여러 줄로 나뉜다', async ($, on) => {
+test('좁은 폭(60칸)에서도 effort 줄이 그려진다', async ($, on) => {
   await ready($, on)
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...BAND(60), surface } as never)
     const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).join(' ')
-    expect(texts).toContain('Opus 5.5')
+    expect(texts).toContain('low 자동')
     await ui.unmount()
   }
 })
@@ -116,24 +109,16 @@ test('한도 80% 를 넘으면 경고와 [절약 켜기] 가 뜨고, 누르면 �
   await ui.unmount()
 })
 
-test('설정에서 캐시·한도 표시를 켜면 상태줄에 나온다', { options: { showCache: true, showLimits: true } }, async ($, on) => {
+test('버튼을 끄면 effort·근거는 그대로 보이고 버튼만 없다', { options: { showActionRow: false } }, async ($, on) => {
   await ready($, on)
   const ui = await $.ui.mount({ ...BAND(200), surface: 'terminal' } as never)
   const all = (await ui.findAll({ type: 'Text' })).map(t => t.text).join(' ')
-  expect(all).toContain('5시간 42%')
-  await ui.unmount()
-})
-
-test('근거·버튼 줄을 끄면 평소엔 그 줄이 없고, 경고가 있을 때만 나온다', { options: { showActionRow: false } }, async ($, on) => {
-  await ready($, on)
-  const ui = await $.ui.mount({ ...BAND(200), surface: 'terminal' } as never)
-  const all = (await ui.findAll({ type: 'Text' })).map(t => t.text).join(' ')
-  expect(all).not.toContain('근거')
+  expect(all).toContain('low 자동 · 근거: 짧은 조회')
   expect(await ui.find({ type: 'Button', key: 'handoff' })).toBeFalsy()
   await ui.unmount()
 })
 
-test('근거·버튼 줄을 꺼도 한도 경고는 뜬다', { options: { showActionRow: false } }, async ($, on) => {
+test('버튼을 꺼도 한도 경고와 그 버튼은 뜬다', { options: { showActionRow: false } }, async ($, on) => {
   const f = fakeEngine(on, { judgeReply: '{"effort":"low","why":"짧은 조회"}', limits: [{ kind: 'five_hour', percentUsed: 86 }] })
   on('ui.render', ($$, e) => {
     const { Box } = $$.ui.resolve(e)
@@ -146,6 +131,8 @@ test('근거·버튼 줄을 꺼도 한도 경고는 뜬다', { options: { showAc
   const ui = await $.ui.mount({ ...BAND(200), surface: 'terminal' } as never)
   const all = (await ui.findAll({ type: 'Text' })).map(t => t.text).join(' ')
   expect(all).toContain('5시간 한도 86%')
+  expect(all).toContain('low 자동')
+  expect(await ui.find({ type: 'Button', key: 'save' })).toBeTruthy()
   await ui.unmount()
 })
 
@@ -166,6 +153,8 @@ test('다음 할 일: 번호를 바꾸면 초안이 바뀌고, 같은 번호를 
   const ui = await $.ui.mount({ ...BAND(200), surface: 'terminal' } as never)
   // 클릭으로만: 숫자 단축키가 없어야 빈 입력창에 숫자로 시작하는 글을 쳐도 눌리지 않는다.
   for (const key of ['next-0', 'next-1', 'next-dismiss']) expect((await ui.find({ type: 'Button', key }))?.props.hotkey).toBeUndefined()
+  // effort 줄과 다음 할 일 사이는 테두리 색 가로줄로 나눈다.
+  expect((await ui.findAll({ type: 'Text' })).some(t => /^─{10,}$/.test(t.text))).toBe(true)
   await ui.press({ key: 'next-0' } as never)
   expect(f.box).toBe('방금 고친 곳 테스트 돌려줘')
   expect((await ui.find({ type: 'Button', key: 'next-0' }))?.text).toContain('▶테스트 돌리기')
