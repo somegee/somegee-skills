@@ -1,0 +1,45 @@
+{
+  "name": "tree",
+  "version": "0.1.0",
+  "description": "오른쪽 창에 프로젝트 파일 트리 — 마우스로 열기·절대 경로 복사·미리보기·바뀐 내용·폴더 크기 그림, Claude 의 읽기·쓰기·커밋과 git 상태 표시",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "somegee",
+    "email": "somegee@users.noreply.github.com"
+  },
+  "license": "MIT",
+  "keywords": ["file-tree", "git", "preview", "mod"],
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "세션 시작 때 창 자동 열기",
+      "description": "켜 두면 세션을 시작할 때 파일 트리 창이 저절로 열린다. 끄면 /tree 로만 연다.",
+      "default": true
+    },
+    "follow": {
+      "type": "string",
+      "title": "Claude 가 만지는 파일 따라가기",
+      "description": "writes: Claude 가 파일을 만들거나 고치면 트리에서 그 자리를 펼쳐 보여 준다(기본). all: 읽을 때도. off: 따라가지 않는다(색 표시만).",
+      "options": ["writes", "all", "off"],
+      "default": "writes"
+    },
+    "showReads": {
+      "type": "boolean",
+      "title": "읽은 파일도 표시",
+      "description": "켜 두면 Claude 가 읽거나 찾은(Read·Grep·Glob) 파일 이름을 잠깐 보라색으로 칠한다.",
+      "default": true
+    },
+    "hidden": {
+      "type": "string",
+      "title": "숨길 이름",
+      "description": "트리·검색에서 뺄 파일·폴더 이름(빈칸으로 구분). .git 은 늘 숨긴다.",
+      "default": "node_modules __pycache__ .venv .pytest_cache .mypy_cache .DS_Store"
+    },
+    "recentLimit": {
+      "type": "number",
+      "title": "최근 작업에 남길 파일 수",
+      "description": "트리 아래 '최근 작업'에 남겨 둘 개수. 1~30, 기본 8.",
+      "default": 8
+    }
+  }
+}

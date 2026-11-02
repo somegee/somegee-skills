@@ -1,6 +1,6 @@
 # somegee-skills
 
-개인 Claude Code 플러그인 마켓플레이스. 현재 `terminal-swarm`, `notes`(mod — 옆 창 노트), `pilot`(mod — 입력창 위 막대) 플러그인 관리.
+개인 Claude Code 플러그인 마켓플레이스. 현재 `terminal-swarm`, `notes`(mod — 옆 창 노트), `pilot`(mod — 입력창 위 막대), `tree`(mod — 오른쪽 창 파일 트리) 플러그인 관리.
 
 ## 구조
 
@@ -24,6 +24,12 @@ pilot/                 # mod 플러그인 (입력창 위 막대: 상태줄·자�
   tests/*.test.ts(x)
   types/index.d.ts
   NOTICE               # effortless·next-steps MIT 고지 — 빌려 온 코드가 남아 있는 한 지우지 않는다
+tree/                  # mod 플러그인 (오른쪽 창 파일 트리, 마우스 전용)
+  hooks/register.tsx   # 이벤트 연결만
+  hooks/state.ts       # $.state atom + readX/writeX
+  hooks/actions.ts     # 누르기·미리보기·diff·크기 그림·활동 표시
+  hooks/view/*.tsx     # 그리기 (Acts 콜백만 받음)
+  NOTICE               # claude-code-filetree MIT 고지
 ```
 
 **이 저장소는 PUBLIC이다.** 비밀값·업무 내용을 올리지 않는다.
@@ -71,6 +77,16 @@ _swarm_py="$(ls ~/.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm
 - `session.compact` 훅은 `compactModel` 이 '원래대로'가 아닐 때만 단다(회사 PC 보안 모듈이 막으면 세션마다 알림).
 - 설정은 `/config`(userConfig)로만 바꾼다 — 막대에 설정 띠를 두지 않는다(2026-10-30 결정).
 - 공개 저장소다: 문구에 개인 이름·호칭을 넣지 않는다.
+
+## tree (mod) 규칙
+
+- 테스트: `claude plugin test tree`, 검증: `claude plugin validate tree`
+- 개발 중 실행: `claude --plugin-dir tree`
+- 경로는 늘 '/' 절대 경로로 들고 다니고 비교는 `idOf`(윈도우 소문자). 복사·열기 때만 `nativePath`(윈도우 '\').
+- 경로 복사는 **늘 절대 경로**(사용자 결정 2026-11-02). 상대 경로 옵션을 만들지 않는다.
+- 마우스 전용(2026-11-02 결정): 단축키(hotkey)를 달지 않는다.
+- `read`/`update` 는 `hooks/state.ts` 안에서만(pilot 과 같은 검사기 제약).
+- purisia/project-tree 는 라이선스가 없어 코드를 가져오지 않는다(아이디어만).
 
 ## Hook 설정 규칙 (terminal-swarm)
 
