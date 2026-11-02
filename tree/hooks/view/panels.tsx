@@ -5,7 +5,12 @@ import { OTHERS_COLOR, TILE_COLORS, colorHex, layout, paint, topTiles } from '..
 import { C } from './look'
 import type { Acts, Els } from './look'
 
-/** 맨 위: 폴더 이름 · 브랜치 ↑↓. (바뀐 파일 수는 탭에 있으니 여기선 빼서 덜 붐비게) */
+function innerCount(git: GitInfo | null): number {
+  if (!git) return 0
+  return Object.keys(git.repos).filter(id => id !== idOf(git.top)).length
+}
+
+/** 맨 위: 폴더 이름 · 브랜치 ↑↓ · 추적 중인 안쪽 저장소 수. (바뀐 파일 수는 탭에 있다) */
 export function header(els: Els, root: string, git: GitInfo | null) {
   const { Box, Text } = els
   return (
@@ -13,7 +18,7 @@ export function header(els: Els, root: string, git: GitInfo | null) {
       <Text bold color={C.accent}>
         {baseName(root)}
       </Text>
-      {git ? (
+      {git?.top ? (
         <Text color={C.commit}>
           ⎇ {git.branch || '?'}
           {git.ahead ? <Text color={C.commit}> ↑{git.ahead}</Text> : null}
@@ -22,6 +27,7 @@ export function header(els: Els, root: string, git: GitInfo | null) {
       ) : (
         <Text dimColor>git 아님</Text>
       )}
+      {innerCount(git) > 0 ? <Text dimColor>{`안쪽 저장소 ${innerCount(git)}개`}</Text> : null}
     </Box>
   )
 }

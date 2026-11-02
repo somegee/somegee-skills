@@ -1,8 +1,8 @@
 // git 상태 읽기, Claude 가 돌린 git 명령 알아보기, 바뀐 내용(diff) 가져오기.
 import type { EngineInterface } from 'claude-code'
 
-import type { DiffFile, GitInfo } from '../types'
-import { idOf, join, norm, relativeTo } from './paths'
+import type { DiffFile, GitInfo, RepoHead } from '../types'
+import { idOf, isUnder, join, norm, relativeTo } from './paths'
 
 const GIT_TIMEOUT_MS = 15_000
 
@@ -90,18 +90,74 @@ export function parseNumstat(out: string, top: string): Record<string, readonly 
   return lines
 }
 
-/** 저장소 안 root 아래의 git 상태를 한 번에 읽는다. 저장소가 아니면 null. */
-export async function loadGit($: EngineInterface, root: string): Promise<GitInfo | null> {
-  const top = await repoTop($, root)
-  if (!top) return null
+type RepoState = RepoHead & Pick<GitInfo, 'files' | 'lines' | 'paths'>
+
+/** 저장소 하나의 상태. scope 폴더 아래만 본다(루트 저장소는 루트 아래, 안쪽 저장소는 전체). */
+async function loadRepo($: EngineInterface, top: string, scope: string): Promise<RepoState | null> {
   const [status, numstat] = await Promise.all([
-    runGit($, root, ['status', '--porcelain=v1', '-b', '-z', '--untracked-files=all', '--', '.']),
-    runGit($, root, ['diff', 'HEAD', '--numstat', '-z', '--', '.']).catch(() => null),
+    runGit($, scope, ['status', '--porcelain=v1', '-b', '-z', '--untracked-files=all', '--', '.']).catch(() => null),
+    runGit($, scope, ['diff', 'HEAD', '--numstat', '-z', '--', '.']).catch(() => null),
   ])
-  if (status.exitCode !== 0) return null
+  if (!status || status.exitCode !== 0) return null
   const parsed = parseStatus(status.stdout, top)
   const lines = numstat && numstat.exitCode === 0 ? parseNumstat(numstat.stdout, top) : {}
   return { top, ...parsed, lines }
+}
+
+const EMPTY_HEAD: RepoHead = { top: '', branch: '', upstream: '', ahead: 0, behind: 0 }
+
+function headOfRepo(r: RepoState): RepoHead {
+  return { top: r.top, branch: r.branch, upstream: r.upstream, ahead: r.ahead, behind: r.behind }
+}
+
+/**
+ * 루트가 든 저장소 + 안쪽 저장소들(inner: 그 폴더 바로 아래에 .git 이 있는 폴더)의 상태를 합친다.
+ * 바깥 저장소가 안쪽 저장소 폴더를 '새 폴더(?)' 하나로 보고하는 줄은 지운다(안쪽 파일들로 대신 보이므로).
+ * 저장소가 하나도 없으면 null.
+ */
+export async function loadGit($: EngineInterface, root: string, inner: readonly string[] = []): Promise<GitInfo | null> {
+  const rootTop = await repoTop($, root)
+  const innerTops = inner.map(norm).filter(top => idOf(top) !== idOf(rootTop))
+  const states = await Promise.all([
+    rootTop ? loadRepo($, rootTop, root) : Promise.resolve(null),
+    ...innerTops.map(top => loadRepo($, top, top)),
+  ])
+  const found = states.filter((s): s is RepoState => s !== null)
+  if (found.length === 0) return null
+  const innerIds = new Set(innerTops.map(idOf))
+  const files: Record<string, string> = {}
+  const lines: Record<string, readonly [number, number]> = {}
+  const paths: Record<string, string> = {}
+  const repos: Record<string, RepoHead> = {}
+  for (const s of found) {
+    repos[idOf(s.top)] = headOfRepo(s)
+    for (const [id, code] of Object.entries(s.files)) {
+      if (innerIds.has(id) && idOf(s.top) !== id) continue
+      files[id] = code
+      paths[id] = s.paths[id] ?? id
+    }
+    Object.assign(lines, s.lines)
+  }
+  const rootState = rootTop ? found.find(s => idOf(s.top) === idOf(rootTop)) : undefined
+  return { ...(rootState ? headOfRepo(rootState) : EMPTY_HEAD), repos, files, lines, paths }
+}
+
+/** 경로가 든 저장소(가장 안쪽). 없으면 ''. */
+export function repoFor(git: GitInfo, path: string): string {
+  let best = ''
+  for (const head of Object.values(git.repos)) {
+    if (isUnder(head.top, path) && head.top.length > best.length) best = head.top
+  }
+  return best
+}
+
+/** 폴더(또는 파일)와 겹치는 저장소들: 그 안에 든 저장소 + 그것을 품은 저장소. */
+export function reposTouching(git: GitInfo, path: string): string[] {
+  const out = Object.values(git.repos)
+    .map(h => h.top)
+    .filter(top => isUnder(path, top))
+  const outer = repoFor(git, path)
+  return outer && !out.some(t => idOf(t) === idOf(outer)) ? [outer, ...out] : out
 }
 
 // ── Claude 가 돌린 셸 명령에서 git 동작 알아보기 ──

@@ -1,11 +1,11 @@
 // 창에서 누른 것과 Claude 의 작업이 상태를 바꾸는 곳.
 import type { EngineInterface, RenderSurface } from 'claude-code'
 
-import type { Entry, Mode, TouchKind } from '../types'
+import type { DiffFile, Entry, Mode, TouchKind } from '../types'
 import type { Config } from './config'
 import { dropIndex, listDir, measure, openPath, searchFiles } from './fsx'
-import { addedDiff, diffOf, loadGit } from './git'
-import { ancestorsWithin, baseName, idOf, isBinaryName, isMarkdownName, isUnder, nativePath, norm, parentOf, relativeTo } from './paths'
+import { addedDiff, diffOf, loadGit, reposTouching } from './git'
+import { ancestorsWithin, baseName, idOf, isBinaryName, isMarkdownName, isUnder, join, nativePath, norm, parentOf, relativeTo } from './paths'
 import {
   editListings,
   editOpened,
@@ -113,7 +113,10 @@ export function rowKey(path: string): string {
 /** 폴더는 펼치거나 접으며 고르고, 파일은 고른다. 고른 줄을 다시 누르면 고르기를 푼다. */
 export async function pressRow($: EngineInterface, path: string, isDir: boolean): Promise<void> {
   const current = await readSelected($)
-  if (isDir) await toggleDir($, path)
+  if (isDir) {
+    await toggleDir($, path)
+    void refreshGit($).catch(() => undefined) // 펼친 폴더 안 저장소도 추적하도록
+  }
   const isSame = current !== null && idOf(current) === idOf(path)
   await writeSelected($, isSame && !isDir ? null : norm(path))
 }
@@ -199,20 +202,28 @@ export async function showPreview($: EngineInterface, path: string): Promise<voi
 }
 
 export async function showDiff($: EngineInterface, path: string): Promise<void> {
-  const git = (await readGit($)) ?? (await loadGit($, await rootOf($)))
+  const root = await rootOf($)
+  const git = (await readGit($)) ?? (await loadGit($, root, await innerRepos($)))
   const full = norm(path)
-  if (!git) {
+  const tops = git ? reposTouching(git, full) : []
+  if (!git || tops.length === 0) {
     await writePreview($, { kind: 'note', path: full, note: 'git 저장소가 아니라 바뀐 내용을 볼 수 없습니다.' })
     return
   }
-  const files = (await diffOf($, git.top, full)) ?? []
+  const files: DiffFile[] = []
+  // 제목은 루트 기준 경로로(안쪽 저장소가 여럿이어도 어디 파일인지 보이게)
+  const titled = (top: string, f: DiffFile): DiffFile => ({ ...f, title: relativeTo(root, join(top, f.title)) || f.title })
+  for (const top of tops.slice(0, REPO_LIMIT)) {
+    const scope = isUnder(top, full) ? full : top
+    for (const f of (await diffOf($, top, scope)) ?? []) files.push(titled(top, f))
+  }
   // git 이 아직 모르는 새 파일은 diff 에 안 나오므로 내용을 '전부 추가'로 붙인다
   const fresh = Object.entries(git.files).filter(([id, code]) => code === '?' && isUnder(full, id))
   for (const [id] of fresh.slice(0, 20)) {
     const abs = git.paths[id] ?? id
     if (isBinaryName(abs)) continue
     const text = await $.fs.read(abs).catch(() => null)
-    if (text !== null && text.length < PREVIEW_CHARS) files.push(addedDiff(relativeTo(git.top, abs), text))
+    if (text !== null && text.length < PREVIEW_CHARS) files.push(addedDiff(relativeTo(root, abs) || abs, text))
   }
   const note = files.length === 0 ? '바뀐 내용이 없습니다(마지막 커밋과 같음).' : ''
   await writePreview($, { kind: 'diff', path: full, files, note })
@@ -235,6 +246,29 @@ export async function showMap($: EngineInterface, dir: string): Promise<void> {
 
 // ── git ──
 
+const REPO_LIMIT = 20
+
+/**
+ * 트리에 보이는 폴더(루트 바로 아래 + 펼친 폴더 바로 아래) 중 안쪽 저장소(.git 이 있는 폴더).
+ * 펼친 폴더 안만 보므로 저장소가 많아도 갱신이 무거워지지 않는다.
+ */
+export async function innerRepos($: EngineInterface): Promise<string[]> {
+  const root = await rootOf($)
+  const listings = await readListings($)
+  const opened = await readOpened($)
+  const parents = [root, ...opened.filter(dir => isUnder(root, dir))]
+  const candidates: string[] = []
+  for (const dir of parents) {
+    for (const one of listings[idOf(dir)] ?? []) if (one.isDir) candidates.push(join(dir, one.name))
+  }
+  const found: string[] = []
+  for (const dir of candidates) {
+    if (found.length >= REPO_LIMIT) break
+    if (await $.fs.exists(join(dir, '.git')).catch(() => false)) found.push(dir)
+  }
+  return found
+}
+
 let gitRun: Promise<void> | null = null
 let gitAgain = false
 
@@ -247,7 +281,7 @@ export function refreshGit($: EngineInterface): Promise<void> {
   gitRun = (async () => {
     do {
       gitAgain = false
-      const git = await loadGit($, await rootOf($)).catch(() => null)
+      const git = await loadGit($, await rootOf($), await innerRepos($)).catch(() => null)
       await writeGit($, git)
     } while (gitAgain)
   })().finally(() => {

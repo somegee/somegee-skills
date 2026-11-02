@@ -12,12 +12,16 @@ export type TouchKind = 'read' | 'write' | 'commit'
 export type Touch = { kind: TouchKind; at: number }
 
 /** git 상태. files·lines 의 열쇠는 id(비교용 경로). */
-export type GitInfo = {
-  top: string
-  branch: string
-  upstream: string
-  ahead: number
-  behind: number
+/** 저장소 하나의 머리 정보. */
+export type RepoHead = { top: string; branch: string; upstream: string; ahead: number; behind: number }
+
+/**
+ * 트리에 보이는 모든 저장소의 git 상태를 합친 것.
+ * top·branch… 는 루트 폴더가 든 저장소(없으면 빈 값), repos 는 루트 저장소 + 펼친 폴더 안의 안쪽 저장소들.
+ */
+export type GitInfo = RepoHead & {
+  /** id(top) → 머리 정보 */
+  repos: Record<string, RepoHead>
   /** id → 한 글자 상태(M·A·D·R·?) */
   files: Record<string, string>
   /** id → [더한 줄, 지운 줄] */

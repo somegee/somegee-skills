@@ -80,7 +80,13 @@ export function treeRow(els: Els, row: TreeRow, m: Marks, acts: Acts) {
   const caret = row.isDir ? (row.isOpen ? '▾ ' : '▸ ') : '  '
   const gutter = isSelected ? '›' : ' '
   const nameWidth = Math.max(4, m.width - 1 - cells(rail) - cells(caret) - MARK_CELLS)
-  const name = fit(row.isDir ? `${row.name}/` : row.name, nameWidth)
+  // 안쪽 저장소 폴더면 이름 옆에 흐린 브랜치 표시(⎇ main ↑1)
+  const repo = row.isDir ? m.git?.repos[id] : undefined
+  const tag = repo ? `  ⎇ ${repo.branch || '?'}${repo.ahead ? ` ↑${repo.ahead}` : ''}${repo.behind ? ` ↓${repo.behind}` : ''}` : ''
+  const label = row.isDir ? `${row.name}/` : row.name
+  const nameCells = tag ? Math.min(cells(label), Math.max(4, nameWidth - cells(tag))) : nameWidth
+  const name = fit(label, nameCells)
+  const tagText = tag ? fit(tag, nameWidth - nameCells) : ''
   const mark = markOf(row, m)
   const nameColor = isSelected ? C.accent : touch && !row.isDir ? TOUCH_COLOR[touch.kind] : undefined
   return (
@@ -94,6 +100,7 @@ export function treeRow(els: Els, row: TreeRow, m: Marks, acts: Acts) {
         <Text color={nameColor} bold={isSelected || Boolean(touch)} dimColor={row.isDir && !isSelected && !touch}>
           {name}
         </Text>
+        {tagText ? <Text color={C.commit} dimColor>{tagText}</Text> : null}
         <Text> </Text>
         <Text color={mark.claudeColor}>{mark.claude}</Text>
         <Text color={mark.codeColor}>{mark.code}</Text>
