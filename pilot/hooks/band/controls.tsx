@@ -61,8 +61,8 @@ export function reasonText(pick: Pick | null, isAuto: boolean, modelId: string, 
   if (!isAuto) return pick?.by === 'manual' ? '직접 고른 값으로 보냄 (자동 꺼짐)' : `${T.autoOff} — 앱 설정대로 보냄`
   if (modelId && !cacheSafe(modelId)) return T.pausedWhy
   if (!pick) return '첫 질문부터 Haiku 가 effort 를 고릅니다'
-  // '근거: 짧은 조회'. 누가 골랐는지(Haiku)는 덜 중요해서 뺐다(2026-10-30).
-  return `근거: ${pick.why || '판정'}`
+  // '짧은 조회'. 누가 골랐는지(Haiku)는 덜 중요해서 뺐다(2026-10-30), '근거:' 머리말도 뺐다(2026-11-03).
+  return pick.why || '판정'
 }
 
 export type Actions = {

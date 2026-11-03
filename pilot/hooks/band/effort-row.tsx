@@ -1,4 +1,4 @@
-// 맨 윗줄: 실제로 보낸 effort + 근거(예: 'low 자동 · 근거: 짧은 조회'). 폴더·모델·컨텍스트는 원래 상태줄(statusLine)이 보인다(2026-11-02).
+// 맨 윗줄: 실제로 보낸 effort + 근거(예: 'low 자동 · 짧은 조회'). 폴더·모델·컨텍스트는 원래 상태줄(statusLine)이 보인다(2026-11-02).
 import type { Effort, Pick } from '../../types'
 import { cacheSafe } from '../effort/levels'
 import { EFFORT_LABEL, T } from '../text'

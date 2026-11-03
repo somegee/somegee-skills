@@ -126,8 +126,8 @@ test('맨 윗줄 effort 글자: 자동이면 고른 값, 직접이면 앱 값, �
 test('맨 윗줄은 effort 뒤에 근거가 이어지고, 판단 중엔 근거를 붙이지 않는다', async () => {
   expect(cells('캐시 59분')).toBe(9)
   const low = { text: 'low 자동', color: '#d7afff' }
-  expect(effortParts(low, '근거: 짧은 조회', false).map(p => p.text).join('')).toBe('low 자동 · 근거: 짧은 조회')
-  expect(effortParts({ text: '판단 중…', dim: true }, '근거: 짧은 조회', true).map(p => p.text).join('')).toBe('판단 중…')
+  expect(effortParts(low, '짧은 조회', false).map(p => p.text).join('')).toBe('low 자동 · 짧은 조회')
+  expect(effortParts({ text: '판단 중…', dim: true }, '짧은 조회', true).map(p => p.text).join('')).toBe('판단 중…')
   expect(effortParts({ text: '' }, '자동 꺼짐 — 앱 설정대로 보냄', false).map(p => p.text).join('')).toBe('자동 꺼짐 — 앱 설정대로 보냄')
 })
 
@@ -139,7 +139,7 @@ test('경고는 가장 급한 것 하나: 인계 중 > 한도 > 캐시 식음 > 
   expect(pickAlert({ ...base, limits: [{ label: '5시간', percent: 90 }], isSaving: true })).toBeNull()
   expect(pickAlert({ ...base, cacheMin: 0 })?.kind).toBe('cold')
   expect(pickAlert({ ...base, hint: '주제가 바뀜' })?.kind).toBe('hint')
-  expect(reasonText({ effort: 'low', why: '짧은 조회', by: 'judge' }, true, 'claude-opus-5-5', null)).toBe('근거: 짧은 조회')
+  expect(reasonText({ effort: 'low', why: '짧은 조회', by: 'judge' }, true, 'claude-opus-5-5', null)).toBe('짧은 조회')
 })
 
 test('판정 답이 잘리거나 다른 글이 섞여도 effort 를 읽는다', async () => {
