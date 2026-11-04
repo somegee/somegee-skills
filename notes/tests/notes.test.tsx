@@ -229,6 +229,30 @@ test('창에 다 안 들어가면 본문을 창 높이만큼만 보이고, [▼ 
   expect((await ui.find({ key: 'scroll-down' }))?.text).toContain('▼ 아래로 (10줄)')
 })
 
+test('에이전트가 단계를 덧붙이거나 체크하면 그 단계가 창 가운데 오게 내리고, 그 뒤 휠 위치는 그대로 둔다', async ($, on) => {
+  fakeFiles(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as const)
+  const items = Array.from({ length: 20 }, (_, n) => `단계 ${n + 1}`)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '가운데', items } as never)
+  const small = { ...PANE, scroll: { offset: 0, bodyRows: 15 } }
+  const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: small as never })
+  // 새 탭은 맨 위부터.
+  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-0)
+
+  // 창 8줄, 본문 앞 4줄(제목·세션·할 일 2) 뒤에 단계가 한 줄씩. 단계 10(앞 13줄)을 가운데(위 3줄)에 → 13 - 3 = 10.
+  await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '가운데', items: [9, 10] } as never)
+  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-10)
+
+  // 덧붙인 단계 21(앞 24줄) → 끝까지(최대 18).
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '가운데', add_items: ['단계 21'] } as never)
+  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(-18)
+
+  // 사람이 위로 올린 위치는 다시 그려도 유지된다.
+  await ui.press({ key: 'scroll-up' })
+  const moved = (await ui.find({ key: 'viewport-body' }))?.props.marginTop
+  expect((await ui.find({ key: 'viewport-body' }))?.props.marginTop).toBe(moved)
+})
+
 test('창에 다 들어가면 위·아래 표시도 창 자리도 없다', async ($, on) => {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)

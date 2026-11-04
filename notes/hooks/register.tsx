@@ -13,8 +13,13 @@ let L: Strings = TEXT.ko
 const MAX_TABS = 30
 const MAX_HISTORY = 20
 const book = atom({ plugin: 'notes', key: 'book' } as const, { root: '', tabs: [], history: [], future: [] } as NotesBook)
-const scroll = atom({ plugin: 'notes', key: 'scroll' } as const, 0)
+// 본문을 내린 줄 수(off)와, 그 위치를 정할 때 이미 반영한 focus 번호(seq).
+const scroll = atom({ plugin: 'notes', key: 'scroll' } as const, { off: 0, seq: 0 })
 const tick = atom({ plugin: 'notes', key: 'tick' } as const, 0)
+// 에이전트가 마지막으로 새로 넣거나 체크·표시한 단계(item 은 0부터). seq 가 scroll.seq 보다 크면 아직 안 본 변경이라
+// 창이 그 단계를 본문 가운데 두고 그린다. 그리기는 상태를 못 쓰므로, 사람이 휠·버튼으로 옮길 때 scroll.seq 를 맞춰 끝낸다.
+const focus = atom({ plugin: 'notes', key: 'focus' } as const, { tab: '', item: -1, seq: 0 })
+const setFocus = ($: EngineInterface, tab: string, item: number) => update($, focus, f => ({ tab, item, seq: f.seq + 1 }))
 // 접어 둔 구역. 키 = '<탭 이름>|<구역>'. 이 세션에서만 유지된다(다른 세션·파일과 공유하지 않음).
 const live = atom({ plugin: 'notes', key: 'live' } as const, {} as Record<string, LiveState>)
 const folded = atom({ plugin: 'notes', key: 'folded' } as const, {} as Record<string, boolean>)
@@ -375,6 +380,13 @@ const textRows = (s: string, cols: number) => Math.max(1, Math.ceil(cellWidth(s)
 
 // 마지막으로 그린 탭에서 본문을 내릴 수 있는 최대 줄 수. 휠이 끝을 넘지 않게 그릴 때마다 갱신한다.
 let maxScroll = 0
+// 마지막으로 그린 탭에서 실제로 내려 보인 줄 수. 휠·버튼은 여기서부터 옮긴다(가운데 맞춤으로 보인 자리 포함).
+let shownOff = 0
+// 휠·버튼으로 옮긴 자리를 저장한다. 지금까지의 focus 는 본 것으로 친다.
+async function moveScroll($: EngineInterface, to: (from: number) => number) {
+  const seq = (await read($, focus)).seq
+  await update($, scroll, () => ({ off: Math.min(Math.max(0, to(shownOff)), maxScroll), seq }))
+}
 
 // 창 열기. 본체는 창 안을 제 색(회색)으로 칠하므로, 배경 없는 테마는 투명을 요청해 터미널 바탕이 비치게 한다.
 // 창 바탕 지정(backgroundColor)은 Claude Code 2.1.302 엔 없던 항목이라, 옛 버전이 거절하면 바탕 없이 다시 연다.
@@ -533,7 +545,8 @@ export const register: Register = (on, options) => {
     const a = e as unknown as Record<string, unknown>
     const title = asText(a.tab)?.slice(0, 40)
     if (title === undefined) return { deny: L.needTab }
-    const isNew = findTab(await read($, book), title) === undefined
+    const cur0 = await read($, book)
+    const isNew = findTab(cur0, title) === undefined
 
     const b = await change($, isNew ? L.logNewTab(title) : L.logEdit(title), cur => {
       const old = findTab(cur, title)
@@ -557,6 +570,13 @@ export const register: Register = (on, options) => {
       return { ...cur, tabs: (old ? cur.tabs.map(t => (t.title === title ? tab : t)) : [...rest, tab]).slice(-MAX_TABS), active: title }
     })
     if (isNew) void openPane($)
+    // 기존 탭에 새로 생긴 단계가 있으면 그 첫 단계로 창을 옮긴다. 새 탭은 맨 위부터 보이게 그대로 둔다.
+    const prev = isNew ? [] : (findTab(cur0, title)?.items ?? [])
+    const after = findTab(b, title)?.items ?? []
+    const byText = after.findIndex(i => !prev.some(x => x.text === i.text))
+    const addCount = asList(a.add_items).length
+    const added = isNew ? -1 : byText >= 0 ? byText : addCount > 0 ? after.length - addCount : -1
+    if (added >= 0) await setFocus($, title, added)
 
     return ok(describeTab(findTab(b, title)!))
   }).catch(failed)
@@ -582,6 +602,8 @@ export const register: Register = (on, options) => {
           : { ...t, session: sessionTag(), updatedAt: now(), items: t.items.map((i, n) => (nums.includes(n + 1) ? { ...i, isDone } : i)) },
       ),
     }))
+    // 여러 개를 체크했으면 가장 뒤 단계로 창을 옮긴다(바로 아래가 다음 할 일).
+    if (nums.length > 0) await setFocus($, tab.title, Math.max(...nums) - 1)
 
     return ok(describeTab(findTab(b, tab.title)!))
   }).catch(failed)
@@ -613,6 +635,7 @@ export const register: Register = (on, options) => {
         t.title !== tab.title ? t : { ...t, session: sessionTag(), updatedAt: now(), items: t.items.map((i, k) => (k === n - 1 ? apply(i) : i)) },
       ),
     }))
+    await setFocus($, tab.title, n - 1)
     return ok(describeTab(findTab(b, tab.title)!))
   }).catch(failed)
 
@@ -648,7 +671,7 @@ export const register: Register = (on, options) => {
     if (maxScroll === 0) return next(e)
     if (e.origin.kind === 'person' && e.pointer === undefined) return {}
     const by = Number.isFinite(e.by) ? e.by : 0
-    await update($, scroll, s => Math.min(Math.max(0, s + by), maxScroll))
+    await moveScroll($, from => from + by)
     // 창은 맨 위에 둔다: 탭 줄이 항상 보이게.
     return next({ ...e, offset: 0 })
   })
@@ -733,7 +756,7 @@ export const register: Register = (on, options) => {
     await read($, tick)
     const current = tab.items.findIndex(i => !i.isDone)
     const select = (title: string) => () =>
-      void update($, book, c => ({ ...c, active: title })).then(() => update($, scroll, () => 0))
+      void update($, book, c => ({ ...c, active: title })).then(() => moveScroll($, () => 0))
     const toggle = (n: number) => () =>
       void change($, L.logToggle(tab.title, n + 1), c => ({
         ...c,
@@ -778,7 +801,7 @@ export const register: Register = (on, options) => {
     const sectionRows = (key: string, bodyRows: number) => 2 + (isFolded(key.replace(/^b-/, '')) ? 0 : bodyRows)
     const memoLines = tab.memo?.split('\n') ?? []
     // 묶음마다 그릴 것과 차지할 줄 수(대략)를 함께 둔다.
-    const blocks: { el: RenderChildren; rows: number }[] = [
+    const blocks: { el: RenderChildren; rows: number; item?: number }[] = [
       {
         el: (
           <Text key="b-title" bold color={th.text}>
@@ -840,6 +863,7 @@ export const register: Register = (on, options) => {
             </Box>
           ),
           rows: textRows(`☐ ${i.text}`, cols - 2) + subs.reduce((sum, x) => sum + textRows(`   ${x.text}`, cols - 2), 0),
+          item: n,
         }
       }),
       tab.results?.length
@@ -886,7 +910,7 @@ export const register: Register = (on, options) => {
             rows: sectionRows('b-memo', memoLines.reduce((sum, line) => sum + textRows(`- ${line}`, cols - 2), 0)),
           }
         : undefined,
-    ].filter((x): x is { el: RenderChildren; rows: number } => x !== undefined)
+    ].filter((x): x is { el: RenderChildren; rows: number; item?: number } => x !== undefined)
     // 버튼 줄은 탭 줄 바로 아래, 본문과 따로 고정한다(본문을 내려도 그 자리).
     // 창 닫기 버튼은 두지 않는다([탭 지우기]와 헷갈림). 창은 /notes 를 다시 입력하거나 우상단 × 로 닫는다.
     const bar = buttonBar([{ key: 'remove', icon: BAR_ICON.remove, text: L.removeTab, onPress: remove }, ...historyButtons])
@@ -905,10 +929,17 @@ export const register: Register = (on, options) => {
     const isTerminal = e.surface === 'terminal'
     const isScrollable = isTerminal && total > avail
     if (isTerminal) maxScroll = isScrollable ? total - room + 1 : 0
-    const off = Math.min(Math.max(0, await read($, scroll)), maxScroll)
+    // 에이전트가 방금 넣거나 체크한 단계가 있으면 그 단계가 창 가운데 오게 내린 뒤 표시를 비운다(한 번만).
+    // 사람이 휠·버튼으로 옮긴 위치는 다음 변경 전까지 그대로 둔다.
+    const target = await read($, focus)
+    const pos = await read($, scroll)
+    const at = target.seq > pos.seq && target.tab === tab.title ? blocks.findIndex(x => x.item === target.item) : -1
+    const want = at < 0 ? pos.off : blocks.slice(0, at).reduce((sum, x) => sum + x.rows, 0) - Math.floor((room - blocks[at].rows) / 2)
+    const off = Math.min(Math.max(0, want), maxScroll)
+    if (isTerminal) shownOff = off
     const page = Math.max(1, room - 1)
-    const up = () => void update($, scroll, s => Math.max(0, Math.min(s, maxScroll) - page))
-    const down = () => void update($, scroll, s => Math.min(maxScroll, s + page))
+    const up = () => void moveScroll($, from => from - page)
+    const down = () => void moveScroll($, from => from + page)
     // 위·아래 표시: 기울인 글자에 배경색을 칠해 본문과 구별한다. 없을 때도 빈 줄로 자리를 지킨다.
     const pager = (key: string, text: string | undefined, onPress: () => void) => (
       <Box key={`${key}-row`} flexDirection="row" justifyContent="center">

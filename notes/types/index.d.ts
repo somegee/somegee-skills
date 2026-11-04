@@ -32,6 +32,7 @@ declare module 'claude-code' {
     // tick: 'N분 전 갱신' 이 흐르도록 30초마다 오르는 수.
     // folded: 접어 둔 구역, 키 = "<탭 이름>|<구역>".
     // live: 세션 id → 상태(탭 줄의 ●·💬 표시용).
-    notes: { book: NotesBook; scroll: number; tick: number; folded: Record<string, boolean>; live: Record<string, LiveState> }
+    // scroll: 본문을 내린 줄 수와 그때 반영한 focus 번호. focus: 에이전트가 마지막으로 넣거나 체크한 단계(창 가운데 맞춤용).
+    notes: { book: NotesBook; scroll: { off: number; seq: number }; focus: { tab: string; item: number; seq: number }; tick: number; folded: Record<string, boolean>; live: Record<string, LiveState> }
   }
 }
