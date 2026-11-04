@@ -1010,3 +1010,35 @@ test('●·💬 는 그 세션이 가장 최근에 고친 탭에만 켜지고, �
   expect(await ui.find({ type: 'Text', text: /^▶ ● 하던 일$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^\[ 새 일 \]$/ })).toBeDefined()
 })
+
+test('턴마다 처음 부르는 도구 결과 뒤에만 notes 알림이 붙고, notes 도구를 먼저 썼거나 서브에이전트면 안 붙는다', async ($, on) => {
+  fakeFiles(on)
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  await startSession($, on)
+  const hasReminder = (r: unknown) => ((r as { context?: string[] }).context ?? []).some(c => c.startsWith('[notes]'))
+
+  await $.turn.start({ text: '조사해줘', turnId: 't1' } as never)
+  expect(hasReminder(await $.tool.call({ tool: 'Bash', command: 'ls' } as never))).toBe(true)
+  expect(hasReminder(await $.tool.call({ tool: 'Bash', command: 'ls' } as never))).toBe(false)
+
+  // notes 도구를 먼저 쓴 턴은 알리지 않는다.
+  await $.turn.start({ text: '고쳐줘', turnId: 't2' } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '고치기', items: ['A'] } as never)
+  expect(hasReminder(await $.tool.call({ tool: 'Bash', command: 'ls' } as never))).toBe(false)
+
+  // 서브에이전트의 도구 호출에는 붙이지 않고, 메인 턴의 알림 기회도 쓰지 않는다.
+  await $.turn.start({ text: '다음', turnId: 't3' } as never)
+  expect(hasReminder(await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'a1' } as never))).toBe(false)
+  expect(hasReminder(await $.tool.call({ tool: 'Bash', command: 'ls' } as never))).toBe(true)
+})
+
+test('notes 도구를 등록하지 않은 헤드리스 세션에는 알림을 붙이지 않는다', async ($, on) => {
+  fakeFiles(on)
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  await startSession($, on, { isInteractive: false })
+  await $.turn.start({ text: '크론', turnId: 't1' } as never)
+  const r = (await $.tool.call({ tool: 'Bash', command: 'ls' } as never)) as { context?: string[] }
+  expect((r.context ?? []).some(c => c.startsWith('[notes]'))).toBe(false)
+})

@@ -146,6 +146,19 @@ const tabMark = (t: NoteTab, states: Record<string, LiveState>, latest: Map<stri
 const LIVE_BEAT_MS = 60000
 const LIVE_STALE_MS = 180000
 let myLive: { state: LiveState; at: number } = { state: 'idle', at: 0 }
+// 턴 첫 도구 알림: fresh = 이번 턴에 아직 알리지도 notes 도구를 쓰지도 않음, done = 알렸거나 썼음.
+let turnNotes: 'fresh' | 'done' = 'done'
+// notes 도구를 등록한 세션인지(헤드리스에서 설정을 안 켜면 등록하지 않는다).
+let hasTools = false
+const NOTES_TOOL_PREFIX = 'mcp__notes__'
+// 서버 안내(instructions) 칸은 엔진이 만드는 고정 문구라 mod 로 못 바꾸고, prompt.compose 는 회사 PC 보안 모듈이 건너뛴다.
+// 그래서 tool.call 결과의 context(모델만 읽고 사람에게는 안 보임)로 사용 규칙의 핵심을 턴마다 한 번 알린다.
+// 이번 턴에 notes 도구를 이미 썼으면 알리지 않는다. 서브에이전트 호출은 알리지도, 기회를 쓰지도 않는다.
+function shouldRemind(tool: string, agentId: string | undefined): boolean {
+  if (!hasTools || agentId !== undefined || turnNotes !== 'fresh') return false
+  turnNotes = 'done'
+  return !tool.startsWith(NOTES_TOOL_PREFIX)
+}
 const livePath = ($: EngineInterface, id: string) => `${dataDir($.plugin.root)}/live/${id.replace(/[^A-Za-z0-9-]/g, '')}.json`
 async function setLive($: EngineInterface, state: LiveState) {
   if (sessionId === '' || state === myLive.state) return
@@ -397,6 +410,7 @@ export const register: Register = (on, options) => {
   // 자동 모드에서 사람 대신 분류기가 답하는 경우까지 들어가 💬 가 잘못 켜진다.
   on('turn.start', async ($, e, next) => {
     await setLive($, 'working')
+    if (e.agentId === undefined) turnNotes = 'fresh'
     return next(e)
   })
   on('turn.complete', async ($, e, next) => {
@@ -408,10 +422,13 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined) await setLive($, 'ask')
     return next(e)
   })
+  // 턴마다 메인 에이전트가 처음 부르는 도구(notes 도구 말고)의 결과 뒤에 탭부터 만들 일인지 한 줄 알린다(shouldRemind).
   on('tool.call', async ($, e, next) => {
+    const isReminding = shouldRemind(e.tool, e.agentId)
     const result = await next(e)
     if (myLive.state === 'ask') await setLive($, 'working')
-    return result
+    if (!isReminding || result.deny !== undefined) return result
+    return { ...result, context: [...(result.context ?? []), L.turnReminder] }
   })
   on('session.end', async ($, e, next) => {
     await setLive($, 'idle')
@@ -434,6 +451,7 @@ export const register: Register = (on, options) => {
     if (options.autoOpen !== false && e.isInteractive) void openPane($)
 
     await $.command.register({ name: 'notes', description: L.command })
+    hasTools = true
     await $.tool.register({
       name: 'notes_write',
       isDeferred: false,

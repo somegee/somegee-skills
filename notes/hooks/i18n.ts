@@ -61,6 +61,9 @@ const GUIDE_EN = [
 
 const ko = {
   guide: GUIDE_KO,
+  // 턴마다 처음 부르는 도구 결과 뒤에 붙는 알림(모델만 읽음). 서버 안내 칸은 mod 로 못 바꾸고 시스템 프롬프트 훅은 회사 PC 에서 막혀서 이 길을 쓴다.
+  turnReminder:
+    '[notes] 이번 턴의 첫 도구 호출이다. 이 요청이 ① 할 일 2개 이상 ② 파일 수정·배포·게시 ③ 끝에 판단·선택지를 사용자에게 넘김 ④ 스킬 절차 진행 중 하나라도 해당하면, 다음 도구 호출 전에 notes_write 로 탭부터 만든다(이어지는 일이면 기존 탭에 add_items). 한 번 조회하고 답하면 끝나는 질문·잡담이면 무시한다.',
   // 갱신 시각
   justNow: '방금',
   minAgo: (n: number) => `${n}분 전`,
@@ -161,6 +164,8 @@ export type Strings = typeof ko
 
 const en: Strings = {
   guide: GUIDE_EN,
+  turnReminder:
+    '[notes] This is the first tool call of this turn. If the request (1) has 2 or more things to do, (2) edits files, deploys or posts, (3) ends by handing the user a decision or options, or (4) follows a skill procedure, create the tab with notes_write before your next tool call (append with add_items for follow-up work). Ignore this for a one-lookup question or small talk.',
   justNow: 'just now',
   minAgo: n => `${n} min ago`,
   hourAgo: n => `${n} h ago`,
