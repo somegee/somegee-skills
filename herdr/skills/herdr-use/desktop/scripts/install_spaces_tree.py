@@ -36,6 +36,7 @@ CLONE = "my-spaces"
 CLONE_JS = os.path.join(APP_HOME, "mods", CLONE, "main.js")
 TREE_MARK = "// ---- my-spaces ----"  # 트리 단계 표식 (있으면 그 단계 건너뜀)
 DRAG_MARK = "// ---- my-spaces drag ----"  # 끌어 옮기기 단계 표식
+RETRY_MARK = "// ---- my-spaces drag retry ----"  # 끌어 옮기기 재시도 단계 표식
 
 HELPERS = r'''
 // ---- my-spaces: 공간 아래 세션 목록 ----
@@ -274,6 +275,43 @@ DRAG_PATCHES = [
      ".on_mouse_up(\"left\", (_e, cx) => { this.pressed = null; this.dragAgent = null; this.dropOver = null; cx.notify(); })"),
 ]
 
+# park 가 끝나기 전에 keep 이 들어가면 keep 이 안 먹어 창 없는 세션이 된다(계속 돌지만 화면에서 사라짐).
+# → 원래 창이 없어질 때까지 기다린 뒤 keep, 새 창이 안 생기면 대상 공간을 다시 고르고 최대 4번 다시 붙인다.
+RETRY_OLD = """      await cx.sleep(300);
+      run("terminal.keep", { terminal: addr, place: "tab" });
+      for (let i = 0; i < 20; i++) {
+        await cx.sleep(150);
+        const p = panes().find((x) => x.terminal === addr);
+        if (!p) continue;
+        if (name) run("tab.rename", { id: p.tab, name });
+        run("pane.focus", { pane: p.pane });
+        break;
+      }
+"""
+RETRY_NEW = """      // ---- my-spaces drag retry ----
+      // park 가 끝나기 전에 keep 이 들어가면 keep 이 안 먹어 창 없는 세션이 된다(계속 돌지만 화면에서 사라짐).
+      // → 원래 창이 없어질 때까지 기다린 뒤 keep, 새 창이 안 생기면 대상 공간을 다시 고르고 최대 4번 다시 붙인다.
+      const paneOf = () => panes().find((x) => x.terminal === addr);
+      for (let i = 0; i < 20 && paneOf(); i++) await cx.sleep(150);
+      let p = null;
+      for (let tries = 0; tries < 4 && !p; tries++) {
+        if (tries) {
+          run("space.select", { id: target.id });
+          await cx.sleep(150);
+        }
+        run("terminal.keep", { terminal: addr, place: "tab" });
+        for (let i = 0; i < 10 && !p; i++) {
+          await cx.sleep(150);
+          p = paneOf();
+        }
+      }
+      if (p) {
+        if (name) run("tab.rename", { id: p.tab, name });
+        run("pane.focus", { pane: p.pane });
+      }
+"""
+RETRY_PATCHES = [(RETRY_OLD, RETRY_NEW)]
+
 HERDR_IMPORT = re.compile(r'import \{([^}]*)\} from "herdr";')
 
 
@@ -308,6 +346,8 @@ def patch(src):
         src = ensure_hc_import(apply(src, TREE_PATCHES))
     if DRAG_MARK not in src:
         src = apply(src, DRAG_PATCHES)
+    if RETRY_MARK not in src:
+        src = apply(src, RETRY_PATCHES)
     return src
 
 
