@@ -1,17 +1,18 @@
 # herdr 데스크톱 앱 커스텀 (Windows)
 
-herdr 데스크톱 앱(herdr-app)에 아래 7가지를 한 번에 깔아 주는 묶음입니다.
+herdr 데스크톱 앱(herdr-app)에 아래 8가지를 한 번에 깔아 주는 묶음입니다.
 다른 PC 에서도 이 폴더를 통째로 옮겨 `1_설치.bat` 을 더블클릭하면 됩니다.
 
 | # | 기능 | 어디서 보이나 |
 |---|---|---|
-| 1 | **기본 레이아웃을 내 것(`my-main`)으로 복제** — "설정해도 계속 기본값으로 돌아감" 해결. 아래 2~5 가 모두 이 위에 얹힘 | 화면 전체 |
+| 1 | **기본 레이아웃을 내 것(`my-main`)으로 복제** — "설정해도 계속 기본값으로 돌아감" 해결. 아래 2~8 이 모두 이 위에 얹힘 | 화면 전체 |
 | 2 | **`/rename` → 탭 이름 따라가기** — 세션 이름을 바꾸거나, 첫 대화 뒤 Claude 가 제목을 지으면 상단 탭 이름이 그걸로 바뀜 | 상단 탭 |
 | 3 | **Ctrl+Shift+V 이미지 붙여넣기** — 클립보드가 그림이면 PNG 로 저장해 경로를 붙여 Claude 가 그림으로 읽음 (글자면 그냥 글자) | 터미널 |
 | 4 | **좌하단 Agents 목록** — `공간이름 · 세션명` 대신 세션명만 + 작업 중인 세션 아래에 "지금 하는 일" | 좌하단 Agents |
 | 5 | **상단 탭 바** — 이름 없는 Claude 탭은 `2` 대신 `Claude Code` + 탭을 끌 때 놓일 자리에 점선 | 상단 탭 |
 | 6 | **우상단 `+` 메뉴에 `ccd` 버튼** — `claude --dangerously-skip-permissions` 로 새 탭 | 우상단 `+` |
 | 7 | **Ctrl+N → ccd 새 Claude 탭** — 6번과 같은 명령을 키 하나로 | 어디서든 Ctrl+N |
+| 8 | **좌상단 Spaces 접기/펼치기** — 공간 줄 왼쪽 ▾/▸ 로 그 공간의 세션 목록을 펼침. 세션마다 이름 + 상태(작업 중 도는 표시 / `Needs you` / 끝남 채운 점 / 쉬는 중 빈 동그라미), 작업 중이면 아래 작은 글씨로 하는 일. 세션 줄을 누르면 그 창으로 이동. 펼침 상태는 앱을 다시 켜도 유지(처음엔 선택된 공간만 펼침) | 좌상단 Spaces |
 
 ## 준비물
 
@@ -38,6 +39,7 @@ herdr 데스크톱 앱(herdr-app)에 아래 7가지를 한 번에 깔아 주는 
 | 5 | `+` 로 새 Claude 탭 → 탭 이름 `Claude Code` / 탭을 끌면 점선 |
 | 6 | 우상단 `+` → `ccd (Claude, 권한 확인 생략)` |
 | 7 | `Ctrl+N` → 지금 공간에 새 Claude 탭 **하나** (`Claude Code` 로 보임) |
+| 8 | 좌상단 공간 줄 왼쪽 ▾ 누르면 세션 목록이 접히고(▸) 다시 누르면 펼쳐짐 — 이때 **선택된 공간은 안 바뀜** / 세션 줄 누르면 그 창으로 이동 / 앱 껐다 켜도 펼침·접힘 그대로 / 공간을 끌어 순서 바꾸기도 그대로 됨 / 세션 없는 공간엔 버튼 없음 |
 
 이 동작들은 SSH 나 `hc send` 로는 시험할 수 없고, 그 PC 앞에서 직접 눌러야 합니다.
 
@@ -45,7 +47,7 @@ herdr 데스크톱 앱(herdr-app)에 아래 7가지를 한 번에 깔아 주는 
 
 - **`2_상태확인.bat`** — 아무것도 바꾸지 않고 지금 상태만 보여 줌
 - **`3_되돌리기.bat`** — 전부 해제하고 기본 레이아웃(`main`)으로 돌아감. 복제본 파일은 남겨 둠
-- **완전 삭제** — 되돌리기 후 `%USERPROFILE%\.config\herdr-app\` 에서 `layouts\my-main.json`, `mods\my-agents\`, `mods\my-tabs\` 를 지움
+- **완전 삭제** — 되돌리기 후 `%USERPROFILE%\.config\herdr-app\` 에서 `layouts\my-main.json`, `mods\my-agents\`, `mods\my-tabs\`, `mods\my-spaces\` 를 지움
 - 화면이 망가졌을 때 비상 탈출: 앱에서 **`Ctrl+Alt+Shift+Esc`** (기본 화면으로 복귀)
 
 ## 알아 둘 점
@@ -64,11 +66,11 @@ herdr 데스크톱 앱(herdr-app)에 아래 7가지를 한 번에 깔아 주는 
 커스텀은 **날아가지 않고** 업데이트도 정상 적용됩니다(업데이트가 덮어쓰는 건 기본 파일뿐). 대신 복제본에는 새 버전의 기본 화면 개선이 안 들어옵니다.
 
 1. `2_상태확인.bat` — 오류 없고 화면 정상이면 **할 일 없음**.
-2. 새 버전의 탭 바·Agents 개선을 받고 싶거나 화면이 깨졌으면:
+2. 새 버전의 탭 바·Agents·Spaces 개선을 받고 싶거나 화면이 깨졌으면:
    1. 앱에서 `Ctrl+Shift+L` 로 `main` 레이아웃으로 전환 (또는 `Ctrl+Alt+Shift+Esc`)
-   2. `%USERPROFILE%\.config\herdr-app\` 의 `layouts\my-main.json`, `mods\my-agents\`, `mods\my-tabs\` 를 다른 폴더로 옮김(백업)
+   2. `%USERPROFILE%\.config\herdr-app\` 의 `layouts\my-main.json`, `mods\my-agents\`, `mods\my-tabs\`, `mods\my-spaces\` 를 다른 폴더로 옮김(백업)
    3. `1_설치.bat` 다시 실행 → 새 버전을 다시 복제하고 수정만 다시 얹음
-- 기본 mod 코드가 크게 바뀌면 스크립트가 **"고칠 문장을 못 찾음"** 으로 멈춥니다(엉뚱하게 고친 채로 남지 않음). 그때는 `scripts\install_agents_name_only.py` / `install_tabs_agent_name.py` 의 `PATCHES` 를 새 코드에 맞춰야 합니다.
+- 기본 mod 코드가 크게 바뀌면 스크립트가 **"고칠 문장을 못 찾음"** 으로 멈춥니다(엉뚱하게 고친 채로 남지 않음). 그때는 `scripts\install_agents_name_only.py` / `install_tabs_agent_name.py` / `install_spaces_tree.py` 의 `PATCHES` 를 새 코드에 맞춰야 합니다.
 
 ## 폴더 구성
 
@@ -82,7 +84,8 @@ herdr-custom/
 │   ├── install_agents_name_only.py 4
 │   ├── install_tabs_agent_name.py  5
 │   ├── install_ccd_button.py       6
-│   └── install_ccd_key.py          7
+│   ├── install_ccd_key.py          7
+│   └── install_spaces_tree.py      8
 └── assets/
     ├── title-sync/                 mod 원본 (main.js, mod.json)
     ├── image-paste/                mod 원본 + clipimg.cs (설치 때 빌드)
@@ -90,4 +93,4 @@ herdr-custom/
 ```
 
 
-2026-11-04, herdr-core 0.1.16 기준으로 만들고 0.1.17 에서 확인함.
+2026-11-04, herdr-core 0.1.16 기준으로 만들고 0.1.17 에서 확인함. 8번은 2026-11-05 herdr-app 0.1.13 에서 시험 적용으로 확인함.

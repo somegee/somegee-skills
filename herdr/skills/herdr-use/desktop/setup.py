@@ -27,6 +27,7 @@ STEPS = [
     ("my-tabs", "install_tabs_agent_name.py", "상단 탭: 이름 없는 Claude 탭은 'Claude Code' + 드래그 시 점선"),
     ("ccd 버튼", "install_ccd_button.py", "우상단 + 메뉴에 ccd (claude --dangerously-skip-permissions)"),
     ("Ctrl+N", "install_ccd_key.py", "Ctrl+N 으로 ccd 새 Claude 탭"),
+    ("my-spaces", "install_spaces_tree.py", "좌상단 Spaces: ▾/▸ 로 공간별 세션 목록·상태 펼치기"),
 ]
 
 
@@ -65,7 +66,7 @@ def check():
     layout = st.get("layout")
     print("지금 레이아웃:", layout, "(my-main 이어야 커스텀이 보임)")
     print("앱 오류:", st.get("errors") or "없음")
-    for mod in ("title-sync", "image-paste", "my-agents", "my-tabs", "ccd-key"):
+    for mod in ("title-sync", "image-paste", "my-agents", "my-tabs", "ccd-key", "my-spaces"):
         n = count_mod(layout, mod)
         print("  %-12s 칸 %d개 %s" % (mod, n, "OK" if n == 1 else ("없음" if n == 0 else "중복! 하나만 남겨야 함")))
     try:
@@ -105,7 +106,7 @@ def remove():
         print("\n[되돌림]", name)
         run_step(script, "--remove")
     subprocess.run([app_exe(), "do", "layout.switch", json.dumps({"name": "main"})])
-    print("\n기본 레이아웃(main)으로 전환함. 복제본(layouts/my-main.json, mods/my-agents, mods/my-tabs)은 남겨 둠 —"
+    print("\n기본 레이아웃(main)으로 전환함. 복제본(layouts/my-main.json, mods/my-agents, mods/my-tabs, mods/my-spaces)은 남겨 둠 —"
           " 완전히 지우려면 README 의 '완전 삭제' 참고.")
 
 
