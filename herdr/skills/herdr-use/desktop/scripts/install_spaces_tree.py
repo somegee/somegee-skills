@@ -4,6 +4,8 @@
 - 세션 줄: 세션명(my-agents 와 같은 규칙) + 오른쪽 상태(작업 중 스피너 / Needs you / 끝남 / 쉬는 중).
   작업 중이면 아래 작은 글씨로 hc get --json 의 status.msg (3초 간격, 펼친 공간의 작업 중 세션만).
 - 세션 줄을 누르면 그 창으로 이동(pane.focus). 사이드바가 좁은(compact) 모드에선 기존 그대로.
+- 세션 줄을 끌어 다른 공간 줄(또는 그 공간의 세션 줄) 위에 놓으면 그 공간으로 옮긴다(같은 기기만, 프로그램은 안 끊김).
+  놓일 공간 줄엔 점선 테두리. 옮긴 뒤엔 그 공간을 펼치고 옮긴 창으로 이동. 목록 밖에 놓으면 취소.
 
 기본 spaces mod 는 읽기 전용(앱 시작 때 원본 복구)이라 my-spaces 로 복제해 고치고,
 내 레이아웃이 my-spaces 를 쓰게 바꾼다.
@@ -12,6 +14,8 @@
 
 기본 mod 가 업데이트돼 고칠 문장을 못 찾으면 멈춘다 → mods/spaces/main.js 를 보고 PATCHES 를 맞춘다.
 `this.refreshMachines(cx);` 는 원본에 2번 나와서 앵커로 못 쓴다 → 15000 타이머 줄을 앵커로 쓴다.
+고치기는 두 단계(트리 → 끌어 옮기기)이고 단계마다 표식이 있어, 트리만 깔린 파일엔 끌어 옮기기만 더한다.
+앱 판마다 원본 문장이 조금 달라(0.1.11 은 공간을 번호 i 로, 0.1.13 은 id 로 다룸) 몇 패치는 대안 문장을 둔다.
 """
 import io
 import json
@@ -30,7 +34,8 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 BASE = "spaces"
 CLONE = "my-spaces"
 CLONE_JS = os.path.join(APP_HOME, "mods", CLONE, "main.js")
-MARK = "// ---- my-spaces ----"  # 이 표식이 있으면 이미 고친 파일 → 건너뜀
+TREE_MARK = "// ---- my-spaces ----"  # 트리 단계 표식 (있으면 그 단계 건너뜀)
+DRAG_MARK = "// ---- my-spaces drag ----"  # 끌어 옮기기 단계 표식
 
 HELPERS = r'''
 // ---- my-spaces: 공간 아래 세션 목록 ----
@@ -145,7 +150,7 @@ METHODS = r'''
 
   render() {'''
 
-PATCHES = [
+TREE_PATCHES = [
     ("import { spaces, machines, panes, run,", "import { spaces, machines, panes, agents, focused, run,"),
     ("export default class Spaces extends View {", HELPERS + "\nexport default class Spaces extends View {"),
     # this.refreshMachines(cx); 는 원본에 2번 나와 앵커로 못 씀 → 15000 타이머 줄
@@ -165,6 +170,110 @@ PATCHES = [
     ("\n  render() {", METHODS),
 ]
 
+# 앱엔 탭을 다른 공간으로 옮기는 명령이 없다(tab.move 는 같은 공간 안 순서만).
+# → 대상 공간 선택 → terminal.park(창만 떼고 계속 실행, 빈 원래 탭은 앱이 지움)
+# → terminal.keep(선택된 공간에 새 탭) → keep 탭은 이름이 터미널 주소(t18 등)라 원래 이름 복원.
+# mod 의 run() 은 null 을 돌려줘 새 탭 id 를 못 받는다 → cx.sleep 으로 기다리며 panes() 에서 찾는다.
+MOVE = r'''
+  // ---- my-spaces drag ----
+  // 앱엔 탭을 다른 공간으로 옮기는 명령이 없다 → 대상 공간 선택 → terminal.park(창만 떼고 계속 실행)
+  // → terminal.keep(선택된 공간에 새 탭) → 원래 탭 이름 복원. 다른 기기 공간으로는 못 옮긴다.
+  canDrop(w) {
+    if (!this.dragAgent) return false;
+    const a = agents().find((x) => x.address === this.dragAgent);
+    if (!a || a.space === w.id) return false;
+    const src = spaces().find((s) => s.id === a.space);
+    return (src?.machine ?? null) === (w.machine ?? null);
+  }
+
+  dragOver(w, cx) {
+    const over = this.canDrop(w) ? w.id : null;
+    if (this.dragAgent && this.dropOver !== over) {
+      this.dropOver = over;
+      cx.notify();
+    }
+  }
+
+  drop(w, cx) {
+    const addr = this.dragAgent;
+    const ok = addr && this.dropOver === w.id && this.canDrop(w);
+    this.dragAgent = null;
+    this.dropOver = null;
+    if (ok) this.moveAgent(addr, w, cx);
+    cx.notify();
+    return ok;
+  }
+
+  moveAgent(addr, target, cx) {
+    const a = agents().find((x) => x.address === addr);
+    if (!a) return;
+    const src = spaces().find((s) => s.id === a.space);
+    const tab = (src?.tabs ?? []).find((x) => x.id === a.tab);
+    const name = tab?.named ? tab.name : "";
+    this.openState[target.id] = true;
+    localStorage.setItem("spaces.open", JSON.stringify(this.openState));
+    cx.spawn(async (cx) => {
+      run("space.select", { id: target.id });
+      await cx.sleep(150);
+      run("terminal.park", { terminal: addr });
+      await cx.sleep(300);
+      run("terminal.keep", { terminal: addr, place: "tab" });
+      for (let i = 0; i < 20; i++) {
+        await cx.sleep(150);
+        const p = panes().find((x) => x.terminal === addr);
+        if (!p) continue;
+        if (name) run("tab.rename", { id: p.tab, name });
+        run("pane.focus", { pane: p.pane });
+        break;
+      }
+      cx.notify();
+    });
+  }
+
+  sessionRows(w, t) {'''
+
+DROP_BORDER = "      .when(this.dropOver === w.id, (el) => el.border(1.5).border_dashed().border_color(t.accent).bg(t.hover))\n"
+OPACITY_013 = "      .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))\n"
+OPACITY_011 = "      .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))\n"
+MOVE_013 = "      .on_mouse_move((_e, cx) => {\n        const source = spaces().find(s => s.id === this.pressed);"
+MOVE_011 = "      .on_mouse_move((_e, cx) => {\n        const source = spaces()[this.pressed];"
+
+
+def after_first_line(old, add):
+    """old 의 첫 줄 뒤에 add 를 끼운다 (old 는 '\n' 으로 줄이 나뉨)."""
+    head, rest = old.split("\n", 1)
+    return head + "\n" + add + rest
+
+
+# 항목이 리스트면 대안들 — 그중 정확히 1번 나오는 하나에만 적용한다
+DRAG_PATCHES = [
+    ("    this.msgs = new Map();\n",
+     "    this.msgs = new Map();\n"
+     "    this.dragAgent = null; // 끄는 중인 세션 주소\n"
+     "    this.dropOver = null; // 놓일 공간 id\n"),
+    ("\n  sessionRows(w, t) {", MOVE),
+    # 공간 줄: 놓일 자리 점선 + 위로 지나갈 때 / 놓을 때
+    [(OPACITY_013, OPACITY_013 + DROP_BORDER), (OPACITY_011, OPACITY_011 + DROP_BORDER)],
+    [(MOVE_013, after_first_line(MOVE_013, "        this.dragOver(w, cx);\n")),
+     (MOVE_011, after_first_line(MOVE_011, "        this.dragOver(w, cx);\n"))],
+    ("      .on_mouse_up(\"left\", (_e, cx) => {\n        const from = this.pressed;",
+     "      .on_mouse_up(\"left\", (_e, cx) => {\n"
+     "        if (this.drop(w, cx)) { this.pressed = null; this.over = null; return; }\n"
+     "        const from = this.pressed;"),
+    # 세션 줄: 끌기 시작 / 다른 공간 세션 위도 그 공간으로 / 끄는 중이면 흐리게
+    ("        .when(on, (el) => el.bg(t.raised))\n        .hover((s) => s.bg(t.hover))\n"
+     "        .on_click(() => run(\"pane.focus\", { pane: a.pane }))",
+     "        .when(on, (el) => el.bg(t.raised))\n        .hover((s) => s.bg(t.hover))\n"
+     "        .when(this.dragAgent === a.address && this.dropOver, (el) => el.opacity(0.5))\n"
+     "        .on_mouse_down(\"left\", () => { this.dragAgent = a.address; this.dropOver = null; })\n"
+     "        .on_mouse_move((_e, cx) => this.dragOver(w, cx))\n"
+     "        .on_mouse_up(\"left\", (_e, cx) => { if (this.dropOver) this.drop(w, cx); })\n"
+     "        .on_click(() => run(\"pane.focus\", { pane: a.pane }))"),
+    # 목록 밖에서 놓으면 취소
+    (".on_mouse_up(\"left\", (_e, cx) => { this.pressed = null; cx.notify(); })",
+     ".on_mouse_up(\"left\", (_e, cx) => { this.pressed = null; this.dragAgent = null; this.dropOver = null; cx.notify(); })"),
+]
+
 HERDR_IMPORT = re.compile(r'import \{([^}]*)\} from "herdr";')
 
 
@@ -180,16 +289,26 @@ def ensure_hc_import(src):
     return src[:m.start(1)] + body + ", hc " + src[m.end(1):]
 
 
-def patch(src):
-    if MARK in src:
-        return src  # 이미 고친 파일 (시험 적용본 포함)
-    for old, new in PATCHES:
-        if new in src:
+def apply(src, patches):
+    for entry in patches:
+        alts = entry if isinstance(entry, list) else [entry]
+        if any(new in src for _, new in alts):
             continue
-        if src.count(old) != 1:
-            sys.exit("고칠 문장을 못 찾음(기본 spaces mod 가 바뀐 듯): " + old.strip()[:80])
+        hits = [(old, new) for old, new in alts if src.count(old) == 1]
+        if len(hits) != 1:
+            sys.exit("고칠 문장을 못 찾음(기본 spaces mod 가 바뀐 듯): " + alts[0][0].strip()[:80])
+        old, new = hits[0]
         src = src.replace(old, new)
-    return ensure_hc_import(src)
+    return src
+
+
+def patch(src):
+    """단계마다 표식을 보고, 없는 단계만 더한다 (시험 적용본 포함 몇 번 돌려도 같은 결과)."""
+    if TREE_MARK not in src:
+        src = ensure_hc_import(apply(src, TREE_PATCHES))
+    if DRAG_MARK not in src:
+        src = apply(src, DRAG_PATCHES)
+    return src
 
 
 def install():

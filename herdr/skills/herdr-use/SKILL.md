@@ -66,7 +66,7 @@ K="$(ls -d ~/.claude/plugins/cache/*/herdr/*/skills/herdr-use 2>/dev/null | tail
 | 5 | 상단 탭: 이름 없는 Claude 탭은 `Claude Code` + 끌 때 점선 (my-tabs) | `install_tabs_agent_name.py` |
 | 6 | 우상단 `+` 메뉴에 ccd(`claude --dangerously-skip-permissions`) | `install_ccd_button.py` |
 | 7 | Ctrl+N → ccd 새 Claude 탭 (ccd-key mod) | `install_ccd_key.py` |
-| 8 | 좌상단 Spaces: ▾/▸로 공간별 세션 목록 펼치기 + 세션 상태·작업 중이면 하는 일, 누르면 그 창으로 (my-spaces) | `install_spaces_tree.py` |
+| 8 | 좌상단 Spaces: ▾/▸로 공간별 세션 목록 펼치기 + 세션 상태·작업 중이면 하는 일, 누르면 그 창으로, 세션을 끌어 다른 공간으로 옮기기(같은 기기만) (my-spaces) | `install_spaces_tree.py` |
 
 - 전부: `python "$K/desktop/setup.py"` / 상태만: `--check` / 전부 되돌리기: `--remove`. 하나만: `python "$K/desktop/scripts/<스크립트>"`(`--remove`로 개별 해제).
 - 이미 기본 레이아웃이 아닌 내 레이아웃(예: 직접 복제한 것)을 쓰는 중이면 **새로 복제하지 않고 그 레이아웃에 얹는다.** `--check`의 "my-main 이어야" 문구는 그 경우 무시.
@@ -78,7 +78,8 @@ K="$(ls -d ~/.claude/plugins/cache/*/herdr/*/skills/herdr-use 2>/dev/null | tail
 - **단축키가 mod를 가리키면 앱이 그 mod 칸을 스스로 넣는다.** 손으로 또 넣으면 두 번 동작한다(그림 두 장). 설치 스크립트는 중복이면 하나만 남긴다.
 - mod는 **레이아웃에 칸이 있어야 돈다**(높이 0 칸이면 화면엔 안 보임).
 - 4·5·8은 기본 mod 코드의 문장을 찾아 고친다. 앱 업데이트로 문장이 바뀌면 "고칠 문장을 못 찾음"으로 멈춘다(엉뚱하게 고친 채 남지 않음) → 그 스크립트의 `PATCHES`를 새 `mods/agents|tabs|spaces/main.js`에 맞춘다. 복제본은 앱 업데이트의 화면 개선을 안 받는다 — 받으려면 README 「herdr 업데이트 후」.
-- 8번 앵커 함정: 원본 spaces `main.js`에 `this.refreshMachines(cx);`가 **2번** 나와 앵커로 못 쓴다 → 15000 타이머 줄(`cx.timer.every(15000, …)`)을 앵커로 쓴다. 이미 고친 파일은 `// ---- my-spaces ----` 표식으로 통째로 건너뛴다(시험 적용본 포함).
+- 8번 앵커 함정: 원본 spaces `main.js`에 `this.refreshMachines(cx);`가 **2번** 나와 앵커로 못 쓴다 → 15000 타이머 줄(`cx.timer.every(15000, …)`)을 앵커로 쓴다. 고치기는 두 단계(트리 `// ---- my-spaces ----` → 끌어 옮기기 `// ---- my-spaces drag ----`)라 표식 없는 단계만 더한다(트리만 깔린 PC엔 끌어 옮기기만). 앱 판마다 원본 문장이 달라(0.1.11은 공간을 번호 `i`, 0.1.13은 `w.id`로 다룸) 몇 패치는 대안 문장을 둔다.
+- **앱엔 탭을 다른 공간으로 옮기는 명령이 없다**(`tab.move`는 같은 공간 안 순서만). 8번은 `space.select`(대상) → `terminal.park`(창만 떼고 계속 실행, 빈 원래 탭은 앱이 지움) → `terminal.keep {place:"tab"}`(선택된 공간에 새 탭) → keep 탭 이름이 터미널 주소(t18 등)가 되므로 원래 이름이면 `tab.rename`으로 복원. mod의 `run()`은 null을 돌려줘 새 탭 id를 못 받는다 → `cx.sleep`으로 기다리며 `panes()`에서 그 터미널의 pane·tab을 찾는다.
 - **Ctrl+N은 앱이 먼저 받는다**(터미널 안에서도) → Claude 입력 기록 이동은 ↓ 키로. Ctrl+N이 이미 다른 동작에 걸려 있으면 설치가 멈춘다. 한 번 안 먹다가 앱 창을 선택하고 다시 누르니 된 사례가 있다(원인 미확인, 한/영 상태일 수 있음).
 - ccd 탭은 **공간(space)의 폴더**에서 열린다(PowerShell `ccd` 함수를 부르지 않음 — herdr는 bash/zsh 함수만 설치 확인을 해서 PowerShell 함수는 "not installed"로 보임).
 - 그림 붙여넣기: 앱은 Windows 로컬 창에 클립보드 **글자만** 붙인다. mod가 `clipimg.exe`(설치 때 .NET Framework 4 `csc.exe`로 빌드, 인터넷 안 씀)로 그림을 `C:\Users\Public\herdr-paste\paste-*.png`에 저장하고 클립보드를 '복사한 파일'로 바꾼 뒤 `terminal.paste` → 경로가 들어가고 Claude가 그림으로 읽는다. 원격 창이면 바로 `terminal.paste`(앱이 그림을 그 기기로 복사). 붙인 뒤 클립보드엔 그림 대신 파일이 남는다. Claude 자체 Alt+V는 PowerShell을 띄워 느려서 안 쓴다.
