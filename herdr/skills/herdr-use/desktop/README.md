@@ -63,7 +63,7 @@ herdr 데스크톱 앱(herdr-app)에 아래 8가지를 한 번에 깔아 주는 
 
 ## herdr 업데이트 후
 
-커스텀은 **날아가지 않고** 업데이트도 정상 적용됩니다(업데이트가 덮어쓰는 건 기본 파일뿐). 대신 복제본에는 새 버전의 기본 화면 개선이 안 들어옵니다.
+커스텀은 **날아가지 않고** 업데이트도 정상 적용됩니다(업데이트가 덮어쓰는 건 기본 파일뿐). 4·5·8번 복제본(my-agents·my-tabs·my-spaces)은 설치할 때마다 새 기본 mod 에서 다시 만들어지므로, `1_설치.bat` 을 한 번 더 돌리면 새 버전의 기본 화면 개선도 들어옵니다. 복제본 `main.js` 를 손으로 고친 내용은 그때 사라지니, 고칠 땐 `scripts\` 의 설치 스크립트를 고치세요.
 
 1. `2_상태확인.bat` — 오류 없고 화면 정상이면 **할 일 없음**.
 2. 새 버전의 탭 바·Agents·Spaces 개선을 받고 싶거나 화면이 깨졌으면:
@@ -85,7 +85,8 @@ herdr-custom/
 │   ├── install_tabs_agent_name.py  5
 │   ├── install_ccd_button.py       6
 │   ├── install_ccd_key.py          7
-│   └── install_spaces_tree.py      8
+│   ├── install_spaces_tree.py      8
+│   └── patchlib.py                 4·5·8 공용: 원본 mod 에서 다시 고쳐 복제본 덮어쓰기
 └── assets/
     ├── title-sync/                 mod 원본 (main.js, mod.json)
     ├── image-paste/                mod 원본 + clipimg.cs (설치 때 빌드)

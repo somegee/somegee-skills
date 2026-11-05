@@ -7,30 +7,30 @@
   python install_agents_name_only.py            # 적용 (멱등)
   python install_agents_name_only.py --remove   # 기본 agents 로 되돌림 (my-agents 폴더는 남김)
 
-기본 mod 가 업데이트돼 고칠 문장을 못 찾으면 멈춘다 → mods/agents/main.js 를 보고 PATCHES 를 맞춘다.
+설치할 때마다 원본 mods/agents/main.js 에서 다시 고쳐 덮어쓴다(patchlib). 기본 mod 가 업데이트돼
+고칠 문장을 못 찾으면 멈춘다 → 원본을 보고 PATCHES 를 맞춘다.
 """
-import io
-import json
 import os
-import subprocess
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from install_title_sync import APP_HOME, app_exe, children_lists, ensure_own_layout, load, save  # noqa: E402
+from install_title_sync import children_lists, ensure_own_layout, load, save  # noqa: E402
+from patchlib import apply_patches, rebuild  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+BASE = "agents"
 CLONE = "my-agents"
-CLONE_JS = os.path.join(APP_HOME, "mods", CLONE, "main.js")
 NL = "\n"
 
 # '지금 하는 일' 읽기: agents() 에는 msg 가 없어서 hc get <주소> --json 의 status.msg 를 3초마다 읽는다.
+# 읽은 결과는 shared("agent.msgs") 로도 내놓는다 → my-spaces 는 따로 hc get 을 돌리지 않고 이걸 쓴다.
 POLL_METHOD = NL.join([
     "    cx.timer.every(30000, (cx) => cx.notify());",
     "    this.msgs = new Map();",
+    '    setShared("agent.msgs", {}); // 앱을 다시 켰을 때 남아 있던 옛 글을 비운다',
     "    this.pollMsgs(cx);",
-    "    cx.timer.every(3000, (cx) => this.pollMsgs(cx));",
+    "    cx.timer.every(MSG_POLL_MS, (cx) => this.pollMsgs(cx));",
     "  }",
     "",
     "  pollMsgs(cx) {",
@@ -45,12 +45,19 @@ POLL_METHOD = NL.join([
     '          const r = await hc(["get", a.address, "--json"]);',
     "          const msg = r.code === 0 ? JSON.parse(r.stdout)?.status?.msg : null;",
     "          if (msg) next.set(a.address, String(msg));",
-    "        } catch (_e) {}",
+    "        } catch (_e) {",
+    "          // 한 번 못 읽으면(세션이 막 끝남·응답 깨짐) 지난 글을 그대로 둔다 — 다음 차례(3초)에 다시 읽는다",
+    "          const prev = this.msgs.get(a.address);",
+    "          if (prev) next.set(a.address, prev);",
+    "        }",
     "      }",
     "      this.polling = false;",
     "      const same = next.size === this.msgs.size && [...next].every(([k, v]) => this.msgs.get(k) === v);",
     "      this.msgs = next;",
-    "      if (!same) cx.notify();",
+    "      if (!same) {",
+    '        setShared("agent.msgs", Object.fromEntries(next));',
+    "        cx.notify();",
+    "      }",
     "    });",
     "  }",
 ])
@@ -62,7 +69,8 @@ PATCHES = [
     (".when(full && Boolean(more), el =>", ".when(false, el =>"),
     # 이하 '지금 하는 일'
     ('closeOverlay, props, window, layout } from "herdr";',
-     'closeOverlay, props, window, layout, hc } from "herdr";'),
+     'closeOverlay, props, window, layout, hc } from "herdr";' + NL
+     + 'const MSG_POLL_MS = 3000; // 지금 하는 일을 다시 읽는 간격'),
     ("    cx.timer.every(30000, (cx) => cx.notify());" + NL + "  }", POLL_METHOD),
     ("      const full = byPriority || isPinned;" + NL,
      "      const full = byPriority || isPinned;" + NL
@@ -75,7 +83,7 @@ PATCHES = [
 ]
 
 
-def point_layout(name, frm, to):
+def point_layout(name: str, frm: str, to: str) -> int:
     layout = load(name)
     n = 0
     for lst in children_lists(layout):
@@ -89,37 +97,23 @@ def point_layout(name, frm, to):
     return n
 
 
-def patch(src):
-    for old, new in PATCHES:
-        if new in src:
-            continue  # 이미 고침 (new 가 old 를 품는 패치도 있어 new 로만 판정)
-        if src.count(old) != 1:
-            sys.exit("고칠 문장을 못 찾음(기본 mod 가 바뀐 듯): " + old[:80])
-        src = src.replace(old, new)
+def build(src: str) -> str:
+    src = apply_patches(src, PATCHES, BASE)
+    if "setShared" not in src.split('from "herdr";')[0]:
+        src = src.replace(', hc } from "herdr";', ', hc, setShared } from "herdr";', 1)
     return src
 
 
-def install():
+def install() -> None:
     target = ensure_own_layout()
-    if not os.path.exists(CLONE_JS):
-        subprocess.run([app_exe(), "do", "mod.clone", json.dumps({"name": "agents", "as": CLONE})], check=True)
-        for _ in range(20):
-            if os.path.exists(CLONE_JS):
-                break
-            time.sleep(0.25)
-    with io.open(CLONE_JS, encoding="utf-8") as f:
-        src = f.read()
-    new = patch(src)
-    if new != src:
-        with io.open(CLONE_JS, "w", encoding="utf-8") as f:
-            f.write(new)
-    n = point_layout(target, "agents", CLONE)
-    print("적용 완료: 레이아웃", target, "/ agents → my-agents 연결", n, "곳", "(코드 변경 없음)" if new == src else "(코드 고침)")
+    changed = rebuild(BASE, CLONE, build)
+    n = point_layout(target, BASE, CLONE)
+    print("적용 완료: 레이아웃", target, "/ agents → my-agents 연결", n, "곳", "(코드 고침)" if changed else "(코드 변경 없음)")
 
 
-def remove():
+def remove() -> None:
     target = ensure_own_layout()
-    print("되돌림:", point_layout(target, CLONE, "agents"), "곳 (레이아웃 " + target + ")")
+    print("되돌림:", point_layout(target, CLONE, BASE), "곳 (레이아웃 " + target + ")")
 
 
 if __name__ == "__main__":

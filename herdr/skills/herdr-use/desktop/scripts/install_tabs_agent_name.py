@@ -6,23 +6,20 @@
 기본 tabs mod 는 읽기 전용이라 my-tabs 로 복제해 고치고, 내 레이아웃이 my-tabs 를 쓰게 바꾼다.
   python install_tabs_agent_name.py            # 적용 (멱등)
   python install_tabs_agent_name.py --remove   # 기본 tabs 로 되돌림 (my-tabs 폴더는 남김)
+설치할 때마다 원본 mods/tabs/main.js 에서 다시 고쳐 덮어쓴다(patchlib).
 """
-import io
-import json
 import os
-import subprocess
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from install_title_sync import APP_HOME, app_exe, ensure_own_layout  # noqa: E402
+from install_title_sync import ensure_own_layout  # noqa: E402
 from install_agents_name_only import point_layout  # noqa: E402
+from patchlib import apply_patches, rebuild  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "tabs"
 CLONE = "my-tabs"
-CLONE_JS = os.path.join(APP_HOME, "mods", CLONE, "main.js")
 NL = "\n"
 PATCHES = [
     # 이름 없는 에이전트 탭은 번호 대신 프로그램 이름
@@ -50,31 +47,14 @@ PATCHES = [
 ]
 
 
-def install():
+def install() -> None:
     target = ensure_own_layout()
-    if not os.path.exists(CLONE_JS):
-        subprocess.run([app_exe(), "do", "mod.clone", json.dumps({"name": BASE, "as": CLONE})], check=True)
-        for _ in range(20):
-            if os.path.exists(CLONE_JS):
-                break
-            time.sleep(0.25)
-    with io.open(CLONE_JS, encoding="utf-8") as f:
-        src = f.read()
-    new = src
-    for old, rep in PATCHES:
-        if rep in new:
-            continue
-        if new.count(old) != 1:
-            sys.exit("고칠 문장을 못 찾음(기본 tabs mod 가 바뀐 듯): " + old)
-        new = new.replace(old, rep)
-    if new != src:
-        with io.open(CLONE_JS, "w", encoding="utf-8") as f:
-            f.write(new)
+    changed = rebuild(BASE, CLONE, lambda src: apply_patches(src, PATCHES, BASE))
     n = point_layout(target, BASE, CLONE)
-    print("적용 완료: 레이아웃", target, "/ tabs → my-tabs 연결", n, "곳", "(코드 변경 없음)" if new == src else "(코드 고침)")
+    print("적용 완료: 레이아웃", target, "/ tabs → my-tabs 연결", n, "곳", "(코드 고침)" if changed else "(코드 변경 없음)")
 
 
-def remove():
+def remove() -> None:
     target = ensure_own_layout()
     print("되돌림:", point_layout(target, CLONE, BASE), "곳 (레이아웃 " + target + ")")
 

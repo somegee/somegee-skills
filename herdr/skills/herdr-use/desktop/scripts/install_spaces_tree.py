@@ -2,44 +2,51 @@
 - 공간 줄 왼쪽 ▾/▸ 버튼으로 그 공간의 세션 목록을 펼치고 접는다(공간 선택·끌어서 순서 바꾸기와 안 겹침).
 - 펼침 상태는 앱을 다시 켜도 유지(mod localStorage "spaces.open"). 기본값: 선택된 공간만 펼침.
 - 세션 줄: 세션명(my-agents 와 같은 규칙) + 오른쪽 상태(작업 중 스피너 / Needs you / 끝남 / 쉬는 중).
-  작업 중이면 아래 작은 글씨로 hc get --json 의 status.msg (3초 간격, 펼친 공간의 작업 중 세션만).
+  작업 중이면 아래 작은 글씨로 지금 하는 일(status.msg).
 - 세션 줄을 누르면 그 창으로 이동(pane.focus). 사이드바가 좁은(compact) 모드에선 기존 그대로.
 - 세션 줄을 끌어 다른 공간 줄(또는 그 공간의 세션 줄) 위에 놓으면 그 공간으로 옮긴다(같은 기기만, 프로그램은 안 끊김).
-  놓일 공간 줄엔 점선 테두리. 옮긴 뒤엔 그 공간을 펼치고 옮긴 창으로 이동. 목록 밖에 놓으면 취소.
+  놓일 공간 줄엔 점선 테두리. 옮긴 뒤엔 그 공간을 펼치고 옮긴 창으로 이동.
+  목록 안 빈 곳에 놓거나, 목록 밖으로 나가거나, 밖을 누르면 취소. 못 옮기면 알림을 띄우고 원래 공간에 되돌린다.
 
 기본 spaces mod 는 읽기 전용(앱 시작 때 원본 복구)이라 my-spaces 로 복제해 고치고,
 내 레이아웃이 my-spaces 를 쓰게 바꾼다.
   python install_spaces_tree.py            # 적용 (멱등)
   python install_spaces_tree.py --remove   # 기본 spaces 로 되돌림 (my-spaces 폴더는 남김)
 
-기본 mod 가 업데이트돼 고칠 문장을 못 찾으면 멈춘다 → mods/spaces/main.js 를 보고 PATCHES 를 맞춘다.
+설치할 때마다 원본 mods/spaces/main.js 에서 처음부터 다시 고쳐 덮어쓴다(patchlib) — 단계 표식·덧대기 없음.
+기본 mod 가 업데이트돼 고칠 문장을 못 찾으면 멈춘다 → 원본을 보고 패치를 맞춘다.
 `this.refreshMachines(cx);` 는 원본에 2번 나와서 앵커로 못 쓴다 → 15000 타이머 줄을 앵커로 쓴다.
-고치기는 두 단계(트리 → 끌어 옮기기)이고 단계마다 표식이 있어, 트리만 깔린 파일엔 끌어 옮기기만 더한다.
 앱 판마다 원본 문장이 조금 달라(0.1.11 은 공간을 번호 i 로, 0.1.13 은 id 로 다룸) 몇 패치는 대안 문장을 둔다.
+지금 하는 일은 my-agents 가 레이아웃에 있으면 그쪽이 읽어 shared("agent.msgs") 로 내놓은 것을 쓰고,
+없을 때만 직접 hc get 으로 읽는다(같은 일을 두 번 돌리지 않게).
 """
-import io
-import json
+from __future__ import annotations
+
 import os
 import re
-import subprocess
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from install_title_sync import APP_HOME, app_exe, ensure_own_layout  # noqa: E402
+from install_title_sync import ensure_own_layout  # noqa: E402
 from install_agents_name_only import point_layout  # noqa: E402
+from patchlib import apply_patches, rebuild  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "spaces"
 CLONE = "my-spaces"
-CLONE_JS = os.path.join(APP_HOME, "mods", CLONE, "main.js")
-TREE_MARK = "// ---- my-spaces ----"  # 트리 단계 표식 (있으면 그 단계 건너뜀)
-DRAG_MARK = "// ---- my-spaces drag ----"  # 끌어 옮기기 단계 표식
-RETRY_MARK = "// ---- my-spaces drag retry ----"  # 끌어 옮기기 재시도 단계 표식
 
 HELPERS = r'''
 // ---- my-spaces: 공간 아래 세션 목록 ----
+const MSG_POLL_MS = 3000; // 지금 하는 일을 다시 읽는 간격
+const MSGS_KEY = "agent.msgs"; // my-agents 가 내놓는 {주소: 지금 하는 일}
+// 세션 옮기기: 기다리는 간격·한도
+const MOVE_STEP_MS = 150; // 상태를 다시 보는 간격
+const MOVE_SELECT_MS = 150; // space.select 가 반영될 때까지
+const MOVE_PARK_WAIT_MS = 8000; // terminal.park 로 원래 창이 떨어질 때까지 (넘기면 옮기기 취소)
+const MOVE_KEEP_WAIT_MS = 3000; // terminal.keep 한 번에 새 창이 생길 때까지
+const MOVE_KEEP_TRIES = 3; // keep 을 몇 번까지 보내 보나 (늦게라도 붙으면 더 안 보냄)
+
 const cleanTitle = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
 function leadPanes(all) {
@@ -73,13 +80,39 @@ function loadOpenState() {
   try {
     return JSON.parse(localStorage.getItem("spaces.open") ?? "{}") ?? {};
   } catch (_e) {
-    return {};
+    return {}; // 저장값이 깨졌으면 기본값(선택된 공간만 펼침)으로 시작
   }
+}
+
+// 지금 레이아웃에 my-agents 가 있으면 그쪽이 지금 하는 일을 읽어 shared 로 내놓는다
+function agentsModShown() {
+  return JSON.stringify(layout() ?? null).includes('"my-agents"');
 }
 '''
 
 METHODS = r'''
   // ---- my-spaces ----
+  // 그릴 때마다 agents()·panes() 를 한 번만 읽는다(읽을 때마다 전부 복사돼 비싸다). render() 첫 줄에서 비운다.
+  snap() {
+    if (!this._snap) {
+      const bySpace = new Map();
+      for (const a of agents()) {
+        const list = bySpace.get(a.space);
+        if (list) list.push(a);
+        else bySpace.set(a.space, [a]);
+      }
+      for (const list of bySpace.values()) list.sort((x, y) => (x.tab_index ?? 0) - (y.tab_index ?? 0));
+      this._snap = { bySpace, leads: null };
+    }
+    return this._snap;
+  }
+
+  leads() {
+    const s = this.snap();
+    if (!s.leads) s.leads = leadPanes(panes());
+    return s.leads;
+  }
+
   isOpen(w) {
     return this.openState[w.id] ?? !!w.active;
   }
@@ -97,28 +130,46 @@ METHODS = r'''
     return div().id(`space-fold-${w.id}`).w(12).h(18).flex_none().flex().items_center().justify_center().rounded(4)
       .text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); this.toggle(w, cx); })
+      .on_mouse_up("left", (_e, cx) => {
+        cx.stop_propagation();
+        // 세션을 끌다가 ▾/▸ 위에서 놓음 = 그 공간 줄에 놓은 것(또는 취소). 끌기 상태를 남기지 않는다.
+        if (this.dragAgent) {
+          this.drop(w, cx);
+          return;
+        }
+        this.toggle(w, cx);
+      })
       .child(svg(`mods/workspace-chrome/chevron-${this.isOpen(w) ? "down" : "right"}.svg`).size(11));
   }
 
   sessionsOf(w) {
-    return agents().filter((a) => a.space === w.id).sort((x, y) => (x.tab_index ?? 0) - (y.tab_index ?? 0));
+    return this.snap().bySpace.get(w.id) ?? [];
+  }
+
+  agentMsgs() {
+    if (!this.sharedMsgs) return this.msgs;
+    return new Map(Object.entries(shared(MSGS_KEY) ?? {}));
   }
 
   sessionRows(w, t) {
     if (!this.isOpen(w)) return [];
     const list = this.sessionsOf(w);
     if (!list.length) return [];
-    const leads = leadPanes(panes());
+    const leads = this.leads();
+    const msgs = this.agentMsgs();
     const tabs = new Map((w.tabs ?? []).map((tab) => [tab.id, tab]));
     const shown = focused()?.agent;
     return list.map((a) => {
-      const msg = a.status === "working" ? this.msgs.get(a.address) : null;
+      const msg = a.status === "working" ? msgs.get(a.address) : null;
       const on = a.address === shown;
       return h_flex().id(`space-agent-${a.address}`).pl(36).pr(8).h(msg ? 38 : 26).flex_none().gap(8).items_center().rounded(7)
         .text_size(12.5)
         .when(on, (el) => el.bg(t.raised))
         .hover((s) => s.bg(t.hover))
+        .when(this.dragAgent === a.address && this.dropOver, (el) => el.opacity(0.5))
+        .on_mouse_down("left", () => { this.dragAgent = a.address; this.dropOver = null; })
+        .on_mouse_move((_e, cx) => this.dragOver(w, cx))
+        .on_mouse_up("left", (_e, cx) => { if (this.dropOver) this.drop(w, cx); })
         .on_click(() => run("pane.focus", { pane: a.pane }))
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().text_color(on ? t.foreground : t.muted).child(sessionName(tabs.get(a.tab), leads.get(a.tab), a)))
@@ -128,9 +179,15 @@ METHODS = r'''
   }
 
   pollMsgs(cx) {
-    if (this.polling) return;
+    const shown = agentsModShown();
+    if (shown !== this.sharedMsgs) {
+      this.sharedMsgs = shown;
+      cx.notify();
+    }
+    if (shown || this.polling) return; // my-agents 가 대신 읽는다
+    const all = spaces();
     const working = agents().filter((a) => a.status === "working" &&
-      this.isOpen({ id: a.space, active: spaces().find((s) => s.id === a.space)?.active }));
+      this.isOpen({ id: a.space, active: all.find((s) => s.id === a.space)?.active }));
     if (!working.length && !this.msgs.size) return;
     this.polling = true;
     cx.spawn(async (cx) => {
@@ -140,7 +197,11 @@ METHODS = r'''
           const r = await hc(["get", a.address, "--json"]);
           const msg = r.code === 0 ? JSON.parse(r.stdout)?.status?.msg : null;
           if (msg) next.set(a.address, String(msg));
-        } catch (_e) {}
+        } catch (_e) {
+          // 한 번 못 읽으면(세션이 막 끝남·응답 깨짐) 지난 글을 그대로 둔다 — 다음 차례에 다시 읽는다
+          const prev = this.msgs.get(a.address);
+          if (prev) next.set(a.address, prev);
+        }
       }
       this.polling = false;
       const same = next.size === this.msgs.size && [...next].every(([k, v]) => this.msgs.get(k) === v);
@@ -149,33 +210,6 @@ METHODS = r'''
     });
   }
 
-  render() {'''
-
-TREE_PATCHES = [
-    ("import { spaces, machines, panes, run,", "import { spaces, machines, panes, agents, focused, run,"),
-    ("export default class Spaces extends View {", HELPERS + "\nexport default class Spaces extends View {"),
-    # this.refreshMachines(cx); 는 원본에 2번 나와 앵커로 못 씀 → 15000 타이머 줄
-    ("    cx.timer.every(15000, cx => this.refreshMachines(cx));\n",
-     "    cx.timer.every(15000, cx => this.refreshMachines(cx));\n"
-     "    this.openState = loadOpenState();\n"
-     "    this.msgs = new Map();\n"
-     "    cx.timer.every(3000, (cx) => this.pollMsgs(cx));\n"),
-    ("const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));",
-     "const draw = (r) => (collapsed ? [this.compact(r, t)] : [this.row(r, t), ...this.sessionRows(r.w, t)]);"),
-    ("return loading(null) && !rows.length ? [loadingRow(null)] : rows.map(draw);",
-     "return loading(null) && !rows.length ? [loadingRow(null)] : rows.flatMap(draw);"),
-    ("mine.length ? mine.map(draw) :", "mine.length ? mine.flatMap(draw) :"),
-    ("          .gap(9)\n          .items_center()\n          .when(Boolean(tree),",
-     "          .gap(9)\n          .items_center()\n          .child(this.chev(w, t, this.sessionsOf(w).length > 0))\n"
-     "          .when(Boolean(tree),"),
-    ("\n  render() {", METHODS),
-]
-
-# 앱엔 탭을 다른 공간으로 옮기는 명령이 없다(tab.move 는 같은 공간 안 순서만).
-# → 대상 공간 선택 → terminal.park(창만 떼고 계속 실행, 빈 원래 탭은 앱이 지움)
-# → terminal.keep(선택된 공간에 새 탭) → keep 탭은 이름이 터미널 주소(t18 등)라 원래 이름 복원.
-# mod 의 run() 은 null 을 돌려줘 새 탭 id 를 못 받는다 → cx.sleep 으로 기다리며 panes() 에서 찾는다.
-MOVE = r'''
   // ---- my-spaces drag ----
   // 앱엔 탭을 다른 공간으로 옮기는 명령이 없다 → 대상 공간 선택 → terminal.park(창만 떼고 계속 실행)
   // → terminal.keep(선택된 공간에 새 탭) → 원래 탭 이름 복원. 다른 기기 공간으로는 못 옮긴다.
@@ -188,18 +222,26 @@ MOVE = r'''
   }
 
   dragOver(w, cx) {
+    if (!this.dragAgent) return;
     const over = this.canDrop(w) ? w.id : null;
-    if (this.dragAgent && this.dropOver !== over) {
+    if (this.dropOver !== over) {
       this.dropOver = over;
       cx.notify();
     }
   }
 
-  drop(w, cx) {
-    const addr = this.dragAgent;
-    const ok = addr && this.dropOver === w.id && this.canDrop(w);
+  // 끌기 상태를 지운다. 지운 게 있으면 true (다시 그려야 함)
+  cancelDrag() {
+    const had = this.dragAgent !== null || this.dropOver !== null;
     this.dragAgent = null;
     this.dropOver = null;
+    return had;
+  }
+
+  drop(w, cx) {
+    const addr = this.dragAgent;
+    const ok = Boolean(addr) && this.dropOver === w.id && this.canDrop(w);
+    this.cancelDrag();
     if (ok) this.moveAgent(addr, w, cx);
     cx.notify();
     return ok;
@@ -208,170 +250,148 @@ MOVE = r'''
   moveAgent(addr, target, cx) {
     const a = agents().find((x) => x.address === addr);
     if (!a) return;
-    const src = spaces().find((s) => s.id === a.space);
+    const srcId = a.space;
+    const src = spaces().find((s) => s.id === srcId);
     const tab = (src?.tabs ?? []).find((x) => x.id === a.tab);
+    // 이름 없던 탭은 "" 로 되돌린다(빈 이름 = 번호로 부르는 원래 상태). 안 하면 keep 이 붙인 터미널 주소(t18 등)가 남는다.
     const name = tab?.named ? tab.name : "";
     this.openState[target.id] = true;
     localStorage.setItem("spaces.open", JSON.stringify(this.openState));
     cx.spawn(async (cx) => {
+      const paneOf = () => panes().find((x) => x.terminal === addr);
+      const waitFor = async (check, ms) => {
+        for (let left = ms; left > 0; left -= MOVE_STEP_MS) {
+          const v = check();
+          if (v) return v;
+          await cx.sleep(MOVE_STEP_MS);
+        }
+        return check();
+      };
+      const keepIn = async (spaceId) => {
+        run("space.select", { id: spaceId });
+        await cx.sleep(MOVE_SELECT_MS);
+        run("terminal.keep", { terminal: addr, place: "tab" });
+        return waitFor(paneOf, MOVE_KEEP_WAIT_MS);
+      };
+
       run("space.select", { id: target.id });
-      await cx.sleep(150);
+      await cx.sleep(MOVE_SELECT_MS);
       run("terminal.park", { terminal: addr });
-      await cx.sleep(300);
-      run("terminal.keep", { terminal: addr, place: "tab" });
-      for (let i = 0; i < 20; i++) {
-        await cx.sleep(150);
-        const p = panes().find((x) => x.terminal === addr);
-        if (!p) continue;
-        if (name) run("tab.rename", { id: p.tab, name });
-        run("pane.focus", { pane: p.pane });
-        break;
+      // park 가 끝나기 전에 keep 이 들어가면 keep 이 안 먹어 창 없는 세션이 된다 → 원래 창이 떨어질 때까지 기다린다.
+      // 끝내 안 떨어지면 원래 창에 그대로 있는 것이라 잃은 게 없다 → 여기서 그만둔다.
+      if (!(await waitFor(() => !paneOf(), MOVE_PARK_WAIT_MS))) {
+        notify({ title: "세션 옮기기 취소", body: "원래 창이 떨어지지 않아 그대로 두었습니다. 잠시 뒤 다시 끌어 보세요.", level: "warning" });
+        cx.notify();
+        return;
       }
+      // keep 이 늦게라도 붙으면 다시 보내지 않는다(같은 세션 탭이 둘 생기지 않게).
+      let p = null;
+      for (let tries = 0; tries < MOVE_KEEP_TRIES && !p; tries++) p = paneOf() ?? (await keepIn(target.id));
+      if (!p) {
+        // 대상 공간에 못 붙였으면 원래 공간에 되돌려 붙인다 — 창 없이 사라진 세션을 남기지 않는다.
+        const back = paneOf() ?? (await keepIn(srcId));
+        notify(back
+          ? { title: "세션을 못 옮겼습니다", body: "원래 공간에 되돌려 두었습니다.", level: "warning" }
+          : { title: "세션 창을 못 붙였습니다", body: `세션(${addr})은 계속 돌고 있습니다. hc ls 로 찾아 terminal.keep 으로 다시 붙이세요.`, level: "error" });
+        if (back) run("tab.rename", { id: back.tab, name });
+        cx.notify();
+        return;
+      }
+      run("tab.rename", { id: p.tab, name });
+      run("pane.focus", { pane: p.pane });
       cx.notify();
     });
   }
 
-  sessionRows(w, t) {'''
+  render() {
+    this._snap = null; // 새로 그릴 때마다 목록을 새로 읽는다'''
+
+TREE_PATCHES = [
+    ("export default class Spaces extends View {", HELPERS + "\nexport default class Spaces extends View {"),
+    # this.refreshMachines(cx); 는 원본에 2번 나와 앵커로 못 씀 → 15000 타이머 줄
+    ("    cx.timer.every(15000, cx => this.refreshMachines(cx));\n",
+     "    cx.timer.every(15000, cx => this.refreshMachines(cx));\n"
+     "    this.openState = loadOpenState();\n"
+     "    this.msgs = new Map();\n"
+     "    this.sharedMsgs = agentsModShown();\n"
+     "    this.dragAgent = null; // 끄는 중인 세션 주소\n"
+     "    this.dropOver = null; // 놓일 공간 id\n"
+     "    cx.timer.every(MSG_POLL_MS, (cx) => this.pollMsgs(cx));\n"),
+    ("const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));",
+     "const draw = (r) => (collapsed ? [this.compact(r, t)] : [this.row(r, t), ...this.sessionRows(r.w, t)]);"),
+    ("return loading(null) && !rows.length ? [loadingRow(null)] : rows.map(draw);",
+     "return loading(null) && !rows.length ? [loadingRow(null)] : rows.flatMap(draw);"),
+    ("mine.length ? mine.map(draw) :", "mine.length ? mine.flatMap(draw) :"),
+    ("          .gap(9)\n          .items_center()\n          .when(Boolean(tree),",
+     "          .gap(9)\n          .items_center()\n          .child(this.chev(w, t, this.sessionsOf(w).length > 0))\n"
+     "          .when(Boolean(tree),"),
+    ("\n  render() {", METHODS),
+]
 
 DROP_BORDER = "      .when(this.dropOver === w.id, (el) => el.border(1.5).border_dashed().border_color(t.accent).bg(t.hover))\n"
 OPACITY_013 = "      .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))\n"
 OPACITY_011 = "      .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))\n"
 MOVE_013 = "      .on_mouse_move((_e, cx) => {\n        const source = spaces().find(s => s.id === this.pressed);"
 MOVE_011 = "      .on_mouse_move((_e, cx) => {\n        const source = spaces()[this.pressed];"
+# 공간 줄을 새로 누름 = 앞선 세션 끌기는 끝난 것 (남은 끌기 상태를 여기서 버린다)
+PRESS_ROW = "      .on_mouse_down(\"left\", () => {\n        this.pressed = "
+LIST_UP = ".on_mouse_up(\"left\", (_e, cx) => { this.pressed = null; cx.notify(); })"
 
 
-def after_first_line(old, add):
+def after_first_line(old: str, add: str) -> str:
     """old 의 첫 줄 뒤에 add 를 끼운다 (old 는 '\n' 으로 줄이 나뉨)."""
     head, rest = old.split("\n", 1)
     return head + "\n" + add + rest
 
 
-# 항목이 리스트면 대안들 — 그중 정확히 1번 나오는 하나에만 적용한다
 DRAG_PATCHES = [
-    ("    this.msgs = new Map();\n",
-     "    this.msgs = new Map();\n"
-     "    this.dragAgent = null; // 끄는 중인 세션 주소\n"
-     "    this.dropOver = null; // 놓일 공간 id\n"),
-    ("\n  sessionRows(w, t) {", MOVE),
-    # 공간 줄: 놓일 자리 점선 + 위로 지나갈 때 / 놓을 때
+    # 공간 줄: 놓일 자리 점선 + 누를 때 남은 끌기 버림 + 위로 지나갈 때 / 놓을 때
     [(OPACITY_013, OPACITY_013 + DROP_BORDER), (OPACITY_011, OPACITY_011 + DROP_BORDER)],
+    (PRESS_ROW, "      .on_mouse_down(\"left\", () => {\n        this.cancelDrag();\n        this.pressed = "),
     [(MOVE_013, after_first_line(MOVE_013, "        this.dragOver(w, cx);\n")),
      (MOVE_011, after_first_line(MOVE_011, "        this.dragOver(w, cx);\n"))],
     ("      .on_mouse_up(\"left\", (_e, cx) => {\n        const from = this.pressed;",
      "      .on_mouse_up(\"left\", (_e, cx) => {\n"
      "        if (this.drop(w, cx)) { this.pressed = null; this.over = null; return; }\n"
      "        const from = this.pressed;"),
-    # 세션 줄: 끌기 시작 / 다른 공간 세션 위도 그 공간으로 / 끄는 중이면 흐리게
-    ("        .when(on, (el) => el.bg(t.raised))\n        .hover((s) => s.bg(t.hover))\n"
-     "        .on_click(() => run(\"pane.focus\", { pane: a.pane }))",
-     "        .when(on, (el) => el.bg(t.raised))\n        .hover((s) => s.bg(t.hover))\n"
-     "        .when(this.dragAgent === a.address && this.dropOver, (el) => el.opacity(0.5))\n"
-     "        .on_mouse_down(\"left\", () => { this.dragAgent = a.address; this.dropOver = null; })\n"
-     "        .on_mouse_move((_e, cx) => this.dragOver(w, cx))\n"
-     "        .on_mouse_up(\"left\", (_e, cx) => { if (this.dropOver) this.drop(w, cx); })\n"
-     "        .on_click(() => run(\"pane.focus\", { pane: a.pane }))"),
-    # 목록 밖에서 놓으면 취소
-    (".on_mouse_up(\"left\", (_e, cx) => { this.pressed = null; cx.notify(); })",
-     ".on_mouse_up(\"left\", (_e, cx) => { this.pressed = null; this.dragAgent = null; this.dropOver = null; cx.notify(); })"),
+    # 목록 안 빈 곳에서 놓음 / 목록 밖으로 나감 / 밖을 누름 = 취소 (끌기 상태가 남아 나중 클릭에 옮겨지지 않게)
+    (LIST_UP,
+     ".on_mouse_up(\"left\", (_e, cx) => { this.pressed = null; this.cancelDrag(); cx.notify(); })\n"
+     "        .on_hover((hovered, cx) => { if (!hovered && this.cancelDrag()) cx.notify(); })\n"
+     "        .on_mouse_down_out((_e, cx) => { if (this.cancelDrag()) cx.notify(); })"),
 ]
 
-# park 가 끝나기 전에 keep 이 들어가면 keep 이 안 먹어 창 없는 세션이 된다(계속 돌지만 화면에서 사라짐).
-# → 원래 창이 없어질 때까지 기다린 뒤 keep, 새 창이 안 생기면 대상 공간을 다시 고르고 최대 4번 다시 붙인다.
-RETRY_OLD = """      await cx.sleep(300);
-      run("terminal.keep", { terminal: addr, place: "tab" });
-      for (let i = 0; i < 20; i++) {
-        await cx.sleep(150);
-        const p = panes().find((x) => x.terminal === addr);
-        if (!p) continue;
-        if (name) run("tab.rename", { id: p.tab, name });
-        run("pane.focus", { pane: p.pane });
-        break;
-      }
-"""
-RETRY_NEW = """      // ---- my-spaces drag retry ----
-      // park 가 끝나기 전에 keep 이 들어가면 keep 이 안 먹어 창 없는 세션이 된다(계속 돌지만 화면에서 사라짐).
-      // → 원래 창이 없어질 때까지 기다린 뒤 keep, 새 창이 안 생기면 대상 공간을 다시 고르고 최대 4번 다시 붙인다.
-      const paneOf = () => panes().find((x) => x.terminal === addr);
-      for (let i = 0; i < 20 && paneOf(); i++) await cx.sleep(150);
-      let p = null;
-      for (let tries = 0; tries < 4 && !p; tries++) {
-        if (tries) {
-          run("space.select", { id: target.id });
-          await cx.sleep(150);
-        }
-        run("terminal.keep", { terminal: addr, place: "tab" });
-        for (let i = 0; i < 10 && !p; i++) {
-          await cx.sleep(150);
-          p = paneOf();
-        }
-      }
-      if (p) {
-        if (name) run("tab.rename", { id: p.tab, name });
-        run("pane.focus", { pane: p.pane });
-      }
-"""
-RETRY_PATCHES = [(RETRY_OLD, RETRY_NEW)]
-
 HERDR_IMPORT = re.compile(r'import \{([^}]*)\} from "herdr";')
+NEEDED = ("agents", "focused", "layout", "notify", "hc", "shared")
 
 
-def ensure_hc_import(src):
-    """pollMsgs 가 hc 를 쓴다. 기본 spaces mod 가 이미 들여오지만, 빠졌으면 넣는다."""
+def ensure_imports(src: str, needed: tuple[str, ...]) -> str:
+    """herdr 에서 needed 이름들을 들여오게 한다. 원본이 이미 들여온 이름은 다시 넣지 않는다(두 번이면 앱이 거절)."""
     m = HERDR_IMPORT.search(src)
     if not m:
         sys.exit('"herdr" import 줄을 못 찾음(기본 spaces mod 가 바뀐 듯)')
-    names = [n.strip() for n in m.group(1).split(",")]
-    if "hc" in names:
+    names = [n.strip() for n in m.group(1).split(",") if n.strip()]
+    missing = [n for n in needed if n not in names]
+    if not missing:
         return src
-    body = m.group(1).rstrip().rstrip(",")  # 끝 쉼표(여러 줄 import)면 ",," 가 되지 않게
-    return src[:m.start(1)] + body + ", hc " + src[m.end(1):]
+    return src[:m.start(1)] + " " + ", ".join(names + missing) + " " + src[m.end(1):]
 
 
-def apply(src, patches):
-    for entry in patches:
-        alts = entry if isinstance(entry, list) else [entry]
-        if any(new in src for _, new in alts):
-            continue
-        hits = [(old, new) for old, new in alts if src.count(old) == 1]
-        if len(hits) != 1:
-            sys.exit("고칠 문장을 못 찾음(기본 spaces mod 가 바뀐 듯): " + alts[0][0].strip()[:80])
-        old, new = hits[0]
-        src = src.replace(old, new)
-    return src
+def build(src: str) -> str:
+    """원본 spaces main.js → my-spaces main.js (트리 + 끌어 옮기기, 한 번에)."""
+    src = apply_patches(src, TREE_PATCHES, BASE)
+    src = apply_patches(src, DRAG_PATCHES, BASE)
+    return ensure_imports(src, NEEDED)
 
 
-def patch(src):
-    """단계마다 표식을 보고, 없는 단계만 더한다 (시험 적용본 포함 몇 번 돌려도 같은 결과)."""
-    if TREE_MARK not in src:
-        src = ensure_hc_import(apply(src, TREE_PATCHES))
-    if DRAG_MARK not in src:
-        src = apply(src, DRAG_PATCHES)
-    if RETRY_MARK not in src:
-        src = apply(src, RETRY_PATCHES)
-    return src
-
-
-def install():
+def install() -> None:
     target = ensure_own_layout()
-    if not os.path.exists(CLONE_JS):
-        subprocess.run([app_exe(), "do", "mod.clone", json.dumps({"name": BASE, "as": CLONE})], check=True)
-        for _ in range(20):
-            if os.path.exists(CLONE_JS):
-                break
-            time.sleep(0.25)
-    if not os.path.exists(CLONE_JS):
-        sys.exit("mod.clone 뒤에도 " + CLONE_JS + " 가 안 생김 — 앱이 켜져 있는지 확인")
-    with io.open(CLONE_JS, encoding="utf-8") as f:
-        src = f.read()
-    new = patch(src)
-    if new != src:
-        with io.open(CLONE_JS, "w", encoding="utf-8") as f:
-            f.write(new)
+    changed = rebuild(BASE, CLONE, build)
     n = point_layout(target, BASE, CLONE)
-    print("적용 완료: 레이아웃", target, "/ spaces → my-spaces 연결", n, "곳", "(코드 변경 없음)" if new == src else "(코드 고침)")
+    print("적용 완료: 레이아웃", target, "/ spaces → my-spaces 연결", n, "곳", "(코드 고침)" if changed else "(코드 변경 없음)")
 
 
-def remove():
+def remove() -> None:
     target = ensure_own_layout()
     print("되돌림:", point_layout(target, CLONE, BASE), "곳 (레이아웃 " + target + ")")
 
