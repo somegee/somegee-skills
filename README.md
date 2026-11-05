@@ -104,6 +104,7 @@ Claude Code의 서브에이전트(Sub-agent)가 대표적인 예다. 메인 에�
 |-------|-------------|
 | [terminal-swarm](./terminal-swarm/) | Agent Swarm을 위한 headless 터미널 세션 관리. 웹 대시보드에서 여러 Claude Code 에이전트를 동시에 모니터링하고 제어합니다. |
 | [pilot](./pilot/) | (mod) 입력창 위 한 막대에 질문별 자동 effort·근거·다음 할 일·인계를 한국어로 모읍니다. |
+| [herdr](./herdr/) | herdr 터미널 관리자 쓰기·잇기 함정 모음 + Windows 데스크톱 앱 커스텀 일괄 설치(탭 이름 따라가기·그림 붙여넣기·Agents 목록·Ctrl+N 새 Claude 탭) + 서버 탭 이름 동기화. |
 
 ## Installation
 

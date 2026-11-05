@@ -1,0 +1,12 @@
+[Unit]
+Description=herdr 탭 이름을 Claude 세션 이름(/rename)에 맞춤
+After=default.target
+
+[Service]
+ExecStart=/usr/bin/python3 %h/.local/share/herdr-title-sync/herdr_title_sync.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

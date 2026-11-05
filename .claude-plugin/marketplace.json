@@ -31,6 +31,12 @@
       "description": "오른쪽 창 파일 트리 — 마우스로 열기·절대 경로 복사·미리보기·바뀐 내용·폴더 크기 그림, Claude 읽기·쓰기·커밋과 git 상태 표시",
       "source": "./tree",
       "category": "productivity"
+    },
+    {
+      "name": "herdr",
+      "description": "herdr 터미널 관리자 쓰기·잇기 함정 + 데스크톱 앱 커스텀 일괄 설치(탭 이름·그림 붙여넣기·Agents 목록·Ctrl+N) + 서버 탭 이름 동기화",
+      "source": "./herdr",
+      "category": "productivity"
     }
   ]
 }
