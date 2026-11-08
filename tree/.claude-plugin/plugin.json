@@ -1,6 +1,6 @@
 {
   "name": "tree",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "오른쪽 창에 프로젝트 파일 트리 — 마우스로 열기·절대 경로 복사·미리보기·바뀐 내용·폴더 크기 그림, Claude 의 읽기·쓰기·커밋과 git 상태 표시",
   "types": "./types/index.d.ts",
   "author": {
@@ -26,7 +26,7 @@
     "showReads": {
       "type": "boolean",
       "title": "읽은 파일도 표시",
-      "description": "켜 두면 Claude 가 읽거나 찾은(Read·Grep·Glob) 파일 이름을 잠깐 보라색으로 칠한다.",
+      "description": "켜 두면 Claude 가 읽거나 찾은(Read·Grep·Glob, 셸의 cat·grep·rg 등) 파일 이름을 잠깐 보라색으로 칠한다.",
       "default": true
     },
     "hidden": {

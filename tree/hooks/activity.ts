@@ -5,7 +5,8 @@ import { innerRepos, refreshGit, refreshListings, remember, rootOf, touch } from
 import type { Config } from './config'
 import { gitVerbs, headOf, lastCommitFiles, repoTop } from './git'
 import { isHidden } from './fsx'
-import { idOf, isUnder, join, resolvePath } from './paths'
+import { idOf, isUnder, join, relativeTo, resolvePath } from './paths'
+import { outputPaths, shellReadPaths, type Shell } from './shellreads'
 import { readGit, readOpened, writeGitOp } from './state'
 
 type Call = { tool: string; input: Record<string, unknown> }
@@ -62,15 +63,19 @@ export async function afterFileTool($: EngineInterface, call: Call, outcome: Out
   scheduleRefresh($)
 }
 
-export type ShellStart = { verbs: string[]; heads: Record<string, string>; startAt: number }
+/** command·cwd 는 읽은 파일을 찾을 때 쓴다(cwd 는 명령이 시작한 폴더). */
+export type ShellStart = { verbs: string[]; heads: Record<string, string>; startAt: number; command?: string; cwd?: string; shell?: Shell }
 
 /** 셸 명령 전에: 시작 시각을 기억하고, git 동작이면 '○○ 중…' 을 띄우고, 커밋이면 저장소마다 HEAD 를 기억한다. */
 export async function beforeShell($: EngineInterface, call: Call): Promise<ShellStart> {
   const startAt = Date.now()
-  const verbs = gitVerbs(textField(call.input, 'command'))
-  if (verbs.length === 0) return { verbs, heads: {}, startAt }
+  const command = textField(call.input, 'command')
+  const cwd = await $.session.cwd().catch(() => '')
+  const base = { startAt, command, cwd, shell: call.tool === 'PowerShell' ? ('powershell' as const) : ('bash' as const) }
+  const verbs = gitVerbs(command)
+  if (verbs.length === 0) return { ...base, verbs, heads: {} }
   await writeGitOp($, { label: `${verbs.join('·')} 중…`, state: 'running', at: Date.now() })
-  return { verbs, heads: verbs.includes('커밋') ? await repoHeads($) : {}, startAt }
+  return { ...base, verbs, heads: verbs.includes('커밋') ? await repoHeads($) : {} }
 }
 
 /** 루트 저장소 + 트리에 보이는 안쪽 저장소의 HEAD. */
@@ -113,6 +118,41 @@ async function changedSince($: EngineInterface, startAt: number): Promise<string
   return [...hits.values()].slice(0, SHELL_TOUCH_LIMIT)
 }
 
+const SHELL_READ_LIMIT = 30
+
+function stdoutOf(result: unknown): string {
+  if (!result || typeof result !== 'object' || !('stdout' in result)) return ''
+  const out = (result as { stdout: unknown }).stdout
+  return typeof out === 'string' ? out : ''
+}
+
+/** 루트 아래의 숨김 이름(.git·node_modules 따위)을 지나는 경로인가. */
+function isHiddenPath(root: string, path: string): boolean {
+  return relativeTo(root, path).split('/').some(isHidden)
+}
+
+/**
+ * 셸 명령이 읽은 파일(cat·sed -n·grep·rg … 의 파일 인자, grep -r·rg·find 출력의 경로)을 보라로 칠한다.
+ * 루트 아래에 실제로 있는 파일만, 숨김 이름은 빼고, 같은 명령이 쓴 파일은 빼고(쓰기가 이긴다).
+ */
+async function markShellReads($: EngineInterface, start: ShellStart, result: unknown, written: readonly string[], config: Config): Promise<void> {
+  if (!start.command || !start.cwd) return
+  const fromArgs = shellReadPaths(start.command, start.cwd, start.shell)
+  const fromOutput = start.shell === 'powershell' ? [] : outputPaths(start.command, stdoutOf(result), start.cwd)
+  const root = await rootOf($)
+  const skip = new Set(written.map(idOf))
+  const files: string[] = []
+  for (const path of [...fromArgs, ...fromOutput]) {
+    if (files.length >= SHELL_READ_LIMIT) break
+    const id = idOf(path)
+    if (skip.has(id) || !isUnder(root, path) || isHiddenPath(root, path)) continue
+    skip.add(id)
+    const stat = await $.fs.stat(path).catch(() => null)
+    if (stat?.kind === 'file') files.push(path)
+  }
+  await touch($, files, 'read', config.follow === 'all')
+}
+
 export async function afterShell($: EngineInterface, start: ShellStart, outcome: Outcome, config: Config): Promise<void> {
   // 셸이 쓴 파일: git 을 먼저 다시 읽어 새 파일도 후보에 넣는다
   await refreshGit($).catch(() => undefined)
@@ -122,6 +162,7 @@ export async function afterShell($: EngineInterface, start: ShellStart, outcome:
     const git = await readGit($)
     for (const path of written) await remember($, path, git?.files[idOf(path)] === '?', config)
   }
+  if (config.showReads && !outcome.isFailed) await markShellReads($, start, outcome.result, written, config).catch(() => undefined)
   scheduleRefresh($)
   if (start.verbs.length === 0) return
   const label = start.verbs.join('·')
