@@ -1,0 +1,16 @@
+{
+  "description": "herdr 터미널에 Claude 세션 id 이름표 달기 (웹 관제 화면의 대화 보기용)",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/label_session.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/label_session.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
