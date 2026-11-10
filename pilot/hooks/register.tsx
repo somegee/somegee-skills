@@ -11,6 +11,7 @@ import { afterSpawn, applyHeld, beforeSpawn, judgePrompt, requestFor } from './e
 import { captureHandoff, maybeHint, noteHandoffTurn } from './handoff/flow'
 import { restoreSave } from './limits'
 import { hideNext, offerNext } from './next-steps'
+import { writeSnapshot } from './snapshot'
 import { makeCtx, writeAuto } from './state'
 import { TICK_MS, afterStep, refreshStatus, tick } from './status/tracker'
 
@@ -26,7 +27,7 @@ export const register: Register = (on, options) => {
     await restoreSave($)
     await $.command.register(COMMAND)
     void refreshStatus($, ctx).catch(() => undefined)
-    $.clock.every(TICK_MS, () => void tick($, ctx).catch(() => undefined))
+    $.clock.every(TICK_MS, () => void tick($, ctx).then(() => writeSnapshot($)).catch(() => undefined))
     return result
   })
 
@@ -34,6 +35,7 @@ export const register: Register = (on, options) => {
     if (!ctx.isHuman || e.isMeta || e.command) return next(e)
     ctx.prompts += 1
     await judgePrompt($, ctx, e.text).catch(() => undefined)
+    void writeSnapshot($).catch(() => undefined)
     void maybeHint($, ctx, e.text).catch(() => undefined)
     return next(e)
   })
@@ -63,6 +65,7 @@ export const register: Register = (on, options) => {
     await captureHandoff($, ctx, e).catch(() => undefined)
     void refreshStatus($, ctx).catch(() => undefined)
     await offerNext($, ctx, e).catch(() => undefined)
+    void writeSnapshot($).catch(() => undefined)
     return result
   })
 

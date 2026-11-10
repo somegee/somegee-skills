@@ -10,6 +10,7 @@ import { cacheSafe, capForSave, clamp, helperFloor, isFollowUp, namedEffort } fr
 import { handoffMessage, parseHint, safeMemo } from '../hooks/handoff/prompts'
 import { hottest, resetTime } from '../hooks/limits'
 import { clean, parseSuggestions } from '../hooks/next-steps'
+import { buildSnapshot, snapshotDir } from '../hooks/snapshot'
 import { cacheTtlOf, minutesLeft } from '../hooks/status/cache'
 import { folderOf, kilo, limitLabel, modelLabel } from '../hooks/status/statusline'
 
@@ -152,4 +153,26 @@ test('판정 답이 잘리거나 다른 글이 섞여도 effort 를 읽는다', 
 test('캐시 알림은 기본으로 끔', async () => {
   expect(readConfig({}).showCache).toBe(false)
   expect(readConfig({ showCache: true }).showCache).toBe(true)
+})
+
+test('막대 내용을 파일로 남길 모양으로 바꾼다', async () => {
+  const snap = buildSnapshot({
+    pick: { effort: 'high', why: '설계 질문', by: 'judge' },
+    isAuto: true,
+    status: { folder: 'p', branch: 'main', model: 'Opus 5.5', modelId: 'x', version: '2', contextTokens: 1, contextWindow: 2, contextPercent: 41, limits: [{ label: '5시간', percent: 30 }] },
+    next: { kind: 'offer', items: [{ label: '배포', prompt: '배포해 줘' }], picked: null },
+    stage: null,
+    hint: '인계 추천',
+  })
+  expect(snap.effort?.effort).toBe('high')
+  expect(snap.model).toBe('Opus 5.5')
+  expect(snap.contextPercent).toBe(41)
+  expect(snap.next).toEqual({ state: 'offer', items: [{ label: '배포', prompt: '배포해 줘' }] })
+  expect(snap.handoff).toEqual({ stage: null, hint: '인계 추천' })
+  const empty = buildSnapshot({ pick: null, isAuto: false, status: null, next: { kind: 'loading', turnId: 't' }, stage: null, hint: null })
+  expect(empty.model).toBe(null)
+  expect(empty.next).toEqual({ state: 'loading', items: [] })
+  expect(snapshotDir('C:/Users/me/.claude/plugins/cache/somegee-skills/pilot/0.2.0')).toBe('C:/Users/me/.claude/pilot-data')
+  expect(snapshotDir('/home/me/.claude/plugins/cache/x/pilot/0.2.0')).toBe('/home/me/.claude/pilot-data')
+  expect(snapshotDir('/work/pilot')).toBe('/work/pilot/data')
 })

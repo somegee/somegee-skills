@@ -1,6 +1,6 @@
 {
   "name": "pilot",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "입력창 위 한 막대에 질문별 자동 effort·근거·다음 할 일·인계를 한국어로 모은 모드",
   "types": "./types/index.d.ts",
   "author": {

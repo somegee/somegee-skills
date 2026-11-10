@@ -3,6 +3,7 @@
 import type { CommandInfo, EngineInterface, TurnCompleteInput } from 'claude-code'
 
 import type { NextView, Suggestion } from '../types'
+import { writeSnapshot } from './snapshot'
 import { readNext, readStage, writeNext } from './state'
 import type { Ctx } from './state'
 
@@ -141,6 +142,7 @@ export async function offerNext($: EngineInterface, ctx: Ctx, e: TurnCompleteInp
     if (view.kind !== 'loading' || view.turnId !== turnId) return
     const shown: NextView = items.length === 0 ? { kind: 'hidden' } : { kind: 'offer', items, picked: null }
     await writeNext($, shown)
+    void writeSnapshot($).catch(() => undefined)
     // 1번은 입력창 흐린 미리보기로도 띄운다. Tab 을 누르면 채워진다(원본 next-steps 와 같음).
     if (items[0] !== undefined) void $.prompt.suggest({ text: items[0].prompt }).catch(() => undefined)
   })()
