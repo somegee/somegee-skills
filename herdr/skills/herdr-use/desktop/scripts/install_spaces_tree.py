@@ -12,7 +12,7 @@
   (mod localStorage "spaces.kept", 이 화면에만). 빈 공간 줄을 누르면 같은 이름·폴더·색으로 기본 셸 탭과 함께 되살리고,
   세션을 끌어 놓으면 되살린 뒤 그 세션만 넣는다(임시 셸 탭은 닫음). 오른쪽 × 는 완전히 없애기.
   탭이 2개 이상이던 공간을 통째로 닫은 것, 이미 비어 있던(탭 0개) 공간을 지운 것,
-  안의 세션이 살아 있는데 공간만 지워진 것(웹 휴지통 — hc ls 로 확인, 0.5.3), 이름이 "~" 인 공간은 남기지 않는다.
+  안의 세션이 살아 있는데 공간만 지워진 것(웹 휴지통 — hc ls 로 확인, 0.5.3), 이름을 안 붙인 공간(named false — 0.5.4)은 남기지 않는다.
 
 기본 spaces mod 는 읽기 전용(앱 시작 때 원본 복구)이라 my-spaces 로 복제해 고치고,
 내 레이아웃이 my-spaces 를 쓰게 바꾼다.
@@ -59,7 +59,6 @@ const KEPT_CONFIRM_MS = 1500; // 사라진 뒤 이만큼 지나도 그 기기 �
 const KEPT_LOOSE_WAIT_MS = 10000; // 안에 있던 세션이 '살아 있는데 어느 공간에도 없는' 채 이만큼 가면 일부러 지운 것(웹 휴지통)
 const KEPT_REVIVE_WAIT_MS = 5000; // space.new 뒤 새 공간이 보일 때까지
 const KEPT_TAB_WAIT_MS = 3000; // 되살린 공간의 탭 수가 반영될 때까지
-const KEPT_SKIP_NAME = "~"; // 홈에서 잠깐 연 이름 없는 공간은 남기지 않는다
 
 const cleanTitle = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
@@ -101,7 +100,7 @@ function loadOpenState() {
 function loadKept() {
   try {
     const list = JSON.parse(localStorage.getItem(KEPT_KEY) ?? "[]");
-    return Array.isArray(list) ? list.filter((g) => g && typeof g.name === "string") : [];
+    return Array.isArray(list) ? list.filter((g) => g && typeof g.name === "string" && g.named !== false) : [];
   } catch (_e) {
     return []; // 저장값이 깨졌으면 빈 목록으로 시작
   }
@@ -389,12 +388,12 @@ METHODS = r'''
     const now = Date.now();
     const live = new Set(sp.map((s) => s.id));
     let changed = false;
-    // 방금 사라진 공간: 탭이 딱 1개였던 것만 후보. 탭 여러 개인 공간을 통째로 닫은 것,
+    // 방금 사라진 공간: 이름을 붙인 공간이고 탭이 딱 1개였던 것만 후보(이름 없는 공간은 잠깐 연 셸 — 서버 상주와 같은 규칙). 탭 여러 개인 공간을 통째로 닫은 것,
     // 이미 비어 있던(탭 0개) 공간을 지운 것(웹 휴지통·앱 Close)은 일부러 없앤 것이라 남기지 않는다.
     for (const [id, info] of Object.entries(this.seenSpaces)) {
       if (live.has(id)) continue;
       delete this.seenSpaces[id];
-      if (info.tabs === 1 && info.name !== KEPT_SKIP_NAME && this.machineReady(info.machine)) this.goneSpaces[id] = { ...info, at: now };
+      if (info.tabs === 1 && info.named && this.machineReady(info.machine)) this.goneSpaces[id] = { ...info, at: now };
     }
     // 잠깐 기다려도 그 기기 화면이 멀쩡하면 닫힌 것 → 빈 줄로 남긴다(연결이 끊겨 안 보이는 것과 구별)
     for (const [id, info] of Object.entries(this.goneSpaces)) {
