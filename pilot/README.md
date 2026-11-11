@@ -1,16 +1,37 @@
-# pilot
+# pilot — 입력창 위 막대 하나로 effort·다음 할 일·인계를 챙기는 Claude Code 모드
 
-Claude Code 입력창 위에 막대 하나를 띄워서, 흩어져 있던 것들을 한국어로 한곳에 모은 모드(mod)입니다.
+질문마다 **생각하는 강도(effort)를 알아서 고르고**, 답이 끝나면 **다음에 할 만한 일을 제안하고**, 대화가 길어지면 **새 대화로 넘기라고 알려 줍니다.** 전부 입력창 바로 위 막대 하나에, 한국어로.
+
+![pilot 막대: effort와 근거, 다음 할 일 제안](./assets/pilot-band.png)
+
+<sub>실제 Claude Code 터미널 화면입니다(예제 프로젝트).</sub>
+
+## 왜 쓰나
+
+- **effort 를 매번 손으로 바꾸지 않아도 됩니다.** 질문을 보낼 때 Haiku 가 먼저 읽고 그 요청 하나의 effort 만 고릅니다. 짧은 조회는 `low`, 여러 파일을 고치는 일은 `high`. 왜 그렇게 골랐는지도 막대에 한 줄로 보입니다.
+- **다음 질문을 치는 수고가 줄어듭니다.** 답이 끝나면 이어서 할 만한 일을 3개까지 띄웁니다. 누르면 입력창에 초안으로만 들어가고, 보내는 건 사용자가 합니다. 1번은 입력창에 흐리게 보여서 Tab 으로 채웁니다.
+- **긴 대화를 깔끔하게 끊습니다.** [인계] 를 누르면 인계 메모를 써서 새 대화로 넘깁니다. 대화가 30% 넘게 차고 넘기는 게 낫다고 판단되면 버튼이 밝아집니다.
+- **한도를 아낍니다.** 5시간·주간 한도가 80% 를 넘으면 알려 주고, [절약 켜기] 를 누르면 한도가 풀릴 때까지 자동 effort 를 medium 이하로 묶습니다.
+
+![가벼운 요청에는 low 를 고릅니다](./assets/pilot-band-low.png)
+
+대화 화면 전체에서는 이렇게 보입니다(오른쪽 창은 함께 쓰기 좋은 [notes](../notes)).
+
+![pilot 막대가 있는 Claude Code 전체 화면](./assets/pilot-overview.png)
+
+## 설치
 
 ```
-╭──────────────────────────────────────────────────────────────────────────────────────╮
-│ low 자동 · 근거: 짧은 조회                            [ 자동 켜짐 ] [ 인계 ]         │
-│ ──────────────────────────────────────────────────────────────────────────────────── │
-│ 다음  [ 테스트 돌리기 ] [ 커밋하기 ] [ /code-review ]  닫기                          │
-╰──────────────────────────────────────────────────────────────────────────────────────╯
+claude plugin marketplace add somegee/somegee-skills
+claude plugin install pilot@somegee-skills --scope user
 ```
 
-## 하는 일
+이미 켜져 있는 세션에서는 `/reload-plugins`.
+
+설치 뒤 겹치는 것을 끕니다: `effortless`, `next-steps` 플러그인. 상태줄(statusLine)은 그대로 두되 effort 표시는 빼는 것을 권합니다.
+자동 effort 는 Opus 5.5·Sonnet 5.5 에서 돕니다. effort 를 바꾸면 캐시가 깨지는 모델에서는 쉽니다.
+
+## 기능 전체
 
 | 기능 | 내용 |
 |---|---|
@@ -23,16 +44,6 @@ Claude Code 입력창 위에 막대 하나를 띄워서, 흩어져 있던 것들
 | 압축 모델 | (기본 원래대로) `/compact` 와 자동 압축 요약을 Haiku / Sonnet / Opus 중 고른 모델이 씁니다 |
 
 사람이 보지 않는 세션(`claude -p`, 크론, SDK)에서는 아무것도 하지 않습니다.
-
-## 설치
-
-```
-/plugin install pilot --marketplace somegee/somegee-skills
-```
-
-셸에서는 `claude plugin install pilot --marketplace somegee/somegee-skills`.
-
-설치 뒤 겹치는 것을 끕니다: `effortless`, `next-steps` 플러그인. 상태줄(statusLine)은 그대로 두되 effort 표시는 빼는 것을 권합니다.
 
 ## 명령어
 
@@ -65,6 +76,17 @@ Claude Code 입력창 위에 막대 하나를 띄워서, 흩어져 있던 것들
 ## 비용
 
 판정·인계 추천은 Haiku 5.5 를 쓰는 사람의 Claude 로그인으로 부릅니다(키 필요 없음). 다음 할 일과 '대화 모델' 인계는 세션을 fork 해서 프롬프트 캐시를 같이 쓰므로 짧은 답 한 번 값입니다. 인계·압축 모델을 따로 고르면 그 모델이 대화 전체를 새로 읽습니다.
+
+## English
+
+pilot is a Claude Code mod that puts one band above the prompt box:
+
+- **Auto effort per question** — Haiku reads each prompt and picks the effort for that single request (your app setting is untouched), and the band shows why.
+- **Next steps** — after each answer, up to three follow-up prompts. Clicking one only drafts it in the prompt box; you still press Enter.
+- **Handoff** — when a conversation gets long, write a handoff memo and continue in a fresh conversation.
+- **Limit guard** — warns at 80% of the 5-hour / weekly limit and can cap auto effort until it resets.
+
+Install: `claude plugin marketplace add somegee/somegee-skills` then `claude plugin install pilot@somegee-skills --scope user`. The band's wording is Korean.
 
 ## 개발
 
