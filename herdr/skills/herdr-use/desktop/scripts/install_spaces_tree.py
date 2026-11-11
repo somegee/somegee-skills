@@ -7,6 +7,11 @@
 - 세션 줄을 끌어 다른 공간 줄(또는 그 공간의 세션 줄) 위에 놓으면 그 공간으로 옮긴다(같은 기기만, 프로그램은 안 끊김).
   놓일 공간 줄엔 점선 테두리. 옮긴 뒤엔 그 공간을 펼치고 옮긴 창으로 이동.
   목록 안 빈 곳에 놓거나, 목록 밖으로 나가거나, 밖을 누르면 취소. 못 옮기면 알림을 띄우고 원래 공간에 되돌린다.
+- 빈 공간 남기기: 마지막 세션이 닫혀(또는 끌려 나가) 사라진 공간을 기억해 흐린 "빈 공간 줄"로 계속 그린다.
+  앱 규칙상 공간엔 탭이 1개 이상이어야 해서 진짜 빈 공간은 못 만든다 → 이 mod 가 이름·폴더·색을 기억한다
+  (mod localStorage "spaces.kept", 이 화면에만). 빈 공간 줄을 누르면 같은 이름·폴더·색으로 기본 셸 탭과 함께 되살리고,
+  세션을 끌어 놓으면 되살린 뒤 그 세션만 넣는다(임시 셸 탭은 닫음). 오른쪽 × 는 완전히 없애기.
+  탭이 2개 이상이던 공간을 통째로 닫은 것과 이름이 "~" 인 공간은 남기지 않는다.
 
 기본 spaces mod 는 읽기 전용(앱 시작 때 원본 복구)이라 my-spaces 로 복제해 고치고,
 내 레이아웃이 my-spaces 를 쓰게 바꾼다.
@@ -46,6 +51,13 @@ const MOVE_SELECT_MS = 150; // space.select 가 반영될 때까지
 const MOVE_PARK_WAIT_MS = 8000; // terminal.park 로 원래 창이 떨어질 때까지 (넘기면 옮기기 취소)
 const MOVE_KEEP_WAIT_MS = 3000; // terminal.keep 한 번에 새 창이 생길 때까지
 const MOVE_KEEP_TRIES = 3; // keep 을 몇 번까지 보내 보나 (늦게라도 붙으면 더 안 보냄)
+// 빈 공간 남기기
+const KEPT_KEY = "spaces.kept"; // localStorage: 세션이 0개가 돼 사라진 공간들
+const KEPT_TICK_MS = 500; // 공간 목록을 다시 보는 간격
+const KEPT_CONFIRM_MS = 1500; // 사라진 뒤 이만큼 지나도 그 기기 화면이 멀쩡하면 "닫힌 것"으로 본다(연결 끊김과 구별)
+const KEPT_REVIVE_WAIT_MS = 5000; // space.new 뒤 새 공간이 보일 때까지
+const KEPT_TAB_WAIT_MS = 3000; // 되살린 공간의 탭 수가 반영될 때까지
+const KEPT_SKIP_NAME = "~"; // 홈에서 잠깐 연 이름 없는 공간은 남기지 않는다
 
 const cleanTitle = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
@@ -83,6 +95,17 @@ function loadOpenState() {
     return {}; // 저장값이 깨졌으면 기본값(선택된 공간만 펼침)으로 시작
   }
 }
+
+function loadKept() {
+  try {
+    const list = JSON.parse(localStorage.getItem(KEPT_KEY) ?? "[]");
+    return Array.isArray(list) ? list.filter((g) => g && typeof g.name === "string") : [];
+  } catch (_e) {
+    return []; // 저장값이 깨졌으면 빈 목록으로 시작
+  }
+}
+
+const keptKey = (machine, name) => JSON.stringify([machine ?? null, name]);
 
 // 지금 레이아웃에 my-agents 가 있으면 그쪽이 지금 하는 일을 읽어 shared 로 내놓는다
 function agentsModShown() {
@@ -248,8 +271,22 @@ METHODS = r'''
   }
 
   moveAgent(addr, target, cx) {
+    cx.spawn(async (cx) => { await this.moveAgentRun(addr, target, cx); });
+  }
+
+  async waitFor(cx, check, ms) {
+    for (let left = ms; left > 0; left -= MOVE_STEP_MS) {
+      const v = check();
+      if (v) return v;
+      await cx.sleep(MOVE_STEP_MS);
+    }
+    return check();
+  }
+
+  // 옮긴 뒤의 창(pane)을 돌려준다. 못 옮겼으면 null.
+  async moveAgentRun(addr, target, cx) {
     const a = agents().find((x) => x.address === addr);
-    if (!a) return;
+    if (!a) return null;
     const srcId = a.space;
     const src = spaces().find((s) => s.id === srcId);
     const tab = (src?.tabs ?? []).find((x) => x.id === a.tab);
@@ -257,50 +294,181 @@ METHODS = r'''
     const name = tab?.named ? tab.name : "";
     this.openState[target.id] = true;
     localStorage.setItem("spaces.open", JSON.stringify(this.openState));
-    cx.spawn(async (cx) => {
-      const paneOf = () => panes().find((x) => x.terminal === addr);
-      const waitFor = async (check, ms) => {
-        for (let left = ms; left > 0; left -= MOVE_STEP_MS) {
-          const v = check();
-          if (v) return v;
-          await cx.sleep(MOVE_STEP_MS);
-        }
-        return check();
-      };
-      const keepIn = async (spaceId) => {
-        run("space.select", { id: spaceId });
-        await cx.sleep(MOVE_SELECT_MS);
-        run("terminal.keep", { terminal: addr, place: "tab" });
-        return waitFor(paneOf, MOVE_KEEP_WAIT_MS);
-      };
-
-      run("space.select", { id: target.id });
+    const paneOf = () => panes().find((x) => x.terminal === addr);
+    const keepIn = async (spaceId) => {
+      run("space.select", { id: spaceId });
       await cx.sleep(MOVE_SELECT_MS);
-      run("terminal.park", { terminal: addr });
-      // park 가 끝나기 전에 keep 이 들어가면 keep 이 안 먹어 창 없는 세션이 된다 → 원래 창이 떨어질 때까지 기다린다.
-      // 끝내 안 떨어지면 원래 창에 그대로 있는 것이라 잃은 게 없다 → 여기서 그만둔다.
-      if (!(await waitFor(() => !paneOf(), MOVE_PARK_WAIT_MS))) {
-        notify({ title: "세션 옮기기 취소", body: "원래 창이 떨어지지 않아 그대로 두었습니다. 잠시 뒤 다시 끌어 보세요.", level: "warning" });
-        cx.notify();
-        return;
-      }
-      // keep 이 늦게라도 붙으면 다시 보내지 않는다(같은 세션 탭이 둘 생기지 않게).
-      let p = null;
-      for (let tries = 0; tries < MOVE_KEEP_TRIES && !p; tries++) p = paneOf() ?? (await keepIn(target.id));
-      if (!p) {
-        // 대상 공간에 못 붙였으면 원래 공간에 되돌려 붙인다 — 창 없이 사라진 세션을 남기지 않는다.
-        const back = paneOf() ?? (await keepIn(srcId));
-        notify(back
-          ? { title: "세션을 못 옮겼습니다", body: "원래 공간에 되돌려 두었습니다.", level: "warning" }
-          : { title: "세션 창을 못 붙였습니다", body: `세션(${addr})은 계속 돌고 있습니다. hc ls 로 찾아 terminal.keep 으로 다시 붙이세요.`, level: "error" });
-        if (back) run("tab.rename", { id: back.tab, name });
-        cx.notify();
-        return;
-      }
-      run("tab.rename", { id: p.tab, name });
+      run("terminal.keep", { terminal: addr, place: "tab" });
+      return this.waitFor(cx, paneOf, MOVE_KEEP_WAIT_MS);
+    };
+
+    run("space.select", { id: target.id });
+    await cx.sleep(MOVE_SELECT_MS);
+    run("terminal.park", { terminal: addr });
+    // park 가 끝나기 전에 keep 이 들어가면 keep 이 안 먹어 창 없는 세션이 된다 → 원래 창이 떨어질 때까지 기다린다.
+    // 끝내 안 떨어지면 원래 창에 그대로 있는 것이라 잃은 게 없다 → 여기서 그만둔다.
+    if (!(await this.waitFor(cx, () => !paneOf(), MOVE_PARK_WAIT_MS))) {
+      notify({ title: "세션 옮기기 취소", body: "원래 창이 떨어지지 않아 그대로 두었습니다. 잠시 뒤 다시 끌어 보세요.", level: "warning" });
+      cx.notify();
+      return null;
+    }
+    // keep 이 늦게라도 붙으면 다시 보내지 않는다(같은 세션 탭이 둘 생기지 않게).
+    let p = null;
+    for (let tries = 0; tries < MOVE_KEEP_TRIES && !p; tries++) p = paneOf() ?? (await keepIn(target.id));
+    if (!p) {
+      // 대상 공간에 못 붙였으면 원래 공간에 되돌려 붙인다 — 창 없이 사라진 세션을 남기지 않는다.
+      const back = paneOf() ?? (await keepIn(srcId));
+      notify(back
+        ? { title: "세션을 못 옮겼습니다", body: "원래 공간에 되돌려 두었습니다.", level: "warning" }
+        : { title: "세션 창을 못 붙였습니다", body: `세션(${addr})은 계속 돌고 있습니다. hc ls 로 찾아 terminal.keep 으로 다시 붙이세요.`, level: "error" });
+      if (back) run("tab.rename", { id: back.tab, name });
+      cx.notify();
+      return null;
+    }
+    run("tab.rename", { id: p.tab, name });
+    run("pane.focus", { pane: p.pane });
+    cx.notify();
+    return p;
+  }
+
+  // ---- my-spaces kept: 세션이 0개가 된 공간을 빈 줄로 남긴다 ----
+  // 앱은 마지막 탭이 닫히면 공간도 닫는다 → 사라진 공간을 여기서 기억해 그리고, 누르면 같은 이름·폴더·색으로 되살린다.
+  saveKept() {
+    localStorage.setItem(KEPT_KEY, JSON.stringify(this.kept));
+  }
+
+  forgetKept(key) {
+    const next = this.kept.filter((g) => g.key !== key);
+    if (next.length === this.kept.length) return false;
+    this.kept = next;
+    this.saveKept();
+    return true;
+  }
+
+  machineReady(machine) {
+    return machines().some((k) => (k.name ?? null) === machine && k.layout === "ready");
+  }
+
+  trackKept(cx) {
+    const sp = spaces();
+    const now = Date.now();
+    const live = new Set(sp.map((s) => s.id));
+    let changed = false;
+    // 방금 사라진 공간: 탭이 1개 이하였던 것만 후보(탭 여러 개인 공간을 통째로 닫은 건 남기지 않는다)
+    for (const [id, info] of Object.entries(this.seenSpaces)) {
+      if (live.has(id)) continue;
+      delete this.seenSpaces[id];
+      if (info.tabs <= 1 && info.name !== KEPT_SKIP_NAME && this.machineReady(info.machine)) this.goneSpaces[id] = { ...info, at: now };
+    }
+    // 잠깐 기다려도 그 기기 화면이 멀쩡하면 닫힌 것 → 빈 줄로 남긴다(연결이 끊겨 안 보이는 것과 구별)
+    for (const [id, info] of Object.entries(this.goneSpaces)) {
+      if (now - info.at < KEPT_CONFIRM_MS) continue;
+      delete this.goneSpaces[id];
+      if (live.has(id) || !this.machineReady(info.machine)) continue;
+      const key = keptKey(info.machine, info.name);
+      this.kept = [...this.kept.filter((g) => g.key !== key), { key, machine: info.machine, name: info.name, named: info.named, folder: info.folder, color: info.color }];
+      changed = true;
+    }
+    // 같은 기기에 같은 이름 공간이 살아 있으면 빈 줄은 필요 없다(되살리는 중인 것은 reviveKept 가 지운다)
+    const names = new Set(sp.map((s) => keptKey(s.machine, s.name)));
+    const next = this.kept.filter((g) => this.reviving.has(g.key) || !names.has(g.key));
+    if (next.length !== this.kept.length) {
+      this.kept = next;
+      changed = true;
+    }
+    const ps = panes();
+    const colors = shared("space.colors") ?? {};
+    for (const s of sp) {
+      this.seenSpaces[s.id] = { machine: s.machine ?? null, name: s.name, named: !!s.named, folder: place(s, ps) || "", tabs: (s.tabs ?? []).length, color: colors[s.id] ?? null };
+    }
+    if (changed) {
+      this.saveKept();
+      cx.notify();
+    }
+  }
+
+  // 빈 공간을 되살린다(기본 셸 탭 1개와 함께). 새 공간을 돌려주고, 못 만들면 null.
+  async reviveKept(g, cx) {
+    if (this.reviving.has(g.key)) return null;
+    this.reviving.add(g.key);
+    cx.notify();
+    const before = new Set(spaces().map((s) => s.id));
+    const born = () => spaces().find((s) => !before.has(s.id) && (s.machine ?? null) === g.machine);
+    const make = (folder) => {
+      const args = { machine: g.machine ?? "" };
+      if (g.named) args.name = g.name;
+      if (folder) args.folder = folder;
+      run("space.new", args);
+      return this.waitFor(cx, born, KEPT_REVIVE_WAIT_MS);
+    };
+    // 기억한 폴더가 없어졌으면 앱이 공간을 안 만든다 → 폴더 없이(그 기기 홈에서) 한 번 더
+    const s = (await make(g.folder)) ?? (g.folder ? await make("") : null);
+    this.reviving.delete(g.key);
+    if (!s) {
+      notify({ title: "빈 공간을 못 열었습니다", body: `"${g.name}" 공간을 만들지 못했습니다. 기기 연결을 확인하고 다시 눌러 보세요.`, level: "warning" });
+      cx.notify();
+      return null;
+    }
+    if (g.color) setShared("space.colors", { ...(shared("space.colors") ?? {}), [s.id]: g.color });
+    this.forgetKept(g.key);
+    cx.notify();
+    return s;
+  }
+
+  // 빈 공간 줄에 세션을 끌어 놓음: 되살린 뒤 그 세션만 남긴다(되살릴 때 같이 생긴 셸 탭은 닫는다).
+  moveToKept(addr, g, cx) {
+    cx.spawn(async (cx) => {
+      const s = await this.reviveKept(g, cx);
+      if (!s) return;
+      const tabsOf = () => spaces().find((x) => x.id === s.id)?.tabs ?? [];
+      const first = (await this.waitFor(cx, () => tabsOf()[0], KEPT_TAB_WAIT_MS))?.id;
+      const p = await this.moveAgentRun(addr, s, cx);
+      if (!p || !first) return; // 못 옮겼으면 되살린 공간은 셸 탭과 함께 그대로 둔다
+      // 탭이 2개로 보일 때만 닫는다 — 1개일 때 닫으면 공간이 또 닫힌다
+      const both = await this.waitFor(cx, () => tabsOf().length >= 2 && tabsOf().some((x) => x.id === first), KEPT_TAB_WAIT_MS);
+      if (!both) return;
+      run("tab.close", { id: first, confirmed: true });
+      await cx.sleep(MOVE_SELECT_MS);
       run("pane.focus", { pane: p.pane });
       cx.notify();
     });
+  }
+
+  keptRows(m, t, collapsed) {
+    if (collapsed) return [];
+    const machine = m ?? null;
+    if (machine && this.machines.find((k) => k.name === machine)?.state !== "connected") return [];
+    return this.kept.filter((g) => g.machine === machine && !this.reviving.has(g.key)).map((g) => this.keptRow(g, t));
+  }
+
+  keptRow(g, t) {
+    const pid = `kept:${g.key}`; // 놓일 자리 표시에 쓰는 가짜 공간 id
+    const pw = { id: pid, machine: g.machine };
+    const slug = `${g.machine ?? "local"}-${g.name}`;
+    const color = g.color ?? "ansi6";
+    const fill = color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    return h_flex().id(`space-kept-${slug}`).px(8).h(30).flex_none().gap(9).items_center().rounded(8)
+      .hover((s) => s.bg(t.hover))
+      .when(this.dropOver === pid, (el) => el.border(1.5).border_dashed().border_color(t.accent).bg(t.hover))
+      .tooltip("세션 없음 · 누르면 새 탭으로 다시 엽니다 · 세션을 끌어다 놓을 수 있습니다")
+      .on_mouse_move((_e, cx) => this.dragOver(pw, cx))
+      .on_mouse_up("left", (_e, cx) => {
+        if (!this.dragAgent) return;
+        const addr = this.dragAgent;
+        const ok = this.dropOver === pid && this.canDrop(pw);
+        this.cancelDrag();
+        if (ok) this.moveToKept(addr, g, cx);
+        cx.notify();
+      })
+      .on_click((_e, cx) => { cx.spawn(async (cx) => { await this.reviveKept(g, cx); }); })
+      .child(div().w(12).flex_none())
+      .child(h_flex().size(18).flex_none().rounded(5).bg(fill).opacity(0.4).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...g.name][0]?.toUpperCase() ?? "?"))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(g.name))
+      .child(div().id(`space-kept-x-${slug}`).size(18).flex_none().flex().items_center().justify_center().rounded(4)
+        .text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .tooltip("이 빈 공간을 목록에서 없애기")
+        .on_click((_e, cx) => { cx.stop_propagation(); if (this.forgetKept(g.key)) cx.notify(); })
+        .child("×"));
   }
 
   render() {
@@ -316,12 +484,18 @@ TREE_PATCHES = [
      "    this.sharedMsgs = agentsModShown();\n"
      "    this.dragAgent = null; // 끄는 중인 세션 주소\n"
      "    this.dropOver = null; // 놓일 공간 id\n"
-     "    cx.timer.every(MSG_POLL_MS, (cx) => this.pollMsgs(cx));\n"),
+     "    cx.timer.every(MSG_POLL_MS, (cx) => this.pollMsgs(cx));\n"
+     "    this.kept = loadKept(); // 세션이 0개가 돼 사라진 공간들(빈 줄로 그린다)\n"
+     "    this.seenSpaces = {}; // 공간 id → 마지막으로 본 모습\n"
+     "    this.goneSpaces = {}; // 방금 사라져 확인을 기다리는 공간\n"
+     "    this.reviving = new Set(); // 되살리는 중인 빈 공간 key\n"
+     "    cx.timer.every(KEPT_TICK_MS, (cx) => this.trackKept(cx));\n"),
     ("const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));",
      "const draw = (r) => (collapsed ? [this.compact(r, t)] : [this.row(r, t), ...this.sessionRows(r.w, t)]);"),
     ("return loading(null) && !rows.length ? [loadingRow(null)] : rows.map(draw);",
-     "return loading(null) && !rows.length ? [loadingRow(null)] : rows.flatMap(draw);"),
-    ("mine.length ? mine.map(draw) :", "mine.length ? mine.flatMap(draw) :"),
+     "return loading(null) && !rows.length ? [loadingRow(null)] : [...rows.flatMap(draw), ...this.keptRows(null, t, collapsed)];"),
+    ("mine.length ? mine.map(draw) :",
+     "(mine.length || this.keptRows(m, t, collapsed).length) ? [...mine.flatMap(draw), ...this.keptRows(m, t, collapsed)] :"),
     ("          .gap(9)\n          .items_center()\n          .when(Boolean(tree),",
      "          .gap(9)\n          .items_center()\n          .child(this.chev(w, t, this.sessionsOf(w).length > 0))\n"
      "          .when(Boolean(tree),"),
@@ -362,7 +536,7 @@ DRAG_PATCHES = [
 ]
 
 HERDR_IMPORT = re.compile(r'import \{([^}]*)\} from "herdr";')
-NEEDED = ("agents", "focused", "layout", "notify", "hc", "shared")
+NEEDED = ("agents", "focused", "layout", "notify", "hc", "shared", "setShared", "machines")
 
 
 def ensure_imports(src: str, needed: tuple[str, ...]) -> str:
