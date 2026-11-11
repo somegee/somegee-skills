@@ -7,6 +7,8 @@
   python install_tabs_agent_name.py            # 적용 (멱등)
   python install_tabs_agent_name.py --remove   # 기본 tabs 로 되돌림 (my-tabs 폴더는 남김)
 설치할 때마다 원본 mods/tabs/main.js 에서 다시 고쳐 덮어쓴다(patchlib).
+my-new-menu(install_ccd_button.py 가 만듦)가 있으면 + 버튼이 기본 new-menu 대신 그걸 열게 한다 —
+없는데 가리키면 + 버튼이 아무것도 안 열므로 있을 때만.
 """
 import os
 import sys
@@ -14,7 +16,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import ensure_own_layout  # noqa: E402
 from install_agents_name_only import point_layout  # noqa: E402
-from patchlib import apply_patches, rebuild  # noqa: E402
+from patchlib import apply_patches, mod_js, rebuild  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -45,13 +47,31 @@ PATCHES = [
     ('.on_mouse_up("left", () => { this.pressed = null; })',
      '.on_mouse_up("left", (_e, cx) => { this.pressed = null; this.over = null; cx.notify(); })'),
 ]
+NEW_MENU = "my-new-menu"
+# + 버튼 → my-new-menu (ccd 를 설치 때 정한 폴더에서 여는 + 메뉴)
+NEW_MENU_PATCH = ('openOverlay({ mod: "new-menu", kind: "popup"', 'openOverlay({ mod: "%s", kind: "popup"' % NEW_MENU)
+
+
+def patches() -> list:
+    return PATCHES + ([NEW_MENU_PATCH] if os.path.exists(mod_js(NEW_MENU)) else [])
+
+
+def build() -> bool:
+    return rebuild(BASE, CLONE, lambda src: apply_patches(src, patches(), BASE))
+
+
+def refresh() -> None:
+    """my-new-menu 를 만들거나 지운 뒤 부른다 — my-tabs 가 이미 있으면 + 버튼 연결만 다시 맞춘다(레이아웃은 안 건드림)."""
+    if os.path.exists(mod_js(CLONE)) and build():
+        print("my-tabs 다시 만듦: + 버튼 →", NEW_MENU if os.path.exists(mod_js(NEW_MENU)) else "new-menu(기본)")
 
 
 def install() -> None:
     target = ensure_own_layout()
-    changed = rebuild(BASE, CLONE, lambda src: apply_patches(src, PATCHES, BASE))
+    changed = build()
     n = point_layout(target, BASE, CLONE)
-    print("적용 완료: 레이아웃", target, "/ tabs → my-tabs 연결", n, "곳", "(코드 고침)" if changed else "(코드 변경 없음)")
+    menu = NEW_MENU if os.path.exists(mod_js(NEW_MENU)) else "new-menu(기본)"
+    print("적용 완료: 레이아웃", target, "/ tabs → my-tabs 연결", n, "곳", "(코드 고침)" if changed else "(코드 변경 없음)", "/ + 버튼 →", menu)
 
 
 def remove() -> None:

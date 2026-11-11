@@ -1,8 +1,10 @@
 """herdr 앱: Ctrl+N 으로 지금 공간에 ccd(claude --dangerously-skip-permissions) 새 탭을 연다.
 
 keys.json 은 tab.new 에 argv 를 못 넘기므로 작은 mod(ccd-key)가 키를 받아 연다.
-  python install_ccd_key.py            # 설치 (멱등)
-  python install_ccd_key.py --remove   # 단축키·mod 제거
+  python install_ccd_key.py                          # 설치 (멱등)
+  python install_ccd_key.py --ccd-folder "<경로>"    # 그 폴더에서 열기 ("" = 지정 해제 → 공간 폴더)
+  python install_ccd_key.py --remove                 # 단축키·mod 제거
+폴더를 안 주면 이미 설치된 값을 유지한다(정하는 순서는 ccd_folder.py). 다른 기기(원격) 공간에선 늘 그 공간 폴더.
 
 주의: 단축키가 ccd-key.new 를 가리키면 앱이 레이아웃에 mod 칸을 스스로 넣는다 → 기다렸다가 없을 때만 넣고,
 여러 개면 하나만 남긴다(두 개면 Ctrl+N 한 번에 탭이 두 개 열림).
@@ -17,6 +19,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import APP_HOME, LAYOUTS, SHIPPED, children_lists, ensure_own_layout, find_block, load, save  # noqa: E402
+import ccd_folder  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -58,10 +61,19 @@ def set_key(value):
         f.write(json.dumps(keys, ensure_ascii=False, indent=2))
 
 
-def install():
+def copy_mod(folder):
+    """mod 파일을 복사하되 main.js 의 FOLDER 줄은 정한 폴더로 채운다(먼저 정해야 설치본 값을 읽을 수 있음)."""
     os.makedirs(MOD_DIR, exist_ok=True)
-    for name in ("main.js", "mod.json"):
-        shutil.copy2(os.path.join(SRC, name), os.path.join(MOD_DIR, name))
+    shutil.copy2(os.path.join(SRC, "mod.json"), os.path.join(MOD_DIR, "mod.json"))
+    with io.open(os.path.join(SRC, "main.js"), encoding="utf-8", newline="") as f:
+        src = f.read()
+    with io.open(os.path.join(MOD_DIR, "main.js"), "w", encoding="utf-8", newline="") as f:
+        f.write(ccd_folder.set_in_source(src, "FOLDER", folder))
+
+
+def install(folder_arg=None):
+    folder = ccd_folder.resolve(folder_arg)
+    copy_mod(folder)
     target = ensure_own_layout()
     set_key(ACTION)
     for _ in range(12):  # 앱이 스스로 칸을 넣는지 최대 6초
@@ -82,7 +94,7 @@ def install():
             lst.remove(child)
         save(target, layout)
         print("중복 칸 정리:", len(blocks) - 1, "개 제거")
-    print("설치 완료: Ctrl+N = ccd 새 탭 / 레이아웃:", target)
+    print("설치 완료: Ctrl+N = ccd 새 탭 / 레이아웃:", target, "/ 폴더:", ccd_folder.describe(folder))
 
 
 def remove():
@@ -103,4 +115,4 @@ def remove():
 
 
 if __name__ == "__main__":
-    remove() if "--remove" in sys.argv else install()
+    remove() if "--remove" in sys.argv else install(ccd_folder.parse_arg(sys.argv[1:]))

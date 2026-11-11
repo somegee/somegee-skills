@@ -1,9 +1,11 @@
 """herdr 데스크톱 앱 커스텀 일괄 설치·제거·점검.
 
-  python setup.py            # 전부 설치 (여러 번 실행해도 같은 결과)
-  python setup.py --remove   # 전부 되돌림
-  python setup.py --check    # 지금 상태만 보기 (아무것도 안 바꿈)
+  python setup.py                          # 전부 설치 (여러 번 실행해도 같은 결과)
+  python setup.py --ccd-folder "<경로>"    # 설치 + ccd 새 탭(Ctrl+N·+ 메뉴)을 그 폴더에서 열기 ("" = 지정 해제)
+  python setup.py --remove                 # 전부 되돌림
+  python setup.py --check                  # 지금 상태만 보기 (아무것도 안 바꿈)
 
+--ccd-folder 를 안 주면 이미 설치된 폴더를 유지한다(처음이면 PowerShell 프로필의 ccd 함수에서 찾아 보고, 없으면 공간 폴더).
 herdr 앱이 켜져 있어야 한다(레이아웃·mod 복제를 앱에 시킨다). 자세한 내용은 README.md.
 """
 import io
@@ -18,17 +20,21 @@ sys.path.insert(0, SCRIPTS)
 sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)  # 하위 스크립트 출력과 순서 맞춤
 
 from install_title_sync import APP_HOME, app_exe  # noqa: E402
+from patchlib import mod_js  # noqa: E402
+import ccd_folder  # noqa: E402
 
-# (이름, 스크립트, 설명) — 순서 중요: title-sync 가 기본 레이아웃을 my-main 으로 복제·전환한다
+# (이름, 스크립트, 설명) — 순서 중요: title-sync 가 기본 레이아웃을 my-main 으로 복제·전환한다.
+# ccd 버튼이 my-tabs 보다 먼저 — my-new-menu 가 있어야 my-tabs 의 + 버튼이 그걸 연다.
 STEPS = [
     ("title-sync", "install_title_sync.py", "/rename 하면 상단 탭 이름이 따라감 (+ 기본 레이아웃을 my-main 으로 복제)"),
     ("image-paste", "install_image_paste.py", "Ctrl+Shift+V 로 클립보드 그림 붙여넣기"),
     ("my-agents", "install_agents_name_only.py", "좌하단 Agents: 세션명만 + 지금 하는 일"),
-    ("my-tabs", "install_tabs_agent_name.py", "상단 탭: 이름 없는 Claude 탭은 'Claude Code' + 드래그 시 점선"),
-    ("ccd 버튼", "install_ccd_button.py", "우상단 + 메뉴에 ccd (claude --dangerously-skip-permissions)"),
+    ("ccd 버튼", "install_ccd_button.py", "우상단 + 메뉴에 ccd (claude --dangerously-skip-permissions) + my-new-menu"),
+    ("my-tabs", "install_tabs_agent_name.py", "상단 탭: 이름 없는 Claude 탭은 'Claude Code' + 드래그 시 점선 + + 버튼 → my-new-menu"),
     ("Ctrl+N", "install_ccd_key.py", "Ctrl+N 으로 ccd 새 Claude 탭"),
     ("my-spaces", "install_spaces_tree.py", "좌상단 Spaces: ▾/▸ 로 공간별 세션 목록·상태 펼치기"),
 ]
+CCD_SCRIPTS = {"install_ccd_button.py", "install_ccd_key.py"}  # --ccd-folder 를 넘겨 줄 단계
 
 
 def status():
@@ -82,14 +88,51 @@ def check():
     except (OSError, ValueError):
         has = False
     print("  + 메뉴 ccd     =", "있음" if has else "없음")
+    check_new_menu()
+    check_ccd_folder()
 
 
-def install():
+def read_file(path):
+    try:
+        with io.open(path, encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def check_new_menu():
+    """my-new-menu 는 팝업이라 레이아웃 칸이 없다 → 파일과 my-tabs 의 + 버튼 연결만 본다."""
+    has_file = os.path.exists(mod_js("my-new-menu"))
+    linked = 'mod: "my-new-menu"' in read_file(mod_js("my-tabs"))
+    if has_file and linked:
+        state = "파일 있음 · + 버튼 연결 OK"
+    elif has_file:
+        state = "파일 있음 · + 버튼 연결 안 됨 (my-tabs 다시 설치)"
+    elif linked:
+        state = "파일 없음인데 + 버튼이 가리킴! + 버튼이 안 열림 → 설치 다시"
+    else:
+        state = "없음"
+    print("  %-12s %s" % ("my-new-menu", state))
+
+
+def check_ccd_folder():
+    vals = ccd_folder.installed_values()
+    key, menu = vals[ccd_folder.KEY_MOD], vals[ccd_folder.MENU_MOD]
+    print("  ccd 폴더 =", ccd_folder.describe(key if key is not None else menu))
+    if key is not None and menu is not None and key != menu:
+        print("  !! ccd 폴더가 서로 다름 — Ctrl+N: %s / + 메뉴: %s → setup.py --ccd-folder 로 다시 맞추기"
+              % (ccd_folder.describe(key), ccd_folder.describe(menu)))
+
+
+def install(folder_arg):
     need_app()
+    folder = ccd_folder.resolve(folder_arg)
+    print("ccd 새 탭 폴더:", ccd_folder.describe(folder))
     failed = []
     for i, (name, script, desc) in enumerate(STEPS, 1):
         print("\n[%d/%d] %s — %s" % (i, len(STEPS), name, desc))
-        if not run_step(script):
+        extra = [ccd_folder.OPTION, folder] if script in CCD_SCRIPTS else []
+        if not run_step(script, *extra):
             failed.append(name)
             print("  !! 실패 — 위 메시지 확인. 나머지는 계속 진행")
     print("\n===== 결과 =====")
@@ -107,7 +150,7 @@ def remove():
         run_step(script, "--remove")
     subprocess.run([app_exe(), "do", "layout.switch", json.dumps({"name": "main"})])
     print("\n기본 레이아웃(main)으로 전환함. 복제본(layouts/my-main.json, mods/my-agents, mods/my-tabs, mods/my-spaces)은 남겨 둠 —"
-          " 완전히 지우려면 README 의 '완전 삭제' 참고.")
+          " 완전히 지우려면 README 의 '완전 삭제' 참고. (mods/my-new-menu 는 지움)")
 
 
 if __name__ == "__main__":
@@ -116,4 +159,4 @@ if __name__ == "__main__":
     elif "--check" in sys.argv:
         check()
     else:
-        install()
+        install(ccd_folder.parse_arg(sys.argv[1:]))

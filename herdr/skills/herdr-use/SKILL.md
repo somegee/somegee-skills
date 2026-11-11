@@ -68,17 +68,18 @@ K="$(ls -d ~/.claude/plugins/cache/*/herdr/*/skills/herdr-use 2>/dev/null | tail
 | 2 | `/rename`·Claude 자동 제목 → 상단 탭 이름 (title-sync mod) | `install_title_sync.py` |
 | 3 | Ctrl+Shift+V 그림 붙여넣기 (image-paste mod + `clipimg.exe`) | `install_image_paste.py` |
 | 4 | 좌하단 Agents: 세션명만 + 작업 중이면 "지금 하는 일" (my-agents) | `install_agents_name_only.py` |
-| 5 | 상단 탭: 이름 없는 Claude 탭은 `Claude Code` + 끌 때 점선 (my-tabs) | `install_tabs_agent_name.py` |
-| 6 | 우상단 `+` 메뉴에 ccd(`claude --dangerously-skip-permissions`) | `install_ccd_button.py` |
-| 7 | Ctrl+N → ccd 새 Claude 탭 (ccd-key mod) | `install_ccd_key.py` |
+| 5 | 상단 탭: 이름 없는 Claude 탭은 `Claude Code` + 끌 때 점선 + `+` 버튼이 my-new-menu를 엶 (my-tabs) | `install_tabs_agent_name.py` |
+| 6 | 우상단 `+` 메뉴에 ccd(`claude --dangerously-skip-permissions`) — programs.json 항목 + 기본 new-menu 복제본 my-new-menu(ccd를 정한 폴더에서 엶) | `install_ccd_button.py` |
+| 7 | Ctrl+N → ccd 새 Claude 탭 (ccd-key mod, 6과 같은 폴더) | `install_ccd_key.py` |
 | 8 | 좌상단 Spaces: ▾/▸로 공간별 세션 목록 펼치기 + 세션 상태·작업 중이면 하는 일, 누르면 그 창으로, 세션을 끌어 다른 공간으로 옮기기(같은 기기만), 세션이 0개가 된 공간을 빈 줄로 남기기 (my-spaces) | `install_spaces_tree.py` |
 
 - 전부: `python "$K/desktop/setup.py"` / 상태만: `--check` / 전부 되돌리기: `--remove`. 하나만: `python "$K/desktop/scripts/<스크립트>"`(`--remove`로 개별 해제).
+- ccd 새 탭 폴더: `setup.py --ccd-folder "<경로>"`(6·7 스크립트도 같은 옵션, `""` = 지정 해제). 순서·검사는 아래 함정 「ccd 탭 폴더」.
 - 이미 기본 레이아웃이 아닌 내 레이아웃(예: 직접 복제한 것)을 쓰는 중이면 **새로 복제하지 않고 그 레이아웃에 얹는다.** `--check`의 "my-main 이어야" 문구는 그 경우 무시.
 - 끝나면 `--check`에서 각 mod `칸 1개 OK`, `앱 오류: 없음`을 본다. 키·화면 동작은 SSH나 `hc send`로는 시험할 수 없다 — 사람이 그 PC에서 직접 눌러 본다(`desktop/README.md` 「확인 방법」).
 
 **함정**
-- **`herdr-app do`/`status`가 `no Herdr window ... (os error 10061)`이면** 앱이 명령을 못 받는 상태다. 오래 떠 있던 앱 프로세스가 이러기도 한다 → 트레이까지 완전히 끄고 다시 켠다. SSH 세션에서도 같은 오류가 난다(앱 창에 못 붙음) → 원격에선 파일만 `hc file write --on pc`로 쓰고 레이아웃 전환은 사람이 한다. 6·7(파일만 고침)은 앱 응답 없이도 깔리지만 4·5·8(mod 복제)은 앱이 응답해야 한다.
+- **`herdr-app do`/`status`가 `no Herdr window ... (os error 10061)`이면** 앱이 명령을 못 받는 상태다. 오래 떠 있던 앱 프로세스가 이러기도 한다 → 트레이까지 완전히 끄고 다시 켠다. SSH 세션에서도 같은 오류가 난다(앱 창에 못 붙음) → 원격에선 파일만 `hc file write --on pc`로 쓰고 레이아웃 전환은 사람이 한다. 7(파일만 고침)은 앱 응답 없이도 깔리지만 4·5·6·8(mod 복제 — 6은 my-new-menu를 처음 만들 때)은 앱이 응답해야 한다.
 - **기본 레이아웃·기본 mod는 읽기 전용이다.** 앱이 시작할 때 원본으로 되돌리고 고친 파일은 `<이름>-edited`로 치운다 → 고치려면 `layout.clone`·`mod.clone`으로 복제본을 고친다.
 - **단축키가 mod를 가리키면 앱이 그 mod 칸을 스스로 넣는다.** 손으로 또 넣으면 두 번 동작한다(그림 두 장). 설치 스크립트는 중복이면 하나만 남긴다.
 - mod는 **레이아웃에 칸이 있어야 돈다**(높이 0 칸이면 화면엔 안 보임).
@@ -90,7 +91,11 @@ K="$(ls -d ~/.claude/plugins/cache/*/herdr/*/skills/herdr-use 2>/dev/null | tail
 - 지금 하는 일(status.msg): my-agents가 3초마다 `hc get`으로 읽어 `shared("agent.msgs")`로 내놓고, my-spaces는 레이아웃에 my-agents가 있으면 그걸 읽는다(없을 때만 직접 읽음) — 같은 조회를 두 번 돌리지 않게.
 - **끌어 옮기다 세션이 화면에서 사라지면 죽은 게 아니라 떼어진 채 남은 것이다.** `hc ls`엔 보이고, `hc get <t> --json`으로 보면 `keep:false`에 `herdr.space` 이름표가 없다. (0.3.0부터는 못 붙이면 원래 공간에 되돌리고 알림을 띄우지만, 그래도 사라졌을 때) 되살리기: ① `herdr-app do space.select '{"id":"<공간 id>"}'` ② `herdr-app do terminal.keep '{"terminal":"<t>","place":"tab"}'` ③ `tab.rename`으로 탭 이름 되돌리기. 공간 id는 같은 공간에 있는 다른 세션의 `herdr.space` 이름표에서 알 수 있다.
 - **Ctrl+N은 앱이 먼저 받는다**(터미널 안에서도) → Claude 입력 기록 이동은 ↓ 키로. Ctrl+N이 이미 다른 동작에 걸려 있으면 설치가 멈춘다. 한 번 안 먹다가 앱 창을 선택하고 다시 누르니 된 사례가 있다(원인 미확인, 한/영 상태일 수 있음).
-- ccd 탭은 **공간(space)의 폴더**에서 열린다(PowerShell `ccd` 함수를 부르지 않음 — herdr는 bash/zsh 함수만 설치 확인을 해서 PowerShell 함수는 "not installed"로 보임).
+- **ccd 탭 폴더**: Ctrl+N·`+` 메뉴 ccd 모두 **설치 때 `--ccd-folder`로 정한 폴더**(안 정했으면 공간 폴더, **다른 기기(원격) 공간은 늘 그 공간 폴더** — `spaces()[i].machine`이 null일 때만 적용, 이 PC 경로는 원격에 없음)에서 연다. 탭은 늘 `claude`를 직접 실행한다 — **PowerShell `ccd` 함수가 없어도 된다**(대부분의 PC엔 없음. 함수를 부르지 않는 이유: herdr는 bash/zsh 함수만 설치 확인을 해서 PowerShell 함수는 "not installed"로 보임).
+  - 앱 API `tab.new`는 `folder`를 받지만 programs.json의 `run`엔 폴더 칸이 없다 → `+` 메뉴는 기본 new-menu를 my-new-menu로 복제해 고치고(patchlib), `+` 버튼은 tabs mod 안에 있어서 my-tabs가 `openOverlay({ mod: "my-new-menu" … })`로 연다. **my-new-menu가 있을 때만 그렇게 고친다**(없는데 가리키면 `+`가 아무것도 안 엶) → setup 순서는 ccd 버튼 → my-tabs, 6번 설치·`--remove` 뒤엔 my-tabs를 다시 맞춘다(`refresh()`). my-new-menu는 팝업이라 레이아웃 칸이 없다. `KNOWN`("new-menu.agents") 캐시 키는 원본과 같이 쓴다.
+  - 폴더 정하는 순서(`scripts/ccd_folder.py`): ① 옵션 ② **설치본 값 유지**(ccd-key `const FOLDER`, my-new-menu `const CCD_FOLDER` 줄 — 안 그러면 setup을 다시 돌릴 때마다 폴더가 사라짐, `""`로 해제해 둔 것도 유지) ③ 설치본에 그 줄이 없을 때만 PowerShell 프로필의 `function ccd { Set-Location "<경로>" … }`(프로필 위치는 `$PROFILE`을 powershell·pwsh에 물어봄 — OneDrive 문서 폴더 대비. `cd`·`-Path`·변수·`Push-Location` 등 다른 형식이면 조용히 건너뜀) ④ `""`.
+  - 설치 때 폴더가 없으면 경고하고 `""`(없는 폴더로 `tab.new`하면 탭이 안 열림), `claude`가 PATH에 없으면 경고(`+` 메뉴는 "not installed"로 흐림, Ctrl+N은 오류 알림). `--check`에 `ccd 폴더 = …` 줄, 두 설치본 값이 다르면 경고.
+  - 설치 뒤 폴더가 지워진 경우: mod가 누를 때 `exec("cmd", ["/c","exit"], {cwd})`로 확인(`exec`는 cwd가 없으면 거절)하고, 없으면 공간 폴더로 열고 `notify`로 알린다. `run()`은 null이라 tab.new 실패를 직접 알 수 없어서다. `+` 메뉴는 메뉴를 열 때 미리 확인하고 결과가 오기 전에 누르면 폴더를 믿고 넘긴다. **이 확인은 시험 적용 전이다**(폴더 지정 자체는 2026-11-11 herdr-app에서 확인됨).
 - 그림 붙여넣기: 앱은 Windows 로컬 창에 클립보드 **글자만** 붙인다. mod가 `clipimg.exe`(설치 때 .NET Framework 4 `csc.exe`로 빌드, 인터넷 안 씀)로 그림을 `C:\Users\Public\herdr-paste\paste-*.png`에 저장하고 클립보드를 '복사한 파일'로 바꾼 뒤 `terminal.paste` → 경로가 들어가고 Claude가 그림으로 읽는다. 원격 창이면 바로 `terminal.paste`(앱이 그림을 그 기기로 복사). 붙인 뒤 클립보드엔 그림 대신 파일이 남는다. Claude 자체 Alt+V는 PowerShell을 띄워 느려서 안 쓴다.
 - 원래 단축키 설정은 `keys.json.bak-imagepaste`·`keys.json.bak-ccdkey`로 백업된다. 화면이 망가지면 앱에서 `Ctrl+Alt+Shift+Esc`(기본 화면 복귀).
 - 왼쪽 Agents에 안 보이는 Claude 탭 = 백그라운드로 돌던 세션을 `/resume`으로 연 경우 → `claude stop <id>` 후 그 탭에서 `claude --resume`.
