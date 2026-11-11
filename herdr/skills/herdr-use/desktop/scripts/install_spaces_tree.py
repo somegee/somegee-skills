@@ -11,7 +11,8 @@
   앱 규칙상 공간엔 탭이 1개 이상이어야 해서 진짜 빈 공간은 못 만든다 → 이 mod 가 이름·폴더·색을 기억한다
   (mod localStorage "spaces.kept", 이 화면에만). 빈 공간 줄을 누르면 같은 이름·폴더·색으로 기본 셸 탭과 함께 되살리고,
   세션을 끌어 놓으면 되살린 뒤 그 세션만 넣는다(임시 셸 탭은 닫음). 오른쪽 × 는 완전히 없애기.
-  탭이 2개 이상이던 공간을 통째로 닫은 것, 이미 비어 있던(탭 0개) 공간을 지운 것, 이름이 "~" 인 공간은 남기지 않는다.
+  탭이 2개 이상이던 공간을 통째로 닫은 것, 이미 비어 있던(탭 0개) 공간을 지운 것,
+  안의 세션이 살아 있는데 공간만 지워진 것(웹 휴지통 — hc ls 로 확인, 0.5.3), 이름이 "~" 인 공간은 남기지 않는다.
 
 기본 spaces mod 는 읽기 전용(앱 시작 때 원본 복구)이라 my-spaces 로 복제해 고치고,
 내 레이아웃이 my-spaces 를 쓰게 바꾼다.
@@ -55,6 +56,7 @@ const MOVE_KEEP_TRIES = 3; // keep 을 몇 번까지 보내 보나 (늦게라도
 const KEPT_KEY = "spaces.kept"; // localStorage: 세션이 0개가 돼 사라진 공간들
 const KEPT_TICK_MS = 500; // 공간 목록을 다시 보는 간격
 const KEPT_CONFIRM_MS = 1500; // 사라진 뒤 이만큼 지나도 그 기기 화면이 멀쩡하면 "닫힌 것"으로 본다(연결 끊김과 구별)
+const KEPT_LOOSE_WAIT_MS = 10000; // 안에 있던 세션이 '살아 있는데 어느 공간에도 없는' 채 이만큼 가면 일부러 지운 것(웹 휴지통)
 const KEPT_REVIVE_WAIT_MS = 5000; // space.new 뒤 새 공간이 보일 때까지
 const KEPT_TAB_WAIT_MS = 3000; // 되살린 공간의 탭 수가 반영될 때까지
 const KEPT_SKIP_NAME = "~"; // 홈에서 잠깐 연 이름 없는 공간은 남기지 않는다
@@ -349,6 +351,39 @@ METHODS = r'''
     return machines().some((k) => (k.name ?? null) === machine && k.layout === "ready");
   }
 
+  // 지금 살아 있는 터미널 주소들(hc ls). 못 읽으면 null — 그땐 예전처럼 빈 줄로 남긴다.
+  async liveTerminals() {
+    try {
+      const r = await hc(["ls", "--json"]);
+      if (r.code !== 0) return null;
+      return new Set((JSON.parse(r.stdout).terminals ?? []).map((x) => x.address));
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  // 사라진 공간을 빈 줄로 남길지 정한다. 안에 있던 세션이 살아 있는데 어느 공간에도 없으면 남기지 않는다:
+  // 웹 휴지통은 세션을 끄지 않고 공간만 지운다(일부러 지운 것). 세션을 끌어 옮기는 도중에도 잠깐 그 상태라
+  // KEPT_LOOSE_WAIT_MS 까지는 다시 본다. (서버 상주 herdr-title-sync 와 같은 규칙)
+  async settleGone(id, info, cx) {
+    const alive = await this.liveTerminals();
+    info.checking = false;
+    if (this.goneSpaces[id] !== info) return;
+    const placed = new Set(panes().map((p) => p.terminal).filter(Boolean));
+    const loose = alive ? info.terminals.filter((x) => alive.has(x) && !placed.has(x)) : [];
+    if (loose.length) {
+      if (Date.now() - info.at > KEPT_LOOSE_WAIT_MS) delete this.goneSpaces[id];
+      else info.next = Date.now() + KEPT_CONFIRM_MS;
+      return;
+    }
+    delete this.goneSpaces[id];
+    if (spaces().some((s) => s.id === id) || !this.machineReady(info.machine)) return;
+    const key = keptKey(info.machine, info.name);
+    this.kept = [...this.kept.filter((g) => g.key !== key), { key, machine: info.machine, name: info.name, named: info.named, folder: info.folder, color: info.color }];
+    this.saveKept();
+    cx.notify();
+  }
+
   trackKept(cx) {
     const sp = spaces();
     const now = Date.now();
@@ -363,12 +398,13 @@ METHODS = r'''
     }
     // 잠깐 기다려도 그 기기 화면이 멀쩡하면 닫힌 것 → 빈 줄로 남긴다(연결이 끊겨 안 보이는 것과 구별)
     for (const [id, info] of Object.entries(this.goneSpaces)) {
-      if (now - info.at < KEPT_CONFIRM_MS) continue;
-      delete this.goneSpaces[id];
-      if (live.has(id) || !this.machineReady(info.machine)) continue;
-      const key = keptKey(info.machine, info.name);
-      this.kept = [...this.kept.filter((g) => g.key !== key), { key, machine: info.machine, name: info.name, named: info.named, folder: info.folder, color: info.color }];
-      changed = true;
+      if (info.checking || now - info.at < KEPT_CONFIRM_MS || now < (info.next ?? 0)) continue;
+      if (live.has(id) || !this.machineReady(info.machine)) {
+        delete this.goneSpaces[id];
+        continue;
+      }
+      info.checking = true;
+      cx.spawn(async (cx) => { await this.settleGone(id, info, cx); });
     }
     // 같은 기기에 같은 이름 공간이 살아 있으면 빈 줄은 필요 없다(되살리는 중인 것은 reviveKept 가 지운다)
     const names = new Set(sp.map((s) => keptKey(s.machine, s.name)));
@@ -380,7 +416,9 @@ METHODS = r'''
     const ps = panes();
     const colors = shared("space.colors") ?? {};
     for (const s of sp) {
-      this.seenSpaces[s.id] = { machine: s.machine ?? null, name: s.name, named: !!s.named, folder: place(s, ps) || "", tabs: (s.tabs ?? []).length, color: colors[s.id] ?? null };
+      const tabIds = new Set((s.tabs ?? []).map((x) => x.id));
+      const terminals = ps.filter((p) => p.terminal && tabIds.has(p.tab)).map((p) => p.terminal);
+      this.seenSpaces[s.id] = { machine: s.machine ?? null, name: s.name, named: !!s.named, folder: place(s, ps) || "", tabs: tabIds.size, terminals, color: colors[s.id] ?? null };
     }
     if (changed) {
       this.saveKept();
