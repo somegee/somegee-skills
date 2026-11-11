@@ -190,10 +190,14 @@ METHODS = r'''
         .text_size(12.5)
         .when(on, (el) => el.bg(t.raised))
         .hover((s) => s.bg(t.hover))
-        .when(this.dragAgent === a.address && this.dropOver, (el) => el.opacity(0.5))
-        .on_mouse_down("left", () => { this.dragAgent = a.address; this.dropOver = null; })
-        .on_mouse_move((_e, cx) => this.dragOver(w, cx))
-        .on_mouse_up("left", (_e, cx) => { if (this.dropOver) this.drop(w, cx); })
+        .when(this.dragAgent === a.address && (this.dropOver || this.dropRow), (el) => el.opacity(0.5))
+        .when(this.dropRow === a.address, (el) => el.border(1.5).border_dashed().border_color(t.accent).bg(t.hover))
+        .on_mouse_down("left", () => { this.dragAgent = a.address; this.dropOver = null; this.dropRow = null; })
+        .on_mouse_move((_e, cx) => { this.dragOver(w, cx); this.rowOver(a, cx); })
+        .on_mouse_up("left", (_e, cx) => {
+          if (this.dropRow === a.address) this.reorder(a, w, cx);
+          else if (this.dropOver) this.drop(w, cx);
+        })
         .on_click(() => run("pane.focus", { pane: a.pane }))
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().text_color(on ? t.foreground : t.muted).child(sessionName(tabs.get(a.tab), leads.get(a.tab), a)))
@@ -247,6 +251,7 @@ METHODS = r'''
 
   dragOver(w, cx) {
     if (!this.dragAgent) return;
+    if (this.dropRow !== null) this.dropRow = null; // left the session rows: rowOver sets it again
     const over = this.canDrop(w) ? w.id : null;
     if (this.dropOver !== over) {
       this.dropOver = over;
@@ -256,10 +261,32 @@ METHODS = r'''
 
   // 끌기 상태를 지운다. 지운 게 있으면 true (다시 그려야 함)
   cancelDrag() {
-    const had = this.dragAgent !== null || this.dropOver !== null;
+    const had = this.dragAgent !== null || this.dropOver !== null || this.dropRow !== null;
     this.dragAgent = null;
     this.dropOver = null;
+    this.dropRow = null;
     return had;
+  }
+
+  // hovering another session row of the same space = reorder drop target
+  rowOver(a, cx) {
+    if (!this.dragAgent) return;
+    const d = agents().find((x) => x.address === this.dragAgent);
+    const over = d && d.address !== a.address && d.space === a.space ? a.address : null;
+    if (this.dropRow !== over) {
+      this.dropRow = over;
+      cx.notify();
+    }
+  }
+
+  // move dragged session's tab to the drop row's tab position (app tab.move, same space only)
+  reorder(target, w, cx) {
+    const addr = this.dragAgent;
+    const d = agents().find((x) => x.address === addr);
+    const index = (w.tabs ?? []).findIndex((tab) => tab.id === target.tab) + 1;
+    this.cancelDrag();
+    if (d && d.space === target.space && d.tab !== target.tab && index > 0) run("tab.move", { id: d.tab, index });
+    cx.notify();
   }
 
   drop(w, cx) {
@@ -522,6 +549,7 @@ TREE_PATCHES = [
      "    this.sharedMsgs = agentsModShown();\n"
      "    this.dragAgent = null; // 끄는 중인 세션 주소\n"
      "    this.dropOver = null; // 놓일 공간 id\n"
+     "    this.dropRow = null; // drop target session row (reorder inside a space)\n"
      "    cx.timer.every(MSG_POLL_MS, (cx) => this.pollMsgs(cx));\n"
      "    this.kept = loadKept(); // 세션이 0개가 돼 사라진 공간들(빈 줄로 그린다)\n"
      "    this.seenSpaces = {}; // 공간 id → 마지막으로 본 모습\n"

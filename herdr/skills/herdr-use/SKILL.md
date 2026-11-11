@@ -71,7 +71,7 @@ K="$(ls -d ~/.claude/plugins/cache/*/herdr/*/skills/herdr-use 2>/dev/null | tail
 | 5 | 상단 탭: 이름 없는 Claude 탭은 `Claude Code` + 끌 때 점선 + `+` 버튼이 my-new-menu를 엶 (my-tabs) | `install_tabs_agent_name.py` |
 | 6 | 우상단 `+` 메뉴에 ccd(`claude --dangerously-skip-permissions`) — programs.json 항목 + 기본 new-menu 복제본 my-new-menu(ccd를 정한 폴더에서 엶) | `install_ccd_button.py` |
 | 7 | Ctrl+N → ccd 새 Claude 탭 (ccd-key mod, 6과 같은 폴더) | `install_ccd_key.py` |
-| 8 | 좌상단 Spaces: ▾/▸로 공간별 세션 목록 펼치기 + 세션 상태·작업 중이면 하는 일, 누르면 그 창으로, 세션을 끌어 다른 공간으로 옮기기(같은 기기만), 세션이 0개가 된 공간을 빈 줄로 남기기 (my-spaces) | `install_spaces_tree.py` |
+| 8 | 좌상단 Spaces: ▾/▸로 공간별 세션 목록 펼치기 + 세션 상태·작업 중이면 하는 일, 누르면 그 창으로, 세션을 끌어 다른 공간으로 옮기기(같은 기기만), 같은 공간 안에서 세션 줄을 다른 세션 줄에 끌어 놓아 순서 바꾸기(`tab.move`, 0.7.2), 세션이 0개가 된 공간을 빈 줄로 남기기 (my-spaces) | `install_spaces_tree.py` |
 
 - 전부: `python "$K/desktop/setup.py"` / 상태만: `--check` / 전부 되돌리기: `--remove`. 하나만: `python "$K/desktop/scripts/<스크립트>"`(`--remove`로 개별 해제).
 - ccd 새 탭 폴더: `setup.py --ccd-folder "<경로>"`(6·7 스크립트도 같은 옵션, `""` = 지정 해제). 순서·검사는 아래 함정 「ccd 탭 폴더」.
