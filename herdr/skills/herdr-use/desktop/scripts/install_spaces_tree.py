@@ -11,7 +11,7 @@
   앱 규칙상 공간엔 탭이 1개 이상이어야 해서 진짜 빈 공간은 못 만든다 → 이 mod 가 이름·폴더·색을 기억한다
   (mod localStorage "spaces.kept", 이 화면에만). 빈 공간 줄을 누르면 같은 이름·폴더·색으로 기본 셸 탭과 함께 되살리고,
   세션을 끌어 놓으면 되살린 뒤 그 세션만 넣는다(임시 셸 탭은 닫음). 오른쪽 × 는 완전히 없애기.
-  탭이 2개 이상이던 공간을 통째로 닫은 것과 이름이 "~" 인 공간은 남기지 않는다.
+  탭이 2개 이상이던 공간을 통째로 닫은 것, 이미 비어 있던(탭 0개) 공간을 지운 것, 이름이 "~" 인 공간은 남기지 않는다.
 
 기본 spaces mod 는 읽기 전용(앱 시작 때 원본 복구)이라 my-spaces 로 복제해 고치고,
 내 레이아웃이 my-spaces 를 쓰게 바꾼다.
@@ -354,11 +354,12 @@ METHODS = r'''
     const now = Date.now();
     const live = new Set(sp.map((s) => s.id));
     let changed = false;
-    // 방금 사라진 공간: 탭이 1개 이하였던 것만 후보(탭 여러 개인 공간을 통째로 닫은 건 남기지 않는다)
+    // 방금 사라진 공간: 탭이 딱 1개였던 것만 후보. 탭 여러 개인 공간을 통째로 닫은 것,
+    // 이미 비어 있던(탭 0개) 공간을 지운 것(웹 휴지통·앱 Close)은 일부러 없앤 것이라 남기지 않는다.
     for (const [id, info] of Object.entries(this.seenSpaces)) {
       if (live.has(id)) continue;
       delete this.seenSpaces[id];
-      if (info.tabs <= 1 && info.name !== KEPT_SKIP_NAME && this.machineReady(info.machine)) this.goneSpaces[id] = { ...info, at: now };
+      if (info.tabs === 1 && info.name !== KEPT_SKIP_NAME && this.machineReady(info.machine)) this.goneSpaces[id] = { ...info, at: now };
     }
     // 잠깐 기다려도 그 기기 화면이 멀쩡하면 닫힌 것 → 빈 줄로 남긴다(연결이 끊겨 안 보이는 것과 구별)
     for (const [id, info] of Object.entries(this.goneSpaces)) {
