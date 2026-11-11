@@ -97,6 +97,18 @@ def ensure_own_layout():
     return clone
 
 
+def drop_extra_blocks(target, layout):
+    """앱이 mod 파일을 다시 받으면 title-sync 칸을 스스로 하나 더 넣기도 한다(2026-11-11 실측,
+    맨 바깥에 임의 id 로) → 첫 칸만 남긴다. 두 칸이면 탭 이름을 두 번 고친다."""
+    found = [(lst, c) for lst in children_lists(layout) for c in lst
+             if isinstance(c, dict) and (c.get("content") or {}).get("mod") == "title-sync"]
+    for lst, child in found[1:]:
+        lst.remove(child)
+    if len(found) > 1:
+        save(target, layout)
+        print("중복 칸 정리:", len(found) - 1, "개 제거")
+
+
 def install():
     os.makedirs(MOD_DIR, exist_ok=True)
     for name in ("main.js", "mod.json"):
@@ -104,6 +116,7 @@ def install():
     target = ensure_own_layout()
     layout = load(target)
     if find_block(layout, "title-sync")[0] is not None:
+        drop_extra_blocks(target, layout)
         print("이미 레이아웃에 있음 — mod 파일만 갱신:", target)
         return
     lst, i = find_block(layout, "status")  # 맨 아래 상태줄 옆에 높이 0 칸
