@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import ensure_own_layout  # noqa: E402
 from install_agents_name_only import point_layout  # noqa: E402
 from patchlib import apply_patches, mod_js, rebuild  # noqa: E402
+import done_hold  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -57,7 +58,7 @@ def patches() -> list:
 
 
 def build() -> bool:
-    return rebuild(BASE, CLONE, lambda src: apply_patches(src, patches(), BASE))
+    return rebuild(BASE, CLONE, lambda src: done_hold.apply(apply_patches(src, patches(), BASE), BASE))
 
 
 def refresh() -> None:

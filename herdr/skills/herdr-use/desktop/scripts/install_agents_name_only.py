@@ -15,6 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import children_lists, ensure_own_layout, load, save  # noqa: E402
+import done_hold  # noqa: E402
 from patchlib import apply_patches, rebuild  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -101,7 +102,7 @@ def build(src: str) -> str:
     src = apply_patches(src, PATCHES, BASE)
     if "setShared" not in src.split('from "herdr";')[0]:
         src = src.replace(', hc } from "herdr";', ', hc, setShared } from "herdr";', 1)
-    return src
+    return done_hold.apply(src, BASE)
 
 
 def install() -> None:

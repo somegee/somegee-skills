@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -40,6 +41,21 @@ def apply_patches(src: str, patches: Sequence[PatchEntry], label: str) -> str:
         old, new = hits[0]
         src = src.replace(old, new)
     return src
+
+
+HERDR_IMPORT = re.compile(r'import \{([^}]*)\} from "herdr";')
+
+
+def ensure_imports(src: str, needed: Sequence[str]) -> str:
+    """herdr 에서 needed 이름들을 들여오게 한다. 원본이 이미 들여온 이름은 다시 넣지 않는다(두 번이면 앱이 거절)."""
+    m = HERDR_IMPORT.search(src)
+    if not m:
+        sys.exit('"herdr" import 줄을 못 찾음(기본 mod 가 바뀐 듯)')
+    names = [n.strip() for n in m.group(1).split(",") if n.strip()]
+    missing = [n for n in needed if n not in names]
+    if not missing:
+        return src
+    return src[:m.start(1)] + " " + ", ".join(names + missing) + " " + src[m.end(1):]
 
 
 def ensure_clone(base: str, clone: str) -> None:

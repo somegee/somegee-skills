@@ -29,13 +29,13 @@
 from __future__ import annotations
 
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import ensure_own_layout  # noqa: E402
 from install_agents_name_only import point_layout  # noqa: E402
-from patchlib import apply_patches, rebuild  # noqa: E402
+from patchlib import apply_patches, ensure_imports, rebuild  # noqa: E402
+import done_hold  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -573,27 +573,14 @@ DRAG_PATCHES = [
      "        .on_mouse_down_out((_e, cx) => { if (this.cancelDrag()) cx.notify(); })"),
 ]
 
-HERDR_IMPORT = re.compile(r'import \{([^}]*)\} from "herdr";')
 NEEDED = ("agents", "focused", "layout", "notify", "hc", "shared", "setShared", "machines")
-
-
-def ensure_imports(src: str, needed: tuple[str, ...]) -> str:
-    """herdr 에서 needed 이름들을 들여오게 한다. 원본이 이미 들여온 이름은 다시 넣지 않는다(두 번이면 앱이 거절)."""
-    m = HERDR_IMPORT.search(src)
-    if not m:
-        sys.exit('"herdr" import 줄을 못 찾음(기본 spaces mod 가 바뀐 듯)')
-    names = [n.strip() for n in m.group(1).split(",") if n.strip()]
-    missing = [n for n in needed if n not in names]
-    if not missing:
-        return src
-    return src[:m.start(1)] + " " + ", ".join(names + missing) + " " + src[m.end(1):]
 
 
 def build(src: str) -> str:
     """원본 spaces main.js → my-spaces main.js (트리 + 끌어 옮기기, 한 번에)."""
     src = apply_patches(src, TREE_PATCHES, BASE)
     src = apply_patches(src, DRAG_PATCHES, BASE)
-    return ensure_imports(src, NEEDED)
+    return done_hold.apply(ensure_imports(src, NEEDED), BASE)
 
 
 def install() -> None:
