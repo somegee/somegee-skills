@@ -1,6 +1,6 @@
 # herdr 데스크톱 앱 커스텀 (Windows)
 
-herdr 데스크톱 앱(herdr-app)에 아래 8가지를 한 번에 깔아 주는 묶음입니다.
+herdr 데스크톱 앱(herdr-app)에 아래 8가지를 깔아 주는 묶음입니다. **기능마다 상태를 보고, 낡았거나 없는 것만 고칩니다** — 이미 최신인 기능의 파일은 건드리지 않습니다(다시 쓰면 그 직후 단축키가 잠깐 안 먹는 일이 있었음).
 다른 PC 에서도 이 폴더를 통째로 옮겨 `1_설치.bat` 을 더블클릭하면 됩니다.
 
 | # | 기능 | 어디서 보이나 |
@@ -26,16 +26,21 @@ herdr 데스크톱 앱(herdr-app)에 아래 8가지를 한 번에 깔아 주는 
 ## 설치
 
 1. herdr 앱을 켭니다.
-2. **`1_설치.bat`** 더블클릭 (또는 `python setup.py`).
-3. 끝에 나오는 결과에서 `지금 레이아웃: my-main`, 각 mod `칸 1개 OK`, `my-new-menu 파일 있음 · + 버튼 연결 OK`, `ccd 폴더 = …`, `앱 오류: 없음` 을 확인합니다.
+2. 먼저 **`2_상태확인.bat`** (또는 `python setup.py`) — 기능마다 `최신` / `낡음(무엇이 다른지)` / `없음` / `손으로 고친 흔적` / `고칠 문장 못 찾음` 이 나옵니다. 아무것도 바꾸지 않습니다.
+3. **`1_설치.bat`** 더블클릭 (또는 `python setup.py --apply`) — 낡음·없음인 기능만 고칩니다. 몇 개만 고르려면 `python setup.py --apply title-sync,my-spaces`. 미리보기는 `python setup.py --dry-run`.
+4. 끝에 나오는 결과에서 모든 기능이 `최신`, `바뀐 파일`, `앱: … 오류 없음`, 그리고 **「사람이 눌러 볼 것」**(바뀐 기능만)을 확인합니다.
 
-여러 번 실행해도 결과는 같습니다(이미 된 건 건너뜀). 이 PC 의 앱 설정 폴더는 `%USERPROFILE%\.config\herdr-app\` 입니다.
+여러 번 실행해도 결과는 같습니다(최신이면 `변경 없음`, 파일 시각도 그대로).
+
+- 기능 이름: `title-sync`(1·2) · `image-paste`(3) · `my-agents`(4) · `my-tabs`(5) · `ccd-button`(6) · `ccd-key`(7) · `my-spaces`(8)
+- **손으로 고친 흔적**: 설치본 mod 파일을 직접 고쳐 둔 경우입니다(설치 기록 `%USERPROFILE%\.config\herdr-app\.herdr-custom\installed.json` 과 비교). 그대로 두고 멈추며, 덮으려면 `--apply <이름> --force` — 덮기 전에 `.herdr-custom\backup\<시각>\` 로 백업합니다.
+- 기능 하나만: `python scripts\install_<…>.py --status` / `--dry-run` / (옵션 없음 = 적용) / `--remove` 이 PC 의 앱 설정 폴더는 `%USERPROFILE%\.config\herdr-app\` 입니다.
 
 ### ccd 폴더 (6·7번 새 탭을 늘 같은 폴더에서 열기)
 
 ```
-python setup.py --ccd-folder "C:\Users\<사용자>\Desktop\<폴더>"   # 이 폴더에서 열기
-python setup.py --ccd-folder ""                                   # 지정 해제 → 공간 폴더
+python setup.py --apply ccd-button,ccd-key --ccd-folder "C:\Users\<사용자>\Desktop\<폴더>"   # 이 폴더에서 열기
+python setup.py --apply ccd-button,ccd-key --ccd-folder ""                                   # 지정 해제 → 공간 폴더
 ```
 
 - 안 정하면 지금처럼 **공간(space)의 폴더**에서 열립니다. **다른 기기(원격) 공간**은 정해도 늘 그 공간의 폴더입니다(이 PC 경로가 그 기기엔 없으므로).
@@ -61,7 +66,7 @@ python setup.py --ccd-folder ""                                   # 지정 해�
 
 ## 상태 확인 · 되돌리기
 
-- **`2_상태확인.bat`** — 아무것도 바꾸지 않고 지금 상태만 보여 줌
+- **`2_상태확인.bat`** — 아무것도 바꾸지 않고 기능별 상태만 보여 줌 (`python setup.py --status`, `--json` 가능)
 - **`3_되돌리기.bat`** — 전부 해제하고 기본 레이아웃(`main`)으로 돌아감. 복제본 파일은 남겨 둠(`mods\my-new-menu\` 만 지우고 `+` 버튼을 기본 메뉴로 되돌림)
 - **완전 삭제** — 되돌리기 후 `%USERPROFILE%\.config\herdr-app\` 에서 `layouts\my-main.json`, `mods\my-agents\`, `mods\my-tabs\`, `mods\my-spaces\` 를 지움
 - 화면이 망가졌을 때 비상 탈출: 앱에서 **`Ctrl+Alt+Shift+Esc`** (기본 화면으로 복귀)
@@ -80,9 +85,9 @@ python setup.py --ccd-folder ""                                   # 지정 해�
 
 ## herdr 업데이트 후
 
-커스텀은 **날아가지 않고** 업데이트도 정상 적용됩니다(업데이트가 덮어쓰는 건 기본 파일뿐). 4·5·8번 복제본(my-agents·my-tabs·my-spaces)은 설치할 때마다 새 기본 mod 에서 다시 만들어지므로, `1_설치.bat` 을 한 번 더 돌리면 새 버전의 기본 화면 개선도 들어옵니다. 복제본 `main.js` 를 손으로 고친 내용은 그때 사라지니, 고칠 땐 `scripts\` 의 설치 스크립트를 고치세요.
+커스텀은 **날아가지 않고** 업데이트도 정상 적용됩니다(업데이트가 덮어쓰는 건 기본 파일뿐). 4·5·8번 복제본(my-agents·my-tabs·my-spaces)은 새 기본 mod 에서 다시 만든 내용과 비교되므로, 앱이 바뀌면 `2_상태확인.bat` 에 `낡음` 으로 나오고 `1_설치.bat` 으로 새 버전의 기본 화면 개선을 받습니다. 복제본 `main.js` 를 손으로 고쳤으면 `손으로 고친 흔적` 으로 멈추니, 계속 쓸 수정이면 `scripts\` 의 설치 스크립트를 고치세요.
 
-1. `2_상태확인.bat` — 오류 없고 화면 정상이면 **할 일 없음**.
+1. `2_상태확인.bat` — 모두 `최신` 이면 **할 일 없음**.
 2. 새 버전의 탭 바·Agents·Spaces 개선을 받고 싶거나 화면이 깨졌으면:
    1. 앱에서 `Ctrl+Shift+L` 로 `main` 레이아웃으로 전환 (또는 `Ctrl+Alt+Shift+Esc`)
    2. `%USERPROFILE%\.config\herdr-app\` 의 `layouts\my-main.json`, `mods\my-agents\`, `mods\my-tabs\`, `mods\my-spaces\` 를 다른 폴더로 옮김(백업)
@@ -93,8 +98,8 @@ python setup.py --ccd-folder ""                                   # 지정 해�
 
 ```
 herdr-custom/
-├── 1_설치.bat / 2_상태확인.bat / 3_되돌리기.bat   더블클릭용 (setup.py 실행)
-├── setup.py                       일괄 설치·점검·되돌리기
+├── 1_설치.bat / 2_상태확인.bat / 3_되돌리기.bat   더블클릭용 (setup.py --apply / --status / --remove)
+├── setup.py                       전 기능 상태표·미리보기·고른 것만 적용·되돌리기
 ├── scripts/
 │   ├── install_title_sync.py       2 (+ 1 레이아웃 복제)   --remove 로 개별 해제
 │   ├── install_image_paste.py      3
@@ -105,8 +110,10 @@ herdr-custom/
 │   ├── ccd_folder.py               6·7 공용: --ccd-folder 읽기·설치본 값 유지·프로필 ccd 함수 찾기
 │   ├── done_hold.py                4·5·8 공용: '끝남'을 다른 세션 누를 때까지 끝남으로 보이기
 │   ├── install_spaces_tree.py      8
-│   └── patchlib.py                 4·5·6·8 공용: 원본 mod 에서 다시 고쳐 복제본 덮어쓰기
-├── tests/                          ccd_folder·done_hold 테스트 (python -m pytest tests)
+│   ├── patchlib.py                 4·5·6·8 공용: 원본 mod 에서 다시 고친 내용 만들기(다를 때만 덮어씀)
+│   ├── featurelib.py               공용: 상태 판정·미리보기·같은 내용이면 안 쓰기·설치 기록·백업
+│   └── apphome.py                  앱 설정 폴더 위치(HERDR_APP_HOME 으로 바꿀 수 있음)
+├── tests/                          상태 판정·같은 내용이면 안 씀·ccd_folder·done_hold 테스트 (python -m pytest tests)
 └── assets/
     ├── title-sync/                 mod 원본 (main.js, mod.json)
     ├── image-paste/                mod 원본 + clipimg.cs (설치 때 빌드)

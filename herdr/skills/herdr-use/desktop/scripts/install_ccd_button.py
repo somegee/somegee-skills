@@ -6,7 +6,8 @@
      ccd 를 고르면 설치 때 정한 폴더에서 열게 고친다(patchlib — 설치할 때마다 원본에서 다시 고침).
      + 버튼(tabs mod 안)이 my-new-menu 를 열게 하는 건 install_tabs_agent_name.py 가 한다.
 폴더를 안 정했거나 다른 기기(원격) 공간이면 지금처럼 그 공간의 폴더에서 열린다.
-  python install_ccd_button.py                          # 추가 (멱등)
+  python install_ccd_button.py                          # 낡음·없음이면 추가, 최신이면 '변경 없음'
+  python install_ccd_button.py --status                 # 상태 한 줄(--json) / --dry-run 미리보기
   python install_ccd_button.py --ccd-folder "<경로>"    # 그 폴더에서 열기 ("" = 지정 해제)
   python install_ccd_button.py --remove                 # 항목·my-new-menu 를 빼고 + 버튼을 기본 메뉴로
 """
@@ -18,12 +19,14 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import APP_HOME  # noqa: E402
-from patchlib import apply_patches, mod_js, rebuild  # noqa: E402
+from patchlib import apply_patches, desired_clone, mod_js, rebuild  # noqa: E402
+from featurelib import Check, Plan, Want, run_cli, write_json_if_changed  # noqa: E402
 import ccd_folder  # noqa: E402
 import install_tabs_agent_name  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+FEATURE = "ccd-button"
 PROGRAMS = os.path.join(APP_HOME, "programs.json")
 KEY = "claude-ccd"
 ENTRY = {
@@ -82,12 +85,21 @@ def load():
 def save(data):
     if os.path.exists(PROGRAMS) and not os.path.exists(PROGRAMS + ".bak-ccd"):
         shutil.copy2(PROGRAMS, PROGRAMS + ".bak-ccd")
-    with io.open(PROGRAMS, "w", encoding="utf-8") as f:
-        f.write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    write_json_if_changed(PROGRAMS, data, trailing_newline=True)
 
 
 def build(src, folder):
     return ccd_folder.set_in_source(apply_patches(src, PATCHES, BASE), "CCD_FOLDER", folder)
+
+
+def plan(folder_arg=None):
+    folder = ccd_folder.resolve(folder_arg, quiet=True)
+    has_entry = load().get("programs", {}).get(KEY)
+    want = Want(mod_js(CLONE), desired_clone(BASE, CLONE, lambda src: build(src, folder)))
+    return Plan(FEATURE, files=(want,),
+                checks=(Check("programs.json ccd 항목 " + ("다름" if has_entry else "없음"), has_entry == ENTRY,
+                              "programs.json 에 claude-ccd 항목 넣기"),),
+                present=os.path.exists(mod_js(CLONE)) or has_entry is not None)
 
 
 def add_entry():
@@ -124,4 +136,5 @@ def remove():
 
 
 if __name__ == "__main__":
-    remove() if "--remove" in sys.argv else install(ccd_folder.parse_arg(sys.argv[1:]))
+    FOLDER_ARG = ccd_folder.parse_arg(sys.argv[1:])
+    run_cli(FEATURE, lambda: plan(FOLDER_ARG), lambda: install(FOLDER_ARG), remove)

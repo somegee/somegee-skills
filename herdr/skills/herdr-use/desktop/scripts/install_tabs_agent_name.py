@@ -4,7 +4,8 @@
 /rename 하면 title-sync 가 탭 이름을 바꾸므로 그때부터는 그 이름이 보인다.
 
 기본 tabs mod 는 읽기 전용이라 my-tabs 로 복제해 고치고, 내 레이아웃이 my-tabs 를 쓰게 바꾼다.
-  python install_tabs_agent_name.py            # 적용 (멱등)
+  python install_tabs_agent_name.py            # 낡음·없음이면 적용, 최신이면 '변경 없음'
+  python install_tabs_agent_name.py --status   # 상태 한 줄(--json) / --dry-run 미리보기
   python install_tabs_agent_name.py --remove   # 기본 tabs 로 되돌림 (my-tabs 폴더는 남김)
 설치할 때마다 원본 mods/tabs/main.js 에서 다시 고쳐 덮어쓴다(patchlib).
 my-new-menu(install_ccd_button.py 가 만듦)가 있으면 + 버튼이 기본 new-menu 대신 그걸 열게 한다 —
@@ -15,14 +16,15 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import ensure_own_layout  # noqa: E402
-from install_agents_name_only import point_layout  # noqa: E402
+from install_agents_name_only import clone_plan, point_layout  # noqa: E402
 from patchlib import apply_patches, mod_js, rebuild  # noqa: E402
+from featurelib import HAND, Plan, evaluate, run_cli, safe_plan  # noqa: E402
 import done_hold  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "tabs"
-CLONE = "my-tabs"
+CLONE = FEATURE = "my-tabs"
 NL = "\n"
 PATCHES = [
     # 이름 없는 에이전트 탭은 번호 대신 프로그램 이름
@@ -57,13 +59,27 @@ def patches() -> list:
     return PATCHES + ([NEW_MENU_PATCH] if os.path.exists(mod_js(NEW_MENU)) else [])
 
 
+def patched(src: str) -> str:
+    return done_hold.apply(apply_patches(src, patches(), BASE), BASE)
+
+
 def build() -> bool:
-    return rebuild(BASE, CLONE, lambda src: done_hold.apply(apply_patches(src, patches(), BASE), BASE))
+    return rebuild(BASE, CLONE, patched)
+
+
+def plan() -> Plan:
+    return clone_plan(FEATURE, BASE, CLONE, patched)
 
 
 def refresh() -> None:
     """my-new-menu 를 만들거나 지운 뒤 부른다 — my-tabs 가 이미 있으면 + 버튼 연결만 다시 맞춘다(레이아웃은 안 건드림)."""
-    if os.path.exists(mod_js(CLONE)) and build():
+    if not os.path.exists(mod_js(CLONE)):
+        return
+    st = evaluate(safe_plan(FEATURE, plan))
+    if st.state == HAND:  # ccd-button 적용이 손으로 고친 my-tabs 를 몰래 덮지 않게
+        print("!! my-tabs 는 손으로 고친 흔적이 있어 + 버튼 연결을 안 맞춤 — 확인 뒤 install_tabs_agent_name.py --force")
+        return
+    if build():
         print("my-tabs 다시 만듦: + 버튼 →", NEW_MENU if os.path.exists(mod_js(NEW_MENU)) else "new-menu(기본)")
 
 
@@ -81,4 +97,4 @@ def remove() -> None:
 
 
 if __name__ == "__main__":
-    remove() if "--remove" in sys.argv else install()
+    run_cli(FEATURE, plan, install, remove)

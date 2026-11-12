@@ -9,6 +9,7 @@ ccd 함수·PowerShell 프로필은 대부분의 PC 에 없다고 보고 짠다 
 """
 from __future__ import annotations
 
+import functools
 import io
 import json
 import locale
@@ -20,7 +21,8 @@ import sys
 from typing import Optional, Sequence
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from install_title_sync import APP_HOME  # noqa: E402
+from apphome import APP_HOME  # noqa: E402
+from featurelib import PatchError  # noqa: E402
 
 OPTION = "--ccd-folder"
 KEY_MOD = "ccd-key"
@@ -120,18 +122,19 @@ def read_text(path: str) -> Optional[str]:
     return None
 
 
+@functools.lru_cache(maxsize=None)  # 상태 확인·적용이 여러 번 물어도 PowerShell 은 한 번만
 def from_profile() -> Optional[str]:
     for path in profile_paths():
         text = read_text(path)
         found = ccd_from_text(text) if text else None
         if found:
-            print("PowerShell 프로필의 ccd 함수에서 폴더를 찾음:", found, "(" + path + ")")
+            print("PowerShell 프로필의 ccd 함수에서 폴더를 찾음:", found, "(" + path + ")", file=sys.stderr)
             return found
     return None
 
 
-def resolve(arg: Optional[str]) -> str:
-    """위 순서대로 정하고, 폴더가 실제로 있는지·claude 가 PATH 에 있는지 검사(경고만)."""
+def resolve(arg: Optional[str], quiet: bool = False) -> str:
+    """위 순서대로 정하고, 폴더가 실제로 있는지·claude 가 PATH 에 있는지 검사(경고만, quiet 면 경고도 안 냄)."""
     if arg is not None:
         folder = arg
     else:
@@ -140,9 +143,10 @@ def resolve(arg: Optional[str]) -> str:
         if folder is None:
             folder = from_profile() or ""
     if folder and not os.path.isdir(folder):
-        print("!! 경고: ccd 폴더가 없음 →", folder, "— 공간 폴더로 둡니다(없는 폴더로는 탭이 안 열림). 다시 지정: --ccd-folder \"<경로>\"")
+        if not quiet:
+            print("!! 경고: ccd 폴더가 없음 →", folder, "— 공간 폴더로 둡니다(없는 폴더로는 탭이 안 열림). 다시 지정: --ccd-folder \"<경로>\"")
         folder = ""
-    if not shutil.which("claude"):
+    if not quiet and not shutil.which("claude"):
         print("!! 경고: claude 가 PATH 에 없음 — + 메뉴 ccd 는 'not installed' 로 흐리게, Ctrl+N 은 오류 알림이 뜹니다.")
     return folder
 
@@ -159,5 +163,5 @@ def set_in_source(src: str, name: str, folder: str) -> str:
     """mod 코드의 `const <name> = "";` 한 줄을 폴더 값으로 채운다. 그 줄이 정확히 1번 없으면 멈춘다."""
     line = 'const %s = "";' % name
     if src.count(line) != 1:
-        sys.exit("mod 코드에서 '%s' 줄을 못 찾음 — 설치 스크립트를 확인" % line)
+        raise PatchError("mod 코드에서 '%s' 줄을 못 찾음 — 설치 스크립트를 확인" % line)
     return src.replace(line, "const %s = %s;" % (name, js_literal(folder)))

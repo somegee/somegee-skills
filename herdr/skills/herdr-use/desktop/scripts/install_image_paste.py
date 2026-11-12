@@ -4,8 +4,10 @@
 클립보드에 그림이 있으면 clipimg.exe로 PNG 저장 + 클립보드를 '복사한 파일'로 바꾼 뒤
 terminal.paste를 불러, 파일을 끌어다 놓은 것처럼 경로가 들어가게 한다.
 
-  python install_image_paste.py            # 설치 (여러 번 실행해도 같은 결과)
+  python install_image_paste.py            # 낡음·없음이면 설치, 최신이면 '변경 없음'
+  python install_image_paste.py --status   # 상태 한 줄(--json) / --dry-run 미리보기
   python install_image_paste.py --remove   # 제거 (Ctrl+Shift+V 를 terminal.paste 로 되돌림)
+같은 내용이면 mod 파일을 다시 쓰지 않고, clipimg.exe 는 clipimg.cs 가 바뀌었거나 없을 때만 다시 빌드한다.
 
 주의: 단축키가 image-paste.paste 를 가리키면 앱이 레이아웃에 mod 칸을 스스로 넣는다.
 손으로 또 넣으면 mod가 두 번 돌아 그림이 두 장 붙는다 → 이 스크립트는 기다렸다가 없을 때만 넣고,
@@ -17,31 +19,24 @@ import os
 import shutil
 import subprocess
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import (  # noqa: E402  같은 폴더의 공용 함수
-    APP_HOME, LAYOUTS, SHIPPED, children_lists, ensure_own_layout, find_block, load, save,
+    APP_HOME, LAYOUTS, SHIPPED, asset_wants, block_check, copy_assets, ensure_one_block, ensure_own_layout,
+    load, mod_blocks, save, target_layout,
 )
+from featurelib import KEYS, Check, Plan, keys_check, run_cli, write_json_if_changed  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-MOD = "image-paste"
+FEATURE = MOD = "image-paste"
+FILES = ("main.js", "mod.json", "clipimg.cs")
+ACTION = MOD + ".paste"
+EXE = os.path.join(APP_HOME, "mods", MOD, "clipimg.exe")
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", MOD)
 MOD_DIR = os.path.join(APP_HOME, "mods", MOD)
-KEYS = os.path.join(APP_HOME, "keys.json")
 CSC = r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 KEY = "ctrl-shift-v"
-
-
-def mod_blocks(layout):
-    """content.mod == image-paste 인 칸들을 (목록, 칸) 으로 돌려준다(id 는 앱이 무작위로 붙이기도 함)."""
-    found = []
-    for lst in children_lists(layout):
-        for child in lst:
-            if isinstance(child, dict) and (child.get("content") or {}).get("mod") == MOD:
-                found.append((lst, child))
-    return found
 
 
 def build():
@@ -63,39 +58,33 @@ def set_key(value):
     if not os.path.exists(backup):
         shutil.copy2(KEYS, backup)
     term[KEY] = value
-    with io.open(KEYS, "w", encoding="utf-8") as f:
-        f.write(json.dumps(keys, ensure_ascii=False, indent=2))
+    write_json_if_changed(KEYS, keys)
+    print("keys.json: Ctrl+Shift+V =", value)
+
+
+def plan():
+    target = target_layout()
+    return Plan(FEATURE, files=asset_wants(SRC, MOD_DIR, FILES),
+                checks=(Check("clipimg.exe 없음", os.path.exists(EXE), "clipimg.exe 빌드(csc)"),
+                        keys_check("terminal", KEY, ACTION, "Ctrl+Shift+V"),
+                        block_check(target, MOD)),
+                present=os.path.exists(os.path.join(MOD_DIR, "main.js")))
 
 
 def install():
-    os.makedirs(MOD_DIR, exist_ok=True)
-    for name in ("main.js", "mod.json", "clipimg.cs"):
-        shutil.copy2(os.path.join(SRC, name), os.path.join(MOD_DIR, name))
-    build()
+    changed = copy_assets(SRC, MOD_DIR, FILES)
+    print("mod 파일:", ", ".join(changed) + " 바꿈" if changed else "그대로")
+    if "clipimg.cs" in changed or not os.path.exists(EXE):
+        try:
+            os.remove(EXE)  # 빌드가 실패하면 '없음'으로 남아 다음 상태 확인에 잡히게
+        except OSError:
+            pass
+        build()
+        print("clipimg.exe 빌드함")
     target = ensure_own_layout()
-    set_key(MOD + ".paste")
-
-    blocks = []
-    for _ in range(12):  # 앱이 스스로 칸을 넣는지 최대 6초 기다린다
-        blocks = mod_blocks(load(target))
-        if blocks:
-            break
-        time.sleep(0.5)
-    layout = load(target)
-    blocks = mod_blocks(layout)
-    if not blocks:
-        lst, i = find_block(layout, "status")
-        if lst is None:
-            sys.exit("layouts/%s.json 에서 'status' 블록을 못 찾음 — 손으로 넣어야 함" % target)
-        lst.insert(i + 1, {"id": MOD, "type": "block", "size": {"px": 0}, "content": {"mod": MOD}})
-        save(target, layout)
-        print("레이아웃에 칸 추가:", target)
-    elif len(blocks) > 1:
-        for lst, child in blocks[1:]:
-            lst.remove(child)
-        save(target, layout)
-        print("중복 칸 정리:", len(blocks) - 1, "개 제거")
-    print("설치 완료:", MOD_DIR, "/ 레이아웃:", target, "/ Ctrl+Shift+V =", MOD + ".paste")
+    set_key(ACTION)
+    ensure_one_block(target, MOD, wait_for_app=True)
+    print("레이아웃:", target, "/ Ctrl+Shift+V =", ACTION)
 
 
 def remove():
@@ -105,7 +94,7 @@ def remove():
         if ext != ".json" or name in SHIPPED:
             continue
         layout = load(name)
-        blocks = mod_blocks(layout)
+        blocks = mod_blocks(layout, MOD)
         for lst, child in blocks:
             lst.remove(child)
         if blocks:
@@ -116,4 +105,4 @@ def remove():
 
 
 if __name__ == "__main__":
-    remove() if "--remove" in sys.argv else install()
+    run_cli(FEATURE, plan, install, remove)

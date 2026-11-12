@@ -16,7 +16,8 @@
 
 기본 spaces mod 는 읽기 전용(앱 시작 때 원본 복구)이라 my-spaces 로 복제해 고치고,
 내 레이아웃이 my-spaces 를 쓰게 바꾼다.
-  python install_spaces_tree.py            # 적용 (멱등)
+  python install_spaces_tree.py            # 낡음·없음이면 적용, 최신이면 '변경 없음'
+  python install_spaces_tree.py --status   # 상태 한 줄(--json) / --dry-run 미리보기
   python install_spaces_tree.py --remove   # 기본 spaces 로 되돌림 (my-spaces 폴더는 남김)
 
 설치할 때마다 원본 mods/spaces/main.js 에서 처음부터 다시 고쳐 덮어쓴다(patchlib) — 단계 표식·덧대기 없음.
@@ -33,14 +34,15 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import ensure_own_layout  # noqa: E402
-from install_agents_name_only import point_layout  # noqa: E402
+from install_agents_name_only import clone_plan, point_layout  # noqa: E402
 from patchlib import apply_patches, ensure_imports, rebuild  # noqa: E402
+from featurelib import Plan, run_cli  # noqa: E402
 import done_hold  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "spaces"
-CLONE = "my-spaces"
+CLONE = FEATURE = "my-spaces"
 
 HELPERS = r'''
 // ---- my-spaces: 공간 아래 세션 목록 ----
@@ -611,6 +613,10 @@ def build(src: str) -> str:
     return done_hold.apply(ensure_imports(src, NEEDED), BASE)
 
 
+def plan() -> Plan:
+    return clone_plan(FEATURE, BASE, CLONE, build)
+
+
 def install() -> None:
     target = ensure_own_layout()
     changed = rebuild(BASE, CLONE, build)
@@ -624,4 +630,4 @@ def remove() -> None:
 
 
 if __name__ == "__main__":
-    remove() if "--remove" in sys.argv else install()
+    run_cli(FEATURE, plan, install, remove)

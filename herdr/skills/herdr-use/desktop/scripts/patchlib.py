@@ -18,6 +18,7 @@ from typing import Callable, Sequence, Union
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import APP_HOME, app_exe  # noqa: E402
+from featurelib import PatchError, write_if_changed  # noqa: E402
 
 CLONE_WAIT_TRIES = 20  # mod.clone 뒤 복제 폴더가 생길 때까지 확인하는 횟수
 CLONE_WAIT_SECONDS = 0.25  # 그 간격
@@ -37,7 +38,7 @@ def apply_patches(src: str, patches: Sequence[PatchEntry], label: str) -> str:
         alts = entry if isinstance(entry, list) else [entry]
         hits = [(old, new) for old, new in alts if src.count(old) == 1]
         if len(hits) != 1:
-            sys.exit("고칠 문장을 못 찾음(기본 %s mod 가 바뀐 듯): %s" % (label, alts[0][0].strip()[:80]))
+            raise PatchError("고칠 문장을 못 찾음(기본 %s mod 가 바뀐 듯): %s" % (label, alts[0][0].strip()[:80]))
         old, new = hits[0]
         src = src.replace(old, new)
     return src
@@ -50,7 +51,7 @@ def ensure_imports(src: str, needed: Sequence[str]) -> str:
     """herdr 에서 needed 이름들을 들여오게 한다. 원본이 이미 들여온 이름은 다시 넣지 않는다(두 번이면 앱이 거절)."""
     m = HERDR_IMPORT.search(src)
     if not m:
-        sys.exit('"herdr" import 줄을 못 찾음(기본 mod 가 바뀐 듯)')
+        raise PatchError('"herdr" import 줄을 못 찾음(기본 mod 가 바뀐 듯)')
     names = [n.strip() for n in m.group(1).split(",") if n.strip()]
     missing = [n for n in needed if n not in names]
     if not missing:
@@ -77,19 +78,22 @@ def rename_self(src: str, base: str, clone: str) -> str:
     return src.replace("mods/%s/" % base, "mods/%s/" % clone).replace('mod: "%s"' % base, 'mod: "%s"' % clone)
 
 
-def rebuild(base: str, clone: str, build: Callable[[str], str]) -> bool:
-    """원본 base 를 build 로 고쳐 clone 에 쓴다. 바뀌었으면 True. 줄바꿈은 원본(앱은 CRLF)을 따른다."""
-    ensure_clone(base, clone)
-    with io.open(mod_js(base), encoding="utf-8", newline="") as f:
-        raw = f.read()
+def desired_clone(base: str, clone: str, build: Callable[[str], str]) -> bytes:
+    """원본 base 를 build 로 고친 복제본 내용(파일은 안 씀). 줄바꿈은 원본(앱은 CRLF)을 따른다."""
+    try:
+        with io.open(mod_js(base), encoding="utf-8", newline="") as f:
+            raw = f.read()
+    except OSError:
+        sys.exit("기본 mod 가 없음: " + mod_js(base))
     crlf = "\r\n" in raw
     new = rename_self(build(raw.replace("\r\n", "\n")), base, clone)
     if crlf:
         new = new.replace("\n", "\r\n")
-    with io.open(mod_js(clone), encoding="utf-8", newline="") as f:
-        current = f.read()
-    if new == current:
-        return False
-    with io.open(mod_js(clone), "w", encoding="utf-8", newline="") as f:
-        f.write(new)
-    return True
+    return new.encode("utf-8")
+
+
+def rebuild(base: str, clone: str, build: Callable[[str], str]) -> bool:
+    """원본 base 를 build 로 고쳐 clone 에 쓴다. 내용이 같으면 안 쓴다. 바뀌었으면 True."""
+    new = desired_clone(base, clone, build)  # 고칠 문장이 없으면 복제(mod.clone)도 하기 전에 멈춘다
+    ensure_clone(base, clone)
+    return write_if_changed(mod_js(clone), new)

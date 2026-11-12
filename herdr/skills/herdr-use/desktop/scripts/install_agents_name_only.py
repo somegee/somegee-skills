@@ -4,7 +4,8 @@
 
 기본 agents mod 는 읽기 전용(앱 시작 때 원본 복구)이라 my-agents 로 복제해 고치고,
 내 레이아웃이 my-agents 를 쓰게 바꾼다.
-  python install_agents_name_only.py            # 적용 (멱등)
+  python install_agents_name_only.py            # 낡음·없음이면 적용, 최신이면 '변경 없음'
+  python install_agents_name_only.py --status   # 상태 한 줄(--json) / --dry-run 미리보기
   python install_agents_name_only.py --remove   # 기본 agents 로 되돌림 (my-agents 폴더는 남김)
 
 설치할 때마다 원본 mods/agents/main.js 에서 다시 고쳐 덮어쓴다(patchlib). 기본 mod 가 업데이트돼
@@ -14,14 +15,15 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from install_title_sync import children_lists, ensure_own_layout, load, save  # noqa: E402
+from install_title_sync import children_lists, ensure_own_layout, layout_path, load, save, target_layout  # noqa: E402
 import done_hold  # noqa: E402
-from patchlib import apply_patches, rebuild  # noqa: E402
+from patchlib import apply_patches, desired_clone, mod_js, rebuild  # noqa: E402
+from featurelib import Check, Plan, Want, run_cli  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "agents"
-CLONE = "my-agents"
+CLONE = FEATURE = "my-agents"
 NL = "\n"
 
 # '지금 하는 일' 읽기: agents() 에는 msg 가 없어서 hc get <주소> --json 의 status.msg 를 3초마다 읽는다.
@@ -98,6 +100,31 @@ def point_layout(name: str, frm: str, to: str) -> int:
     return n
 
 
+def count_mods(name: str, mod: str) -> int:
+    return sum(1 for lst in children_lists(load(name)) for c in lst
+               if isinstance(c, dict) and (c.get("content") or {}).get("mod") == mod)
+
+
+def points_check(target: str, base: str, clone: str) -> Check:
+    """내 레이아웃이 기본 mod 대신 복제본을 쓰는지."""
+    if not os.path.exists(layout_path(target)):
+        return Check("레이아웃 %s 없음" % target, False, "레이아웃 %s 만들고 %s → %s" % (target, base, clone))
+    n_base, n_clone = count_mods(target, base), count_mods(target, clone)
+    return Check("레이아웃 %s 이 %s 를 씀" % (target, base), n_base == 0 and n_clone > 0,
+                 "레이아웃 %s: %s 칸 → %s" % (target, base, clone))
+
+
+def clone_plan(feature: str, base: str, clone: str, build) -> Plan:
+    """my-agents·my-tabs·my-spaces 공용: 복제본 내용 + 레이아웃 연결. 레이아웃이 원본을 쓰면 '없음'."""
+    pointed = points_check(target_layout(), base, clone)
+    return Plan(feature, files=(Want(mod_js(clone), desired_clone(base, clone, build)),), checks=(pointed,),
+                present=os.path.exists(mod_js(clone)) and pointed.ok)
+
+
+def plan() -> Plan:
+    return clone_plan(FEATURE, BASE, CLONE, build)
+
+
 def build(src: str) -> str:
     src = apply_patches(src, PATCHES, BASE)
     if "setShared" not in src.split('from "herdr";')[0]:
@@ -118,4 +145,4 @@ def remove() -> None:
 
 
 if __name__ == "__main__":
-    remove() if "--remove" in sys.argv else install()
+    run_cli(FEATURE, plan, install, remove)

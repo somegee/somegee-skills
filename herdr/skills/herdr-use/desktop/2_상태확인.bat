@@ -7,6 +7,6 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-python setup.py --check
+python setup.py --status
 echo.
 pause

@@ -1,7 +1,8 @@
 """herdr 앱: Ctrl+N 으로 지금 공간에 ccd(claude --dangerously-skip-permissions) 새 탭을 연다.
 
 keys.json 은 tab.new 에 argv 를 못 넘기므로 작은 mod(ccd-key)가 키를 받아 연다.
-  python install_ccd_key.py                          # 설치 (멱등)
+  python install_ccd_key.py                          # 낡음·없음이면 설치, 최신이면 '변경 없음'
+  python install_ccd_key.py --status                 # 상태 한 줄(--json) / --dry-run 미리보기
   python install_ccd_key.py --ccd-folder "<경로>"    # 그 폴더에서 열기 ("" = 지정 해제 → 공간 폴더)
   python install_ccd_key.py --remove                 # 단축키·mod 제거
 폴더를 안 주면 이미 설치된 값을 유지한다(정하는 순서는 ccd_folder.py). 다른 기기(원격) 공간에선 늘 그 공간 폴더.
@@ -15,29 +16,21 @@ import json
 import os
 import shutil
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from install_title_sync import APP_HOME, LAYOUTS, SHIPPED, children_lists, ensure_own_layout, find_block, load, save  # noqa: E402
+from install_title_sync import (  # noqa: E402
+    APP_HOME, LAYOUTS, SHIPPED, block_check, ensure_one_block, ensure_own_layout, load, mod_blocks, save, target_layout,
+)
+from featurelib import KEYS, Plan, Want, keys_check, read_bytes, run_cli, write_if_changed, write_json_if_changed  # noqa: E402
 import ccd_folder  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-MOD = "ccd-key"
+FEATURE = MOD = "ccd-key"
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", MOD)
 MOD_DIR = os.path.join(APP_HOME, "mods", MOD)
-KEYS = os.path.join(APP_HOME, "keys.json")
 KEY = "ctrl-n"
 ACTION = MOD + ".new"
-
-
-def mod_blocks(layout):
-    found = []
-    for lst in children_lists(layout):
-        for child in lst:
-            if isinstance(child, dict) and (child.get("content") or {}).get("mod") == MOD:
-                found.append((lst, child))
-    return found
 
 
 def set_key(value):
@@ -57,44 +50,36 @@ def set_key(value):
     backup = KEYS + ".bak-ccdkey"
     if not os.path.exists(backup):
         shutil.copy2(KEYS, backup)
-    with io.open(KEYS, "w", encoding="utf-8") as f:
-        f.write(json.dumps(keys, ensure_ascii=False, indent=2))
+    write_json_if_changed(KEYS, keys)
+    print("keys.json: Ctrl+N =", value)
 
 
-def copy_mod(folder):
-    """mod 파일을 복사하되 main.js 의 FOLDER 줄은 정한 폴더로 채운다(먼저 정해야 설치본 값을 읽을 수 있음)."""
-    os.makedirs(MOD_DIR, exist_ok=True)
-    shutil.copy2(os.path.join(SRC, "mod.json"), os.path.join(MOD_DIR, "mod.json"))
-    with io.open(os.path.join(SRC, "main.js"), encoding="utf-8", newline="") as f:
-        src = f.read()
-    with io.open(os.path.join(MOD_DIR, "main.js"), "w", encoding="utf-8", newline="") as f:
-        f.write(ccd_folder.set_in_source(src, "FOLDER", folder))
+def wants(folder):
+    """설치본이 돼야 할 내용 — main.js 의 FOLDER 줄은 정한 폴더로 채운다."""
+    main = read_bytes(os.path.join(SRC, "main.js"))
+    meta = read_bytes(os.path.join(SRC, "mod.json"))
+    if main is None or meta is None:
+        sys.exit("플러그인 assets 에 ccd-key 파일이 없음: " + SRC)
+    filled = ccd_folder.set_in_source(main.decode("utf-8"), "FOLDER", folder).encode("utf-8")
+    return (Want(os.path.join(MOD_DIR, "main.js"), filled), Want(os.path.join(MOD_DIR, "mod.json"), meta))
+
+
+def plan(folder_arg=None):
+    target = target_layout()
+    return Plan(FEATURE, files=wants(ccd_folder.resolve(folder_arg, quiet=True)),
+                checks=(keys_check("global", KEY, ACTION, "Ctrl+N"), block_check(target, MOD)),
+                present=os.path.exists(os.path.join(MOD_DIR, "main.js")))
 
 
 def install(folder_arg=None):
     folder = ccd_folder.resolve(folder_arg)
-    copy_mod(folder)
+    changed = [os.path.basename(w.path) for w in wants(folder) if write_if_changed(w.path, w.content)]
+    print("mod 파일:", ", ".join(changed) + " 바꿈" if changed else "그대로")
     target = ensure_own_layout()
     set_key(ACTION)
-    for _ in range(12):  # 앱이 스스로 칸을 넣는지 최대 6초
-        if mod_blocks(load(target)):
-            break
-        time.sleep(0.5)
-    layout = load(target)
-    blocks = mod_blocks(layout)
-    if not blocks:
-        lst, i = find_block(layout, "status")
-        if lst is None:
-            sys.exit("layouts/%s.json 에서 'status' 블록을 못 찾음 — 손으로 넣어야 함" % target)
-        lst.insert(i + 1, {"id": MOD, "type": "block", "size": {"px": 0}, "content": {"mod": MOD}})
-        save(target, layout)
-        print("레이아웃에 칸 추가:", target)
-    elif len(blocks) > 1:
-        for lst, child in blocks[1:]:
-            lst.remove(child)
-        save(target, layout)
-        print("중복 칸 정리:", len(blocks) - 1, "개 제거")
-    print("설치 완료: Ctrl+N = ccd 새 탭 / 레이아웃:", target, "/ 폴더:", ccd_folder.describe(folder))
+    # 앱이 스스로 칸을 넣는지 기다렸다가 없을 때만 넣고, 여러 개면 하나만(두 개면 Ctrl+N 한 번에 탭 두 개)
+    ensure_one_block(target, MOD, wait_for_app=True)
+    print("Ctrl+N = ccd 새 탭 / 레이아웃:", target, "/ 폴더:", ccd_folder.describe(folder))
 
 
 def remove():
@@ -104,7 +89,7 @@ def remove():
         if ext != ".json" or name in SHIPPED:
             continue
         layout = load(name)
-        blocks = mod_blocks(layout)
+        blocks = mod_blocks(layout, MOD)
         for lst, child in blocks:
             lst.remove(child)
         if blocks:
@@ -115,4 +100,5 @@ def remove():
 
 
 if __name__ == "__main__":
-    remove() if "--remove" in sys.argv else install(ccd_folder.parse_arg(sys.argv[1:]))
+    FOLDER_ARG = ccd_folder.parse_arg(sys.argv[1:])
+    run_cli(FEATURE, lambda: plan(FOLDER_ARG), lambda: install(FOLDER_ARG), remove)
