@@ -78,7 +78,7 @@ K="$(ls -d ~/.claude/plugins/cache/*/herdr/*/skills/herdr-use 2>/dev/null | tail
 - `setup.py --apply`: 낡음·없음인 기능만. `--apply title-sync,my-spaces`: 고른 것만. **최신인 기능은 건드리지 않는다**(파일 시각도 그대로). 끝에 바뀐 기능 / 그대로인 기능 / 멈춘 기능 / 바뀐 파일 / 사람이 눌러 볼 것을 따로 보여 준다.
 - 기능 하나: `scripts/install_<…>.py --status [--json]` / `--dry-run` / (옵션 없음 = 낡음·없음이면 적용) / `--force` / `--remove`.
 - 상태: `최신` · `낡음(무엇이 다른지)` · `없음` · `손으로 고친 흔적` · `고칠 문장 못 찾음(앱 업데이트)` · `오류`. 기능 스크립트 `--status` 종료 코드 0 / 10 / 11 / 12 / 13 / 14.
-- **손으로 고친 흔적**은 설치 기록으로 가린다: 스크립트가 mod 파일을 쓸 때마다 해시를 `~/.config/herdr-app/.herdr-custom/installed.json`에 적는다. 설치본이 플러그인판과도, 마지막으로 스크립트가 쓴 내용과도 다르면 손으로 고친 것. 기록이 없는 파일(0.7.x 이전 설치분)은 알 수 없어 `낡음(설치 기록 없음)`으로 나온다 — 첫 적용 뒤부터 가려진다. 섞인 파일(keys.json·programs.json·레이아웃)은 해당 항목만 본다.
+- **손으로 고친 흔적**은 설치 기록으로 가린다: 스크립트가 mod 파일을 쓸 때마다 해시를 `~/.config/herdr-app/.herdr-custom/installed.json`에 적는다. 설치본이 플러그인판과도, 마지막으로 스크립트가 쓴 내용과도 다르면 손으로 고친 것. 기록이 없는 파일(0.7.x 이전 설치분)은 알 수 없어 `낡음(설치 기록 없음)`으로 나온다 — `--apply`를 한 번 돌리면 플러그인판과 같은 파일은 **mod 파일을 건드리지 않고 기록만** 남겨(모두 최신이어도), 그 뒤부터 가려진다(0.8.1). 섞인 파일(keys.json·programs.json·레이아웃)은 해당 항목만 본다.
 - `--remove`(전부·개별)·ccd 폴더 규칙(`scripts/ccd_folder.py`)·원본에서 다시 만드는 patchlib 방식·칸 중복 정리는 그대로다. ccd 새 탭 폴더: `--apply ccd-button,ccd-key --ccd-folder "<경로>"`(`""` = 해제). `--ccd-folder`만 주면 그 폴더 기준 상태만 본다.
 - `1_설치.bat` = `--apply`, `2_상태확인.bat` = `--status`.
 

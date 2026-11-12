@@ -173,6 +173,9 @@ def run_script(f: Feature, folder_arg, force: bool) -> int:
 
 def apply(names, folder_arg, force: bool) -> int:
     before = status_all(folder_arg)
+    for f in FEATURES:  # 플러그인판과 같은 설치본은 기록만 남긴다(mod 파일은 안 건드림) — 손으로 고친 흔적을 가리려고
+        if before[f.name].state in (fl.LATEST, fl.STALE, fl.MISSING):
+            fl.adopt(feature_plan(f, folder_arg))
     # 이름 없이 부르면 낡음·없음 + 손으로 고친 흔적(--force 가 없으면 멈춤으로 보고만)
     chosen = pick(names) if names else [n for n, s in before.items() if s.state in fl.NEEDS_APPLY + (fl.HAND,)]
     if not chosen:

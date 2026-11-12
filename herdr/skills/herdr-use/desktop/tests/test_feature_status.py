@@ -228,3 +228,17 @@ def test_evaluate_states(tmp_path, monkeypatch):
     f.write_bytes(b"edited")
     (tmp_path / "m.json").write_text(json.dumps({"a.js": fl.sha(b"written-by-us")}), encoding="utf-8")
     assert fl.evaluate(fl.Plan("x", files=(want,), present=False)).state == fl.HAND
+
+
+def test_apply_on_latest_pc_records_manifest_without_touching_mods(home):
+    """0.7.x 로 이미 최신인 PC: --apply 는 mod 파일을 안 건드리고 설치 기록만 남겨, 그 뒤 손댐을 가린다."""
+    assert run(home, "install_title_sync.py")[0] == 0
+    (home / ".herdr-custom" / "installed.json").unlink()  # 이 틀 이전 설치처럼
+    main = home / "mods" / "title-sync" / "main.js"
+    t = mtime(main)
+    code, out = run(home, "setup.py", "--apply")
+    assert mtime(main) == t
+    assert "mods/title-sync/main.js" in json.loads((home / ".herdr-custom" / "installed.json").read_text(encoding="utf-8"))
+    main.write_bytes(main.read_bytes() + b"\n// edit\n")
+    code, out = run(home, "install_title_sync.py", "--status")
+    assert code == fl.EXIT_CODES[fl.HAND], out

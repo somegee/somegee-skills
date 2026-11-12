@@ -133,6 +133,18 @@ def remember(path: str, data: bytes) -> None:
         f.write(json.dumps({**manifest, key: sha(data)}, ensure_ascii=False, indent=2, sort_keys=True))
 
 
+def adopt(plan: Plan) -> int:
+    """플러그인판과 내용이 같은 설치본을 '우리가 둔 것'으로 기록만 한다(파일은 안 건드림).
+    모두 최신이라 아무것도 안 쓰는 PC 에서도 설치 기록이 생겨, 다음부터 손으로 고친 흔적을 가릴 수 있다.
+    --apply 경로에서만 부른다(--status·--dry-run 은 아무것도 안 씀)."""
+    n = 0
+    for w in plan.files:
+        if read_bytes(w.path) == w.content:
+            remember(w.path, w.content)
+            n += 1
+    return n
+
+
 def write_if_changed(path: str, data: bytes) -> bool:
     """내용이 같으면 파일을 건드리지 않는다(시각도 그대로). 바꿨으면 True. 어느 쪽이든 설치 기록은 남긴다."""
     if read_bytes(path) == data:
@@ -270,6 +282,8 @@ def apply_feature(feature: str, make: Callable[[], Plan], install: Callable[[], 
     """최신이면 아무것도 안 하고, 낡음·없음이면 install() 을 돌린다. 종료 코드를 돌려준다."""
     plan = safe_plan(feature, make)
     st = evaluate(plan)
+    if st.state in (LATEST, STALE, MISSING):
+        adopt(plan)  # 같은 파일은 기록만 — 최신이어도 설치 기록이 생기게
     if st.state == LATEST:
         print("[%s] 변경 없음" % feature)
         return 0
