@@ -1,8 +1,8 @@
-"""ccd 새 탭(Ctrl+N·+ 메뉴 ccd)을 열 폴더 정하기 — install_ccd_key·install_ccd_button·setup 이 같이 쓴다.
+"""+ 메뉴 ccd 새 탭을 열 폴더 정하기 — install_ccd_button·setup 이 같이 쓴다.
 
 정하는 순서 (resolve):
   1. --ccd-folder "<경로>" 를 줬으면 그 값 ("" = 지정 해제 → 공간 폴더)
-  2. 없으면 이미 설치된 값 유지 (ccd-key → my-new-menu 설치본의 `const (CCD_)FOLDER = ...` 줄)
+  2. 없으면 이미 설치된 값 유지 (my-new-menu 설치본의 `const CCD_FOLDER = ...` 줄)
   3. 설치본에 그 줄이 없으면(첫 설치·예전 판) PowerShell 프로필의 ccd 함수에서 Set-Location "<경로>" 를 찾아 씀
   4. 그래도 없으면 "" = 공간 폴더(예전과 같은 동작)
 ccd 함수·PowerShell 프로필은 대부분의 PC 에 없다고 보고 짠다 — 못 찾거나 못 읽으면 조용히 건너뛴다.
@@ -25,10 +25,9 @@ from apphome import APP_HOME  # noqa: E402
 from featurelib import PatchError  # noqa: E402
 
 OPTION = "--ccd-folder"
-KEY_MOD = "ccd-key"
 MENU_MOD = "my-new-menu"
 PROFILE_TIMEOUT_SECONDS = 15
-# 설치본 main.js 에서 폴더 값을 읽는 줄 — ccd-key 는 FOLDER, my-new-menu 는 CCD_FOLDER
+# 설치본 main.js 에서 폴더 값을 읽는 줄 — my-new-menu 는 CCD_FOLDER (예전 ccd-key 는 FOLDER)
 INSTALLED_RE = re.compile(r'^const (?:CCD_)?FOLDER = ("(?:[^"\\]|\\.)*");', re.M)
 CCD_FUNC_RE = re.compile(r"function\s+ccd\b[^{]*\{", re.I)
 # Set-Location 바로 뒤의 따옴표 경로만 읽는다(-Path·변수·cd·Push-Location 은 못 읽은 것으로 보고 건너뜀)
@@ -77,7 +76,7 @@ def read_installed(path: str) -> Optional[str]:
 
 
 def installed_values() -> dict[str, Optional[str]]:
-    return {KEY_MOD: read_installed(mod_main(KEY_MOD)), MENU_MOD: read_installed(mod_main(MENU_MOD))}
+    return {MENU_MOD: read_installed(mod_main(MENU_MOD))}
 
 
 def ccd_from_text(text: str) -> Optional[str]:
@@ -139,7 +138,7 @@ def resolve(arg: Optional[str], quiet: bool = False) -> str:
         folder = arg
     else:
         vals = installed_values()
-        folder = next((v for v in (vals[KEY_MOD], vals[MENU_MOD]) if v is not None), None)
+        folder = vals[MENU_MOD]
         if folder is None:
             folder = from_profile() or ""
     if folder and not os.path.isdir(folder):
@@ -147,7 +146,7 @@ def resolve(arg: Optional[str], quiet: bool = False) -> str:
             print("!! 경고: ccd 폴더가 없음 →", folder, "— 공간 폴더로 둡니다(없는 폴더로는 탭이 안 열림). 다시 지정: --ccd-folder \"<경로>\"")
         folder = ""
     if not quiet and not shutil.which("claude"):
-        print("!! 경고: claude 가 PATH 에 없음 — + 메뉴 ccd 는 'not installed' 로 흐리게, Ctrl+N 은 오류 알림이 뜹니다.")
+        print("!! 경고: claude 가 PATH 에 없음 — + 메뉴 ccd 는 'not installed' 로 흐리게 보입니다.")
     return folder
 
 

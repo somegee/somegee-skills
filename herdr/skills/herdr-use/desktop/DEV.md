@@ -45,16 +45,26 @@
 
 my-agents 가 3초마다 `hc get` 으로 읽어 `shared("agent.msgs")` 로 내놓고, my-spaces 는 레이아웃에 my-agents 가 있으면 그걸 읽는다(없을 때만 직접 읽음) — 같은 조회를 두 번 돌리지 않게.
 
-## ccd 폴더 (ccd-button·ccd-key)
+## ccd 폴더 (ccd-button)
 
 - 앱 API `tab.new` 는 `folder` 를 받지만 programs.json 의 `run` 엔 폴더 칸이 없다 → `+` 메뉴는 기본 new-menu 를 my-new-menu 로 복제해 고치고(patchlib), `+` 버튼은 tabs mod 안에 있어서 my-tabs 가 `openOverlay({ mod: "my-new-menu" … })` 로 연다.
 - **my-new-menu 가 있을 때만 그렇게 고친다**(없는데 가리키면 `+` 가 아무것도 안 엶) → setup 순서는 ccd 버튼 → my-tabs, ccd-button 설치·`--remove` 뒤엔 my-tabs 를 다시 맞춘다(`refresh()`). my-new-menu 는 팝업이라 레이아웃 칸이 없다. `KNOWN`("new-menu.agents") 캐시 키는 원본과 같이 쓴다.
 - 원격 공간은 늘 그 공간 폴더: `spaces()[i].machine` 이 null 일 때만 정한 폴더를 쓴다(이 PC 경로는 원격에 없음).
 - PowerShell `ccd` 함수를 부르지 않는 이유: herdr 는 bash/zsh 함수만 설치 확인을 해서 PowerShell 함수는 "not installed" 로 보임 → 탭은 늘 `claude` 를 직접 실행.
-- 폴더 정하는 순서(`scripts/ccd_folder.py`): ① 옵션 ② **설치본 값 유지**(ccd-key `const FOLDER`, my-new-menu `const CCD_FOLDER` 줄 — 안 그러면 setup 을 다시 돌릴 때마다 폴더가 사라짐, `""` 로 해제해 둔 것도 유지) ③ 설치본에 그 줄이 없을 때만 PowerShell 프로필의 `function ccd { Set-Location "<경로>" … }`(프로필 위치는 `$PROFILE` 을 powershell·pwsh 에 물어봄 — OneDrive 문서 폴더 대비. `cd`·`-Path`·변수·`Push-Location` 등 다른 형식이면 조용히 건너뜀) ④ `""`.
-- 설치 때 폴더가 없으면 경고하고 `""`(없는 폴더로 `tab.new` 하면 탭이 안 열림), `claude` 가 PATH 에 없으면 경고(`+` 메뉴는 "not installed" 로 흐림, Ctrl+N 은 오류 알림). 상태표 아래 `ccd 폴더: …` 줄, 두 설치본 값이 다르면 경고.
+- 폴더 정하는 순서(`scripts/ccd_folder.py`): ① 옵션 ② **설치본 값 유지**(my-new-menu `const CCD_FOLDER` 줄 — 안 그러면 setup 을 다시 돌릴 때마다 폴더가 사라짐, `""` 로 해제해 둔 것도 유지) ③ 설치본에 그 줄이 없을 때만 PowerShell 프로필의 `function ccd { Set-Location "<경로>" … }`(프로필 위치는 `$PROFILE` 을 powershell·pwsh 에 물어봄 — OneDrive 문서 폴더 대비. `cd`·`-Path`·변수·`Push-Location` 등 다른 형식이면 조용히 건너뜀) ④ `""`.
+- 설치 때 폴더가 없으면 경고하고 `""`(없는 폴더로 `tab.new` 하면 탭이 안 열림), `claude` 가 PATH 에 없으면 경고(`+` 메뉴는 "not installed" 로 흐림). 상태표 아래 `ccd 폴더(+ 메뉴): …` 줄.
 - 설치 뒤 폴더가 지워진 경우: mod 가 누를 때 `exec("cmd", ["/c","exit"], {cwd})` 로 확인(`exec` 는 cwd 가 없으면 거절)하고, 없으면 공간 폴더로 열고 `notify` 로 알린다. `run()` 은 null 이라 tab.new 실패를 직접 알 수 없어서다. `+` 메뉴는 메뉴를 열 때 미리 확인하고 결과가 오기 전에 누르면 폴더를 믿고 넘긴다. **이 확인은 실제로 시험해 보지 않았다**(폴더 지정 자체는 2026-11-11 herdr-app 에서 확인됨).
 
 ## 그림 붙여넣기 (image-paste)
 
 앱은 Windows 로컬 창에 클립보드 **글자만** 붙인다. mod 가 `clipimg.exe`(설치 때 .NET Framework 4 `csc.exe` 로 빌드, 인터넷 안 씀)로 그림을 `C:\Users\Public\herdr-paste\paste-*.png` 에 저장하고 클립보드를 '복사한 파일'로 바꾼 뒤 `terminal.paste` → 경로가 들어가고 Claude 가 그림으로 읽는다. 원격 창이면 바로 `terminal.paste`(앱이 그림을 그 기기로 복사). Claude 자체 Alt+V 는 PowerShell 을 띄워 느려서 안 쓴다.
+
+## 탭 x 두 번 눌러 닫기 (my-tabs close-confirm, 0.9.0)
+
+- 원본 tabs 의 x 는 `on_click` 에서 바로 `run("tab.close")`. my-tabs 패치가 `this.closeArm`(준비된 탭 id)·`closeArmAt` 을 두고, 첫 클릭엔 준비만(빨간 바탕 `CLOSE_ARMED_BG`), `CLOSE_ARM_MS`(3초) 안의 두 번째 클릭에 닫는다.
+- 원본 `init()` 엔 cx 가 없어 `init(_props, cx)` 로 바꾸고 `cx.timer.every(CLOSE_TICK_MS, …)` 로 시간이 지나면 준비를 풀고 다시 그린다(spaces mod 와 같은 방식).
+- 상수는 mod 맨 위 `[herdr-use close-confirm]` 줄 아래.
+
+## 예전 ccd-key (0.9.0 에 뺌)
+
+Ctrl+N 을 mod(`ccd-key.new`)가 받아 `tab.new {argv: claude --dangerously-skip-permissions}` 로 열었다. mod 파일을 다시 쓰거나 앱을 오래 켜 두면 키가 안 닿는 일이 잦아 뺐다. `install_newtab_key.py` 가 단축키(`ccd-key.new`)·레이아웃 칸·`mods/ccd-key/` 를 치우고 Ctrl+N 을 앱 자체 `tab.new` 로 건다. **키를 먼저 옮기고 칸을 뺀다** — 단축키가 mod 를 가리키는 동안엔 앱이 칸을 스스로 다시 넣는다.

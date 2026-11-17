@@ -1,6 +1,6 @@
 """기능별 상태 확인·미리보기·적용 — 가짜 앱 폴더(HERDR_APP_HOME)에서 스크립트를 실제로 돌려 본다.
 
-앱 없이 되는 기능(title-sync·ccd-key·image-paste 의 이미 깔린 상태)만 끝까지 돌리고,
+앱 없이 되는 기능(title-sync·newtab-key·image-paste 의 이미 깔린 상태)만 끝까지 돌리고,
 복제본 기능(my-agents 등)은 상태 판정만 본다.
   python -m pytest herdr/skills/herdr-use/desktop/tests
 """
@@ -21,7 +21,6 @@ import featurelib as fl  # noqa: E402
 LAYOUT = {"root": {"type": "column", "children": [
     {"id": "main", "type": "block", "content": {"mod": "pane"}},
     {"id": "status", "type": "block", "size": {"px": 24}, "content": {"mod": "status"}},
-    {"id": "ccd-key", "type": "block", "size": {"px": 0}, "content": {"mod": "ccd-key"}},  # 앱이 넣는 칸 흉내(기다림 생략)
 ]}}
 
 
@@ -77,7 +76,7 @@ def preinstall_image_paste(home):
 
 @pytest.mark.parametrize("script, main", [
     ("install_title_sync.py", "mods/title-sync/main.js"),
-    ("install_ccd_key.py", "mods/ccd-key/main.js"),
+    ("install_newtab_key.py", None),
 ])
 def test_second_apply_writes_nothing(home, script, main):
     code, out = run(home, script)
@@ -91,8 +90,8 @@ def test_second_apply_writes_nothing(home, script, main):
 
 
 def test_reinstall_after_stale_writes_only_that_feature(home):
-    """ccd-key 를 깔고 title-sync 만 낡게 → setup --apply 는 title-sync 만 고치고 ccd-key/main.js 는 안 건드림."""
-    assert run(home, "install_ccd_key.py")[0] == 0
+    """newtab-key 를 깔고 title-sync 만 낡게 → setup --apply 는 title-sync 만 고치고 keys.json 은 안 건드림."""
+    assert run(home, "install_newtab_key.py")[0] == 0
     assert run(home, "install_title_sync.py")[0] == 0
     ts = home / "mods" / "title-sync" / "main.js"
     old = b"// old plugin version\n"
@@ -101,26 +100,26 @@ def test_reinstall_after_stale_writes_only_that_feature(home):
     manifest = json.loads(fl_manifest.read_text(encoding="utf-8"))
     manifest["mods/title-sync/main.js"] = fl.sha(old)  # 지난 판이 쓴 것처럼
     fl_manifest.write_text(json.dumps(manifest), encoding="utf-8")
-    key_main = home / "mods" / "ccd-key" / "main.js"
+    key_main = home / "keys.json"
     t_key = mtime(key_main)
 
     code, out = run(home, "setup.py")
     assert "title-sync   낡음(플러그인판과 다름: main.js)" in out
-    assert "ccd-key      최신" in out
+    assert "newtab-key   최신" in out
 
     code, out = run(home, "setup.py", "--apply")
     assert "바뀐 기능: title-sync" in out, out
     assert mtime(key_main) == t_key
-    assert "mods/ccd-key" not in out.split("바뀐 파일:")[1].splitlines()[0]
+    assert "keys.json" not in out.split("바뀐 파일:")[1].splitlines()[0]
     assert ts.read_bytes() == open(os.path.join(ASSETS, "title-sync", "main.js"), "rb").read()
 
 
 def test_setup_apply_all_latest_changes_nothing(home):
     assert run(home, "install_title_sync.py")[0] == 0
-    assert run(home, "install_ccd_key.py")[0] == 0
+    assert run(home, "install_newtab_key.py")[0] == 0
     preinstall_image_paste(home)
     before = tree(home)
-    code, out = run(home, "setup.py", "--apply", "title-sync,ccd-key,image-paste")
+    code, out = run(home, "setup.py", "--apply", "title-sync,newtab-key,image-paste")
     assert out.count("변경 없음") >= 3, out
     assert "바뀐 기능: 없음" in out
     assert "바뀐 파일: 없음" in out
@@ -145,9 +144,39 @@ def test_status_and_dry_run_write_nothing(home):
 
 
 def test_status_json(home):
-    code, out = run(home, "install_ccd_key.py", "--status", "--json")
+    code, out = run(home, "install_newtab_key.py", "--status", "--json")
     data = json.loads(out.strip().splitlines()[-1])
-    assert data["feature"] == "ccd-key" and data["state"] == "missing"
+    assert data["feature"] == "newtab-key" and data["state"] == "missing"
+
+
+def test_newtab_key_clears_old_ccd_key(home):
+    """예전 ccd-key(단축키·칸·mod 폴더)가 깔린 PC → 낡음 → 적용하면 Ctrl+N = tab.new, 흔적 모두 치움."""
+    keys = json.loads((home / "keys.json").read_text(encoding="utf-8"))
+    keys["global"]["ctrl-n"] = "ccd-key.new"
+    (home / "keys.json").write_text(json.dumps(keys, indent=2), encoding="utf-8")
+    layout = json.loads((home / "layouts" / "my-main.json").read_text(encoding="utf-8"))
+    layout["root"]["children"].append({"id": "x1", "type": "block", "size": {"px": 0}, "content": {"mod": "ccd-key"}})
+    (home / "layouts" / "my-main.json").write_text(json.dumps(layout, indent=2), encoding="utf-8")
+    (home / "mods" / "ccd-key").mkdir()
+    (home / "mods" / "ccd-key" / "main.js").write_text("// old", encoding="utf-8")
+
+    code, out = run(home, "install_newtab_key.py", "--status")
+    assert code == fl.EXIT_CODES[fl.STALE] and "예전 ccd-key 남음" in out, out
+    code, out = run(home, "setup.py", "--apply", "ccd-key")  # 옛 이름으로 불러도 된다
+    assert "바뀐 기능: newtab-key" in out, out
+    assert json.loads((home / "keys.json").read_text(encoding="utf-8"))["global"]["ctrl-n"] == "tab.new"
+    assert "ccd-key" not in (home / "layouts" / "my-main.json").read_text(encoding="utf-8")
+    assert not (home / "mods" / "ccd-key").exists()
+    assert run(home, "install_newtab_key.py", "--status")[0] == 0
+
+
+def test_newtab_key_stops_on_other_binding(home):
+    keys = json.loads((home / "keys.json").read_text(encoding="utf-8"))
+    keys["global"]["ctrl-n"] = "space.new"
+    (home / "keys.json").write_text(json.dumps(keys, indent=2), encoding="utf-8")
+    code, out = run(home, "install_newtab_key.py")
+    assert code != 0 and "다른 동작(space.new)" in out
+    assert json.loads((home / "keys.json").read_text(encoding="utf-8"))["global"]["ctrl-n"] == "space.new"
 
 
 # ---- 손으로 고친 흔적 ----

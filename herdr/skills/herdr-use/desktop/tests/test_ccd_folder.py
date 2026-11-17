@@ -84,9 +84,9 @@ def test_set_in_source_stops_when_line_missing():
 
 def test_resolve_prefers_option_then_installed_then_profile(tmp_path, monkeypatch):
     monkeypatch.setattr(ccd_folder, "from_profile", lambda: str(tmp_path))
-    monkeypatch.setattr(ccd_folder, "installed_values", lambda: {ccd_folder.KEY_MOD: None, ccd_folder.MENU_MOD: None})
+    monkeypatch.setattr(ccd_folder, "installed_values", lambda: {ccd_folder.MENU_MOD: None})
     assert ccd_folder.resolve(None) == str(tmp_path)  # 설치본 없음 → 프로필
-    monkeypatch.setattr(ccd_folder, "installed_values", lambda: {ccd_folder.KEY_MOD: "", ccd_folder.MENU_MOD: None})
+    monkeypatch.setattr(ccd_folder, "installed_values", lambda: {ccd_folder.MENU_MOD: ""})
     assert ccd_folder.resolve(None) == ""  # 해제해 둔 값은 유지(프로필로 되살리지 않음)
     assert ccd_folder.resolve(str(tmp_path)) == str(tmp_path)  # 옵션이 먼저
 

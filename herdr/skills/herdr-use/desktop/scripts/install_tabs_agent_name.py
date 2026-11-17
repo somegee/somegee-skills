@@ -49,6 +49,24 @@ PATCHES = [
      + "    };"),
     ('.on_mouse_up("left", () => { this.pressed = null; })',
      '.on_mouse_up("left", (_e, cx) => { this.pressed = null; this.over = null; cx.notify(); })'),
+    # 탭 x 는 두 번 눌러야 닫힌다: 첫 번째엔 빨간 바탕(준비), CLOSE_ARM_MS 안에 한 번 더 누르면 닫음, 지나면 원래대로
+    ("export default class Tabs extends View {",
+     "// [herdr-use close-confirm] 탭 x 두 번 눌러 닫기" + NL
+     + "const CLOSE_ARM_MS = 3000;" + NL
+     + "const CLOSE_TICK_MS = 250;" + NL
+     + 'const CLOSE_ARMED_BG = "#e5484d";' + NL
+     + 'const CLOSE_ARMED_FG = "#ffffff";' + NL + NL
+     + "export default class Tabs extends View {"),
+    ("  init() {" + NL + "    this.pressed = null;",
+     "  init(_props, cx) {" + NL + "    this.pressed = null;" + NL
+     + "    this.closeArm = null; this.closeArmAt = 0; // 빨갛게 준비된 x 의 탭 id" + NL
+     + "    cx.timer.every(CLOSE_TICK_MS, (cx) => { if (this.closeArm !== null && Date.now() - this.closeArmAt > CLOSE_ARM_MS) { this.closeArm = null; cx.notify(); } });"),
+    ('div().id(`close-${c.id}`).text_color(t.dim).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); })',
+     'div().id(`close-${c.id}`).p(2).rounded(4).text_color(this.closeArm === c.id ? CLOSE_ARMED_FG : t.dim)'
+     '.when(this.closeArm === c.id, el => el.bg(CLOSE_ARMED_BG))'
+     '.on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation();'
+     ' if (this.closeArm === c.id && Date.now() - this.closeArmAt <= CLOSE_ARM_MS) { this.closeArm = null; run("tab.close", { id: c.id }); }'
+     ' else { this.closeArm = c.id; this.closeArmAt = Date.now(); } cx.notify(); })'),
 ]
 NEW_MENU = "my-new-menu"
 # + 버튼 → my-new-menu (ccd 를 설치 때 정한 폴더에서 여는 + 메뉴)

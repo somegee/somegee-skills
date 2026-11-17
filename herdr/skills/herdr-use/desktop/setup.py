@@ -5,10 +5,10 @@
   python setup.py --apply                           # 낡음·없음인 기능만 적용 (최신은 안 건드림, 손으로 고친 흔적은 멈춤)
   python setup.py --apply title-sync,my-spaces      # 고른 기능만 (그중 최신인 건 '변경 없음')
   python setup.py --apply ... --force               # 손으로 고친 흔적이 있어도 백업 후 덮기
-  python setup.py --apply ... --ccd-folder "<경로>" # ccd 새 탭(Ctrl+N·+ 메뉴) 폴더 지정 ("" = 지정 해제)
+  python setup.py --apply ... --ccd-folder "<경로>" # + 메뉴 ccd 새 탭 폴더 지정 ("" = 지정 해제)
   python setup.py --remove                          # 전부 되돌림
 
-기능 이름: title-sync, image-paste, my-agents, ccd-button, my-tabs, ccd-key, my-spaces
+기능 이름: title-sync, image-paste, my-agents, ccd-button, my-tabs, newtab-key, my-spaces
 기능 하나만 볼 땐 scripts/install_<…>.py --status / --dry-run 도 된다. 언제 무엇을 돌릴지는 SKILL.md 2갈래(2-3 행동 가이드).
 """
 from __future__ import annotations
@@ -57,13 +57,13 @@ FEATURES = [
             "우상단 + → ccd → 새 탭이 정한 폴더(안 정했으면 공간 폴더)에서 열림", takes_folder=True),
     Feature("my-tabs", "install_tabs_agent_name", "상단 탭: 이름 없는 Claude 탭은 'Claude Code' + 끌 때 점선 + + 버튼 → my-new-menu",
             "+ 로 새 Claude 탭 → 탭 이름 'Claude Code' / 탭을 끌면 점선"),
-    Feature("ccd-key", "install_ccd_key", "Ctrl+N 으로 ccd 새 Claude 탭",
-            "Ctrl+N → 지금 공간에 새 Claude 탭 하나, 폴더는 + 메뉴 ccd 와 같음", takes_folder=True, takes_key=True),
+    Feature("newtab-key", "install_newtab_key", "Ctrl+N → 새 터미널 탭(앱 자체 tab.new, 예전 ccd-key 치움)",
+            "Ctrl+N → 지금 공간에 새 터미널 탭 하나"),
     Feature("my-spaces", "install_spaces_tree", "좌상단 Spaces: ▾/▸ 로 공간별 세션 목록·상태 펼치기",
             "좌상단 ▾/▸ 펼치기·접기 / 세션 줄 누르면 그 창으로 / 다른 공간으로 끌어 옮기기 / 같은 공간 안 순서 바꾸기"),
 ]
 ALIASES = {"ccd 버튼": "ccd-button", "ccd-menu": "ccd-button", "my-new-menu": "ccd-button",
-           "ctrl+n": "ccd-key", "title": "title-sync"}
+           "ctrl+n": "newtab-key", "ccd-key": "newtab-key", "title": "title-sync"}
 BY_NAME = {f.name: f for f in FEATURES}
 
 
@@ -113,12 +113,7 @@ def app_line() -> str:
 
 
 def ccd_line() -> str:
-    vals = ccd_folder.installed_values()
-    key, menu = vals[ccd_folder.KEY_MOD], vals[ccd_folder.MENU_MOD]
-    line = "ccd 폴더: " + ccd_folder.describe(key if key is not None else menu)
-    if key is not None and menu is not None and key != menu:
-        line += " !! Ctrl+N(%s)과 + 메뉴(%s)가 다름" % (ccd_folder.describe(key), ccd_folder.describe(menu))
-    return line
+    return "ccd 폴더(+ 메뉴): " + ccd_folder.describe(ccd_folder.installed_values()[ccd_folder.MENU_MOD])
 
 
 def print_status(statuses: dict, as_json: bool) -> int:
@@ -279,7 +274,7 @@ def main() -> int:
     if a.dry_run is not None:
         return dry_run(a.dry_run, folder_arg)
     if folder_arg is not None:
-        print("※ --ccd-folder 만 주면 그 폴더 기준 상태만 봅니다. 적용하려면 --apply ccd-button,ccd-key --ccd-folder ...\n")
+        print("※ --ccd-folder 만 주면 그 폴더 기준 상태만 봅니다. 적용하려면 --apply ccd-button --ccd-folder ...\n")
     return print_status(status_all(folder_arg), a.json)
 
 
