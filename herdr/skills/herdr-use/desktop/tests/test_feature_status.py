@@ -271,3 +271,23 @@ def test_apply_on_latest_pc_records_manifest_without_touching_mods(home):
     main.write_bytes(main.read_bytes() + b"\n// edit\n")
     code, out = run(home, "install_title_sync.py", "--status")
     assert code == fl.EXIT_CODES[fl.HAND], out
+
+
+# ---- 고르기 화면 묶음 (SKILL.md 「인자」) ----
+
+def test_choices_cover_every_feature_once(home):
+    sys.path.insert(0, DESKTOP)
+    import setup  # noqa: E402
+    names = [n for _t, ns in setup.GROUPS for n in ns]
+    assert sorted(names) == sorted(f.name for f in setup.FEATURES)  # 새 기능을 묶음에 빠뜨리지 않게
+    assert all(len(ns) <= 4 and len(t) <= 12 for t, ns in setup.GROUPS)  # AskUserQuestion 한도
+    assert all(len(setup.SHORT[n].split()) <= 5 for n in names)
+    assert all(d in setup.BY_NAME for ds in setup.NEEDS.values() for d in ds)
+    before = tree(home)
+    code, out = run(home, "setup.py", "--choices", "--json")
+    assert code == 0, out
+    data = json.loads(out[out.index("{"):])
+    flat = {it["name"]: it for g in data["groups"] for it in g["features"]}
+    assert flat["title-sync"]["state"] == "missing" and flat["title-sync"]["recommended"]
+    assert flat["resume-all"]["needs"] == ["my-tabs"]
+    assert tree(home) == before

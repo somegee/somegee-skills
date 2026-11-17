@@ -7,6 +7,7 @@
   python setup.py --apply ... --force               # 손으로 고친 흔적이 있어도 백업 후 덮기
   python setup.py --apply ... --ccd-folder "<경로>" # + 메뉴 ccd 새 탭 폴더 지정 ("" = 지정 해제)
   python setup.py --remove                          # 전부 되돌림
+  python setup.py --choices --json                  # 고르기 화면용: 묶음별 기능·지금 상태·추천·함께 필요한 기능 (아무것도 안 바꿈)
 
 기능 이름: title-sync, image-paste, my-agents, ccd-button, resume-all, my-tabs, newtab-key, my-spaces
 기능 하나만 볼 땐 scripts/install_<…>.py --status / --dry-run 도 된다. 언제 무엇을 돌릴지는 SKILL.md 2갈래(2-3 행동 가이드).
@@ -67,6 +68,21 @@ FEATURES = [
 ALIASES = {"ccd 버튼": "ccd-button", "ccd-menu": "ccd-button", "my-new-menu": "ccd-button",
            "ctrl+n": "newtab-key", "ccd-key": "newtab-key", "title": "title-sync", "resume": "resume-all"}
 BY_NAME = {f.name: f for f in FEATURES}
+
+# 고르기 화면(SKILL.md 「인자」 — AskUserQuestion 다중 선택)용 묶음. 질문 하나에 선택지 4개까지라 4개 이하로 묶는다.
+# 묶음 이름은 질문 머리표(12자 이하), SHORT 는 선택지 이름(다섯 낱말 이하).
+GROUPS = [
+    ("화면", ("my-tabs", "my-spaces", "my-agents", "title-sync")),
+    ("버튼·메뉴", ("resume-all", "ccd-button")),
+    ("키", ("image-paste", "newtab-key")),
+]
+SHORT = {
+    "my-tabs": "상단 탭 바", "my-spaces": "좌상단 Spaces 펼치기", "my-agents": "좌하단 Agents 목록",
+    "title-sync": "/rename → 탭 이름", "resume-all": "Resume 세션 이어하기", "ccd-button": "+ 메뉴 ccd 버튼",
+    "image-paste": "Ctrl+Shift+V 그림 붙여넣기", "newtab-key": "Ctrl+N 새 터미널 탭",
+}
+# 이 기능의 버튼이 들어가 있는 곳 — 같이 깔리지 않으면 눌러 볼 데가 없다
+NEEDS = {"resume-all": ("my-tabs",), "ccd-button": ("my-tabs",)}
 
 
 def pick(names: str) -> list:
@@ -136,6 +152,20 @@ def print_status(statuses: dict, as_json: bool) -> int:
             print("손으로 고친 흔적: %s — 시험 적용 중인지 확인한 뒤에만 --apply %s --force (백업 후 덮음)"
                   % (", ".join(hand), ",".join(hand)))
     return 0 if all(s.state == fl.LATEST for s in statuses.values()) else 1
+
+
+def choices(statuses: dict) -> dict:
+    """고르기 화면용 묶음. recommended = 낡음·없음(적용하면 바뀜). 손으로 고친 흔적·고칠 문장 못 찾음은 따로 표시."""
+    groups = []
+    for title, names in GROUPS:
+        items = []
+        for n in names:
+            st = statuses[n]
+            items.append({"name": n, "label": SHORT[n], "desc": BY_NAME[n].desc, "state": st.state, "state_label": st.label,
+                          "detail": st.detail, "recommended": st.state in fl.NEEDS_APPLY, "needs": list(NEEDS.get(n, ())),
+                          "takes_folder": BY_NAME[n].takes_folder})
+        groups.append({"title": title, "features": items})
+    return {"groups": groups, "app": app_line(), "ccd": ccd_line()}
 
 
 def managed_files(folder_arg) -> list:
@@ -266,11 +296,22 @@ def main() -> int:
     ap.add_argument("--dry-run", nargs="?", const="", default=None, metavar="이름,이름", help="미리보기")
     ap.add_argument("--force", action="store_true", help="손으로 고친 흔적도 백업 후 덮기")
     ap.add_argument("--remove", action="store_true", help="전부 되돌리기")
+    ap.add_argument("--choices", action="store_true", help="고르기 화면용 묶음(--json 과 함께, 아무것도 안 바꿈)")
     ap.add_argument(ccd_folder.OPTION, dest="ccd_folder", default=None, metavar="경로", help='ccd 새 탭 폴더 ("" = 해제)')
     a = ap.parse_args()
     folder_arg = ccd_folder.clean(a.ccd_folder) if a.ccd_folder is not None else None
     if a.remove:
         remove()
+        return 0
+    if a.choices:
+        data = choices(status_all(folder_arg))
+        if a.json:
+            print(json.dumps(data, ensure_ascii=False, indent=2))
+        else:
+            for g in data["groups"]:
+                print("[%s]" % g["title"])
+                for it in g["features"]:
+                    print("  %-12s %-24s %s%s" % (it["name"], it["label"], it["state_label"], " (추천)" if it["recommended"] else ""))
         return 0
     if a.apply is not None:
         return apply(a.apply, folder_arg, a.force)

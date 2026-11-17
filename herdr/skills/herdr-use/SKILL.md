@@ -1,6 +1,7 @@
 ---
 name: herdr-use
-description: herdr(에이전트 터미널 관리자 — 여러 PC의 Claude Code 세션을 한 창에서 보고 서로 일을 시키는 도구)의 함정 모음과 설치 안내. 세 갈래로 나뉜다 — ① 쓰기·잇기: 앱(herdr-app)과 본체(herdr-core/hc) 구분, machine add 연결 방향, Windows PC에 SSH로 붙이기, Linux 서버 함정, hc send·hc run 함정, 안 될 때 점검 순서 ② 데스크톱 앱 커스텀 기능별 설치(상태 확인 → 미리보기 → 고른 것만 적용): 내 레이아웃 복제 + /rename → 탭 이름, Ctrl+Shift+V 그림 붙여넣기, Agents 목록 세션명만, 탭 「Claude Code」·점선·x 두 번 눌러 닫기, + 메뉴 ccd, Ctrl+N 새 터미널 탭, Spaces 공간별 세션 펼치기·끌어 옮기기·빈 공간 남기기, 우상단 Resume(재부팅 뒤 셸만 남은 Claude 세션 골라 일괄 이어하기) ③ 서버·웹 관제 연동: 서버 상주 탭 이름 동기화·빈 공간 되돌리기(herdr-title-sync, systemd), '끝남/봤음' 이름표, 세션 이름표 훅. 명령 사용법은 `hc --help`·`herdr-app --help`가 원천이고 여기엔 도움말에 없는 것만 있다. 'herdr 세팅', 'herdr 연결', 'PC 추가로 붙여줘', 'herdr 커스텀 깔아줘', 'herdr 커스텀 상태', '플러그인 올렸으니 커스텀 맞춰줘', 'herdr 탭 이름', 'rename 하면 탭 이름 바뀌게', 'herdr 그림 붙여넣기', 'Ctrl+N 새 탭', '탭 x 바로 닫힘', 'Spaces 세션 펼치기', '재부팅 뒤 세션 한 번에 이어하기', 'claude --resume 일일이 치기 싫어', 'hc 명령', 'herdr 안 보여/연결 안 돼' 요청 시 사용.
+description: herdr(에이전트 터미널 관리자 — 여러 PC의 Claude Code 세션을 한 창에서 보고 서로 일을 시키는 도구)의 함정 모음과 설치 안내. 세 갈래로 나뉜다 — ① 쓰기·잇기: 앱(herdr-app)과 본체(herdr-core/hc) 구분, machine add 연결 방향, Windows PC에 SSH로 붙이기, Linux 서버 함정, hc send·hc run 함정, 안 될 때 점검 순서 ② 데스크톱 앱 커스텀 기능별 설치(상태 확인 → 미리보기 → 고른 것만 적용): 내 레이아웃 복제 + /rename → 탭 이름, Ctrl+Shift+V 그림 붙여넣기, Agents 목록 세션명만, 탭 「Claude Code」·점선·x 두 번 눌러 닫기, + 메뉴 ccd, Ctrl+N 새 터미널 탭, Spaces 공간별 세션 펼치기·끌어 옮기기·빈 공간 남기기, 우상단 Resume(재부팅 뒤 셸만 남은 Claude 세션 골라 일괄 이어하기) ③ 서버·웹 관제 연동: 서버 상주 탭 이름 동기화·빈 공간 되돌리기(herdr-title-sync, systemd), '끝남/봤음' 이름표, 세션 이름표 훅. 명령 사용법은 `hc --help`·`herdr-app --help`가 원천이고 여기엔 도움말에 없는 것만 있다. 'herdr 세팅', 'herdr 연결', 'PC 추가로 붙여줘', 'herdr 커스텀 깔아줘', 'herdr 커스텀 상태', '플러그인 올렸으니 커스텀 맞춰줘', 'herdr 탭 이름', 'rename 하면 탭 이름 바뀌게', 'herdr 그림 붙여넣기', 'Ctrl+N 새 탭', '탭 x 바로 닫힘', 'Spaces 세션 펼치기', '재부팅 뒤 세션 한 번에 이어하기', 'claude --resume 일일이 치기 싫어', 'hc 명령', 'herdr 안 보여/연결 안 돼' 요청 시 사용. 인자 `설치`(=install·커스텀)면 기능을 골라 깔고, `상태`(=status)면 상태표만.
+argument-hint: "[설치|상태]"
 ---
 
 # herdr-use — herdr 쓰기·잇기·커스텀·서버 연동
@@ -14,6 +15,19 @@ description: herdr(에이전트 터미널 관리자 — 여러 PC의 Claude Code
 ```bash
 K="$(ls -d ~/.claude/plugins/cache/*/herdr/*/skills/herdr-use 2>/dev/null | sort -V | tail -1)"
 ```
+
+## 인자로 불렸을 때 (`/herdr:herdr-use <인자>`)
+
+인자가 없거나 아래에 없는 말이면 이 절은 건너뛰고 「지도」로 간다. **Windows PC(앱이 있는 곳)에서만 한다** — `herdr-app`이 없는 곳(서버 등)이면 "앱이 있는 PC 세션에서 다시 불러 주세요"라고만 하고 끝낸다.
+
+- **`상태`(`status`)**: `python "$K/desktop/setup.py" --status` 결과를 기능별 한 줄로 전한다. 아무것도 안 바꾼다.
+- **`설치`(`install`·`커스텀`·`세팅`)**: 아래 순서. 2-3 행동 가이드의 규칙(최신은 안 건드림, 손으로 고친 흔적은 멈춤)은 그대로다.
+  1. `python "$K/desktop/setup.py" --choices --json`을 읽는다(아무것도 안 바꿈). `app` 줄에 `10061`·`못 찾음`이 있으면 앱을 트레이까지 끄고 다시 켜 달라고 하고 멈춘다.
+  2. **AskUserQuestion 한 번**에 `groups`마다 질문 하나(`multiSelect: true`, 머리표 = `title`). 선택지 이름 = `label`, 설명 = `state_label`(낡음이면 `detail` 요약) + `desc` 한 줄. `recommended`면 이름 끝에 `(추천)`. `state`가 `patch-missing`·`error`인 기능은 선택지에서 빼고 질문 문장에 "○○는 지금 깔 수 없음(이유)"로 적는다. 묶음의 선택지가 2개 미만이 되면 그 질문은 빼고 남은 묶음에 덧붙이지 않는다(질문당 4개 한도).
+  3. 고른 기능의 `needs`가 안 골렸으면 더한다(`resume-all`·`ccd-button`의 버튼은 `my-tabs` 안에 있다). 더한 것은 한 줄로 알린다. 아무것도 안 골랐으면 끝낸다.
+  4. `ccd-button`을 골랐으면 폴더를 한 번 더 묻는다: 지금 값 유지(`ccd` 줄) / 공간 폴더(`""`) / 직접 입력(Other).
+  5. 고른 것 중 `hand-edited`가 있으면 어떤 파일인지 알리고 덮을지 묻는다(덮으면 `--force`, 아니면 그 기능은 뺀다).
+  6. `python "$K/desktop/setup.py" --apply <이름,…> [--force] [--ccd-folder "<경로>"]` → 2-3의 5·6단계(검증, 「사람이 눌러 볼 것」 전하기).
 
 ## 지도 — 요청이 어느 갈래인가
 
@@ -80,6 +94,7 @@ K="$(ls -d ~/.claude/plugins/cache/*/herdr/*/skills/herdr-use 2>/dev/null | sort
 
 기능 8개(+레이아웃 복제)를 **기능별로** 보고 고른 것만 깐다(0.8.0~). 원본 mod 문장 찾아 패치·CRLF·자기 이름 바꾸기·칸 중복 정리 같은 기계적인 일은 스크립트가 하고, **언제 무엇을 돌릴지는 2-3 행동 가이드대로 에이전트가 정한다.** 전부 다시 까는 일괄 실행은 하지 않는다 — 안 바뀐 mod 파일을 다시 쓰면 그 직후 Ctrl+N이 한동안 안 먹었다(0.5.4·0.7.0·0.7.2 재적용 때, 원인은 "mod 파일을 다시 쓰면 앱이 mod를 다시 띄우는 사이 키가 안 닿음"으로 **추정**, 미검증).
 
+- 고르는 화면으로 깔기: `/herdr:herdr-use 설치`(맨 위 「인자」 절, 0.10.0). 묶음·추천·함께 필요한 기능은 `setup.py --choices --json`이 낸다 — 기능을 더하면 `setup.py`의 `GROUPS`·`SHORT`(·`NEEDS`)에도 넣는다(테스트가 빠뜨린 걸 잡음).
 - 사람이 읽고 눌러 볼 것: `desktop/README.md`(「확인 방법」 표)
 - 스크립트·mod를 고칠 때, `고칠 문장 못 찾음`이 나왔을 때: `desktop/DEV.md`(patchlib, 공간 옮기기·빈 공간·done-hold·ccd 폴더·그림 붙여넣기·resume-all 구현)
 
