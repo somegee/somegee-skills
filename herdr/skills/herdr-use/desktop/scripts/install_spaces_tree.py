@@ -177,6 +177,12 @@ METHODS = r'''
     return new Map(Object.entries(shared(MSGS_KEY) ?? {}));
   }
 
+  // How many list children draw() makes for this space: its row, plus its session rows when open.
+  // Keeps activeAt (scroll to the active space) pointing at the right child.
+  drawnSpan(w, collapsed) {
+    return collapsed || !this.isOpen(w) ? 1 : 1 + this.sessionsOf(w).length;
+  }
+
   sessionRows(w, t) {
     if (!this.isOpen(w)) return [];
     const list = this.sessionsOf(w);
@@ -560,10 +566,23 @@ TREE_PATCHES = [
      "    cx.timer.every(KEPT_TICK_MS, (cx) => this.trackKept(cx));\n"),
     ("const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));",
      "const draw = (r) => (collapsed ? [this.compact(r, t)] : [this.row(r, t), ...this.sessionRows(r.w, t)]);"),
-    ("return loading(null) && !rows.length ? [loadingRow(null)] : rows.map(draw);",
-     "return loading(null) && !rows.length ? [loadingRow(null)] : [...rows.flatMap(draw), ...this.keptRows(null, t, collapsed)];"),
+    # 앱 0.1.16 부터 이 줄이 if/return 으로 나뉘고 활성 공간으로 스크롤(activeAt)이 생겼다.
+    # activeAt 은 목록 자식 중 몇 번째인지라, 앞 공간에서 펼친 세션 줄만큼 밀어 준다.
+    [("return loading(null) && !rows.length ? [loadingRow(null)] : rows.map(draw);",
+      "return loading(null) && !rows.length ? [loadingRow(null)] : [...rows.flatMap(draw), ...this.keptRows(null, t, collapsed)];"),
+     ("      this.activeAt = rows.findIndex(r => r.w.active);\n      return rows.map(draw);",
+      "      const act = rows.findIndex(r => r.w.active);\n"
+      "      this.activeAt = act < 0 ? -1 : rows.slice(0, act).reduce((n, r) => n + this.drawnSpan(r.w, collapsed), 0);\n"
+      "      return [...rows.flatMap(draw), ...this.keptRows(null, t, collapsed)];")],
     ("mine.length ? mine.map(draw) :",
      "(mine.length || this.keptRows(m, t, collapsed).length) ? [...mine.flatMap(draw), ...this.keptRows(m, t, collapsed)] :"),
+    # 원격 기기 갈래의 activeAt 도 같은 이유로 밀어 준다(앱 0.1.16 원본). 옛 원본엔 이 줄이 없다 →
+    # 둘째 대안(바로 위 패치가 옛 원본에 만든 줄, 그대로 둠)이 걸려 멈추지 않는다
+    [("const first = folded ? -1 : mine.findIndex(r => r.w.active);",
+      "const act = folded ? -1 : mine.findIndex(r => r.w.active);\n"
+      "      const first = act < 0 ? -1 : mine.slice(0, act).reduce((n, r) => n + this.drawnSpan(r.w, collapsed), 0);"),
+     ("[loadingRow(null)] : [...rows.flatMap(draw), ...this.keptRows(null, t, collapsed)];",
+      "[loadingRow(null)] : [...rows.flatMap(draw), ...this.keptRows(null, t, collapsed)];")],
     ("          .gap(9)\n          .items_center()\n          .when(Boolean(tree),",
      "          .gap(9)\n          .items_center()\n          .child(this.chev(w, t, this.sessionsOf(w).length > 0))\n"
      "          .when(Boolean(tree),"),

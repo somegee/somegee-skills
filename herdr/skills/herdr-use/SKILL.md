@@ -91,9 +91,9 @@ K="$(ls -d ~/.claude/plugins/cache/*/herdr/*/skills/herdr-use 2>/dev/null | sort
 | `image-paste` | Ctrl+Shift+V 그림 붙여넣기 (image-paste mod + `clipimg.exe`) — **키를 받는 mod** | `install_image_paste.py` |
 | `my-agents` | 좌하단 Agents: 세션명만 + 작업 중이면 "지금 하는 일" | `install_agents_name_only.py` |
 | `ccd-button` | 우상단 `+` 메뉴에 ccd(`claude --dangerously-skip-permissions`) — programs.json 항목 + 기본 new-menu 복제본 my-new-menu(ccd를 정한 폴더에서 엶) | `install_ccd_button.py` |
-| `my-tabs` | 상단 탭: 이름 없는 Claude 탭은 `Claude Code` + 끌 때 점선 + `+` 버튼이 my-new-menu를 엶 + **x는 두 번 눌러 닫기**(첫 번째엔 빨간 바탕, 3초 안에 한 번 더 — 0.9.0) | `install_tabs_agent_name.py` |
+| `my-tabs` | 상단 탭: 이름 없는 Claude 탭은 `Claude Code`(앱 0.1.16부터는 원본 `label()`이 프로그램 이름·Claude 실시간 제목을 보여서 그대로 둠) + 끌 때 점선 + `+` 버튼이 my-new-menu를 엶 + **x는 두 번 눌러 닫기**(첫 번째엔 빨간 바탕, 3초 안에 한 번 더 — 0.9.0) | `install_tabs_agent_name.py` |
 | `newtab-key` | Ctrl+N → 앱 자체 `tab.new`(새 터미널 탭). mod 없이 keys.json 한 줄. 예전 `ccd-key`(Ctrl+N → ccd 새 Claude 탭, 키를 받는 mod)가 남아 있으면 치운다(0.9.0 — 키가 자주 안 먹어서 뺌) | `install_newtab_key.py` |
-| `my-spaces` | 좌상단 Spaces: ▾/▸로 공간별 세션 목록 펼치기 + 상태·하는 일, 누르면 그 창으로, 다른 공간으로 끌어 옮기기(같은 기기만), 같은 공간 안 순서 바꾸기(`tab.move`, 0.7.2), 세션 0개 공간을 빈 줄로 남기기 | `install_spaces_tree.py` |
+| `my-spaces` | 좌상단 Spaces: ▾/▸로 공간별 세션 목록 펼치기(앱 0.1.16의 활성 공간 자동 스크롤도 펼친 세션 줄만큼 맞춤) + 상태·하는 일, 누르면 그 창으로, 다른 공간으로 끌어 옮기기(같은 기기만), 같은 공간 안 순서 바꾸기(`tab.move`, 0.7.2), 세션 0개 공간을 빈 줄로 남기기 | `install_spaces_tree.py` |
 
 my-agents·my-tabs·my-spaces는 '끝남' 세션을 눌러 봐도 끝남으로 보이다가 **다른 세션을 누를 때** '쉬는 중'으로 바꾼다(done-hold, 0.7.0 — 표시만 늦춤).
 
@@ -179,5 +179,6 @@ Claude는 `/rename` 이름을 **창 제목**으로 내보내고, 서버 herdr-co
 
 플러그인이 `SessionStart`(새로·/clear·resume)마다 herdr 터미널에 `claude.session=<세션 id>`·`claude.project=<기록 폴더 이름>` 이름표를 단다.
 웹 관제 화면이 이 둘로 `~/.claude/projects/<project>/<session>.jsonl`을 찾아 대화를 보여 준다. herdr 밖에서는 아무것도 안 한다.
+- 훅은 백그라운드(`async`, 0.9.1)로 돈다 — 세션 시작을 막지 않는 대신 이름표가 몇 초 늦게 붙을 수 있다(보안 프로그램 있는 Windows는 셸 하나 띄우는 데 1초쯤). 이름표를 읽는 쪽은 없으면 나중에 다시 읽게 만든다.
 - 이름표가 안 보이면: 그 터미널의 claude를 한 번 다시 켠다(훅은 세션 시작 때만 돈다). `hc get --json -- tN`의 `labels`로 확인.
 - `python`이나 `python3` 중 하나가 PATH에 있어야 한다.

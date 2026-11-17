@@ -27,9 +27,11 @@ BASE = "tabs"
 CLONE = FEATURE = "my-tabs"
 NL = "\n"
 PATCHES = [
-    # 이름 없는 에이전트 탭은 번호 대신 프로그램 이름
-    ('const name = /^tb\\d+$/.test(c.name) ? program?.name ?? "Terminal" : c.name;',
-     'const name = /^tb\\d+$/.test(c.name) || (!c.named && program?.agent) ? program?.name ?? "Terminal" : c.name;'),
+    # 이름 없는 에이전트 탭은 번호 대신 프로그램 이름.
+    # 앱 0.1.16 부터 원본 label() 이 이미 이름 없는 탭에 프로그램 이름(에이전트면 그 실시간 제목)을 보인다 → 그대로 둔다
+    [('const name = /^tb\\d+$/.test(c.name) ? program?.name ?? "Terminal" : c.name;',
+      'const name = /^tb\\d+$/.test(c.name) || (!c.named && program?.agent) ? program?.name ?? "Terminal" : c.name;'),
+     ("const name = label(c, lead);", "const name = label(c, lead);")],
     # 드래그 중 끼워질 자리에 점선 — 누른 채 다른 탭 위에 올라가면 그 탭 기억
     ("      return h_flex().id(`tab-${c.id}`).h(29)",
      "      const tab = h_flex().id(`tab-${c.id}`).h(29)"),
