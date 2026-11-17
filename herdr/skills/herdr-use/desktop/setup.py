@@ -9,7 +9,7 @@
   python setup.py --remove                          # 전부 되돌림
 
 기능 이름: title-sync, image-paste, my-agents, ccd-button, my-tabs, ccd-key, my-spaces
-기능 하나만 볼 땐 scripts/install_<…>.py --status / --dry-run 도 된다. 언제 무엇을 돌릴지는 SKILL.md 5절.
+기능 하나만 볼 땐 scripts/install_<…>.py --status / --dry-run 도 된다. 언제 무엇을 돌릴지는 SKILL.md 2갈래(2-3 행동 가이드).
 """
 from __future__ import annotations
 
