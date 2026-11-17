@@ -1,6 +1,6 @@
 ---
 name: herdr-use
-description: herdr(에이전트 터미널 관리자 — 여러 PC의 Claude Code 세션을 한 창에서 보고 서로 일을 시키는 도구)의 함정 모음과 설치 안내. 세 갈래로 나뉜다 — ① 쓰기·잇기: 앱(herdr-app)과 본체(herdr-core/hc) 구분, machine add 연결 방향, Windows PC에 SSH로 붙이기, Linux 서버 함정, hc send·hc run 함정, 안 될 때 점검 순서 ② 데스크톱 앱 커스텀 기능별 설치(상태 확인 → 미리보기 → 고른 것만 적용): 내 레이아웃 복제 + /rename → 탭 이름, Ctrl+Shift+V 그림 붙여넣기, Agents 목록 세션명만, 탭 「Claude Code」·점선·x 두 번 눌러 닫기, + 메뉴 ccd, Ctrl+N 새 터미널 탭, Spaces 공간별 세션 펼치기·끌어 옮기기·빈 공간 남기기 ③ 서버·웹 관제 연동: 서버 상주 탭 이름 동기화·빈 공간 되돌리기(herdr-title-sync, systemd), '끝남/봤음' 이름표, 세션 이름표 훅. 명령 사용법은 `hc --help`·`herdr-app --help`가 원천이고 여기엔 도움말에 없는 것만 있다. 'herdr 세팅', 'herdr 연결', 'PC 추가로 붙여줘', 'herdr 커스텀 깔아줘', 'herdr 커스텀 상태', '플러그인 올렸으니 커스텀 맞춰줘', 'herdr 탭 이름', 'rename 하면 탭 이름 바뀌게', 'herdr 그림 붙여넣기', 'Ctrl+N 새 탭', '탭 x 바로 닫힘', 'Spaces 세션 펼치기', 'hc 명령', 'herdr 안 보여/연결 안 돼' 요청 시 사용.
+description: herdr(에이전트 터미널 관리자 — 여러 PC의 Claude Code 세션을 한 창에서 보고 서로 일을 시키는 도구)의 함정 모음과 설치 안내. 세 갈래로 나뉜다 — ① 쓰기·잇기: 앱(herdr-app)과 본체(herdr-core/hc) 구분, machine add 연결 방향, Windows PC에 SSH로 붙이기, Linux 서버 함정, hc send·hc run 함정, 안 될 때 점검 순서 ② 데스크톱 앱 커스텀 기능별 설치(상태 확인 → 미리보기 → 고른 것만 적용): 내 레이아웃 복제 + /rename → 탭 이름, Ctrl+Shift+V 그림 붙여넣기, Agents 목록 세션명만, 탭 「Claude Code」·점선·x 두 번 눌러 닫기, + 메뉴 ccd, Ctrl+N 새 터미널 탭, Spaces 공간별 세션 펼치기·끌어 옮기기·빈 공간 남기기, 우상단 Resume(재부팅 뒤 셸만 남은 Claude 세션 골라 일괄 이어하기) ③ 서버·웹 관제 연동: 서버 상주 탭 이름 동기화·빈 공간 되돌리기(herdr-title-sync, systemd), '끝남/봤음' 이름표, 세션 이름표 훅. 명령 사용법은 `hc --help`·`herdr-app --help`가 원천이고 여기엔 도움말에 없는 것만 있다. 'herdr 세팅', 'herdr 연결', 'PC 추가로 붙여줘', 'herdr 커스텀 깔아줘', 'herdr 커스텀 상태', '플러그인 올렸으니 커스텀 맞춰줘', 'herdr 탭 이름', 'rename 하면 탭 이름 바뀌게', 'herdr 그림 붙여넣기', 'Ctrl+N 새 탭', '탭 x 바로 닫힘', 'Spaces 세션 펼치기', '재부팅 뒤 세션 한 번에 이어하기', 'claude --resume 일일이 치기 싫어', 'hc 명령', 'herdr 안 보여/연결 안 돼' 요청 시 사용.
 ---
 
 # herdr-use — herdr 쓰기·잇기·커스텀·서버 연동
@@ -78,10 +78,10 @@ K="$(ls -d ~/.claude/plugins/cache/*/herdr/*/skills/herdr-use 2>/dev/null | sort
 
 # 2갈래. 데스크톱 앱 커스텀 (Windows) — `$K/desktop/`
 
-기능 7개(+레이아웃 복제)를 **기능별로** 보고 고른 것만 깐다(0.8.0~). 원본 mod 문장 찾아 패치·CRLF·자기 이름 바꾸기·칸 중복 정리 같은 기계적인 일은 스크립트가 하고, **언제 무엇을 돌릴지는 2-3 행동 가이드대로 에이전트가 정한다.** 전부 다시 까는 일괄 실행은 하지 않는다 — 안 바뀐 mod 파일을 다시 쓰면 그 직후 Ctrl+N이 한동안 안 먹었다(0.5.4·0.7.0·0.7.2 재적용 때, 원인은 "mod 파일을 다시 쓰면 앱이 mod를 다시 띄우는 사이 키가 안 닿음"으로 **추정**, 미검증).
+기능 8개(+레이아웃 복제)를 **기능별로** 보고 고른 것만 깐다(0.8.0~). 원본 mod 문장 찾아 패치·CRLF·자기 이름 바꾸기·칸 중복 정리 같은 기계적인 일은 스크립트가 하고, **언제 무엇을 돌릴지는 2-3 행동 가이드대로 에이전트가 정한다.** 전부 다시 까는 일괄 실행은 하지 않는다 — 안 바뀐 mod 파일을 다시 쓰면 그 직후 Ctrl+N이 한동안 안 먹었다(0.5.4·0.7.0·0.7.2 재적용 때, 원인은 "mod 파일을 다시 쓰면 앱이 mod를 다시 띄우는 사이 키가 안 닿음"으로 **추정**, 미검증).
 
 - 사람이 읽고 눌러 볼 것: `desktop/README.md`(「확인 방법」 표)
-- 스크립트·mod를 고칠 때, `고칠 문장 못 찾음`이 나왔을 때: `desktop/DEV.md`(patchlib, 공간 옮기기·빈 공간·done-hold·ccd 폴더·그림 붙여넣기 구현)
+- 스크립트·mod를 고칠 때, `고칠 문장 못 찾음`이 나왔을 때: `desktop/DEV.md`(patchlib, 공간 옮기기·빈 공간·done-hold·ccd 폴더·그림 붙여넣기·resume-all 구현)
 
 ## 2-1. 기능
 
@@ -91,7 +91,8 @@ K="$(ls -d ~/.claude/plugins/cache/*/herdr/*/skills/herdr-use 2>/dev/null | sort
 | `image-paste` | Ctrl+Shift+V 그림 붙여넣기 (image-paste mod + `clipimg.exe`) — **키를 받는 mod** | `install_image_paste.py` |
 | `my-agents` | 좌하단 Agents: 세션명만 + 작업 중이면 "지금 하는 일" | `install_agents_name_only.py` |
 | `ccd-button` | 우상단 `+` 메뉴에 ccd(`claude --dangerously-skip-permissions`) — programs.json 항목 + 기본 new-menu 복제본 my-new-menu(ccd를 정한 폴더에서 엶) | `install_ccd_button.py` |
-| `my-tabs` | 상단 탭: 이름 없는 Claude 탭은 `Claude Code`(앱 0.1.16부터는 원본 `label()`이 프로그램 이름·Claude 실시간 제목을 보여서 그대로 둠) + 끌 때 점선 + `+` 버튼이 my-new-menu를 엶 + **x는 두 번 눌러 닫기**(첫 번째엔 빨간 바탕, 3초 안에 한 번 더 — 0.9.0) | `install_tabs_agent_name.py` |
+| `resume-all` | 우상단 `Resume` 버튼(Files 왼쪽, my-tabs 안) → 팝업: 재부팅·core 재시작 뒤 **셸만 남은 Claude 세션**을 골라 각 탭에 `claude --resume <id> [권한 옵션]` 입력(탭 자리·이름 그대로). 마지막 답변 시각·권한 모드 배지, 권한 옵션은 기록에서 자동 판별, 시작 폴더가 다르면 옮겨서 엶. 이 PC 터미널만(0.9.2) | `install_resume_all.py` |
+| `my-tabs` | 상단 탭: 이름 없는 Claude 탭은 `Claude Code`(앱 0.1.16부터는 원본 `label()`이 프로그램 이름·Claude 실시간 제목을 보여서 그대로 둠) + 끌 때 점선 + `+` 버튼이 my-new-menu를 엶 + **x는 두 번 눌러 닫기**(첫 번째엔 빨간 바탕, 3초 안에 한 번 더 — 0.9.0) + resume-all이 있으면 우상단 `Resume` 버튼(이어할 세션이 있으면 강조 + 개수) | `install_tabs_agent_name.py` |
 | `newtab-key` | Ctrl+N → 앱 자체 `tab.new`(새 터미널 탭). mod 없이 keys.json 한 줄. 예전 `ccd-key`(Ctrl+N → ccd 새 Claude 탭, 키를 받는 mod)가 남아 있으면 치운다(0.9.0 — 키가 자주 안 먹어서 뺌) | `install_newtab_key.py` |
 | `my-spaces` | 좌상단 Spaces: ▾/▸로 공간별 세션 목록 펼치기(앱 0.1.16의 활성 공간 자동 스크롤도 펼친 세션 줄만큼 맞춤) + 상태·하는 일, 누르면 그 창으로, 다른 공간으로 끌어 옮기기(같은 기기만), 같은 공간 안 순서 바꾸기(`tab.move`, 0.7.2), 세션 0개 공간을 빈 줄로 남기기 | `install_spaces_tree.py` |
 
@@ -114,7 +115,7 @@ my-agents·my-tabs·my-spaces는 '끝남' 세션을 눌러 봐도 끝남으로 �
 2. **사용자에게 보고하고 고르게 한다.** 기능마다 최신/낡음/없음과, 낡음이면 무엇이 달라지는지 한 줄(`--dry-run <이름>` 결과나 diff에서). **사용자가 고른 것만 적용한다.** "전부 맞춰"라고 하면 낡음·없음만(`--apply`).
 3. **손으로 고친 흔적이면 멈춘다.** 사용자가 시험 적용 중인 것일 수 있다. 어떤 파일인지와 백업 위치(`~/.config/herdr-app/.herdr-custom/backup/<시각>/`)를 알리고 **확인을 받은 뒤에만** `--apply <이름> --force`. `고칠 문장 못 찾음`이면 적용하지 말고 그 스크립트의 `PATCHES`를 새 원본에 맞추는 일로 넘긴다(`DEV.md`).
 4. **적용.** 고른 기능만: `setup.py --apply <이름,…>`(또는 그 기능 스크립트).
-5. **검증.** 다시 `--status`로 고른 기능이 `최신`이 됐는지, 결과의 `바뀐 파일:`에 안 고른 기능의 파일이 없는지 본다(예외: ccd-button은 `+` 버튼 연결을 맞추려고 my-tabs를 다시 만들 수 있음 — 결과에 따로 적힘). 앱 오류(`앱:` 줄의 오류, `herdr-app status`의 errors)도 본다.
+5. **검증.** 다시 `--status`로 고른 기능이 `최신`이 됐는지, 결과의 `바뀐 파일:`에 안 고른 기능의 파일이 없는지 본다(예외: ccd-button·resume-all은 `+`·`Resume` 버튼 연결을 맞추려고 my-tabs를 다시 만들 수 있음 — 결과에 따로 적힘). 앱 오류(`앱:` 줄의 오류, `herdr-app status`의 errors)도 본다.
 6. **사람 확인으로 넘긴다.** 키·화면 동작은 에이전트가 시험할 수 없다. 결과의 「사람이 눌러 볼 것」(바뀐 기능만)을 그대로 전한다. **image-paste(Ctrl+Shift+V)처럼 키를 받는 mod를 다시 썼다면 "처음 한 번 안 먹으면 앱 창을 클릭하고 영문 상태에서 다시 누르기"를 같이 안내한다**(결과에 ※로 나옴).
 
 - 에이전트가 직접 해도 되는 진단: `herdr-app do <명령>`으로 mod 명령을 보내 결과를 본다. 예: `herdr-app do tab.new` → 새 탭을 `hc get <t> --json`으로 보고 cwd·argv 확인 → 시험 탭은 `herdr-app do tab.close '{"id":"<탭 id>","confirmed":true}'`로 닫기. **키가 앱에 닿는지(사람)와 mod가 맞게 도는지(에이전트)를 이렇게 나눠 본다.**
@@ -128,6 +129,9 @@ my-agents·my-tabs·my-spaces는 '끝남' 세션을 눌러 봐도 끝남으로 �
 - mod는 **레이아웃에 칸이 있어야 돈다**(높이 0 칸이면 화면엔 안 보임).
 - 복제본 `main.js`를 손으로 고치면 다음 적용 때 `손으로 고친 흔적`으로 멈춘다 → 계속 쓸 수정이면 설치 스크립트를 고친다(`DEV.md`). 앱 업데이트의 화면 개선은 설치를 다시 돌리면 들어온다(원본에서 다시 만듦).
 - **끌어 옮기다 세션이 화면에서 사라지면 죽은 게 아니라 떼어진 채 남은 것이다.** `hc ls`엔 보이고, `hc get <t> --json`으로 보면 `keep:false`에 `herdr.space` 이름표가 없다. (0.3.0부터는 못 붙이면 원래 공간에 되돌리고 알림을 띄우지만, 그래도 사라졌을 때) 되살리기: ① `herdr-app do space.select '{"id":"<공간 id>"}'` ② `herdr-app do terminal.keep '{"terminal":"<t>","place":"tab"}'` ③ `tab.rename`으로 탭 이름 되돌리기. 공간 id는 같은 공간에 있는 다른 세션의 `herdr.space` 이름표에서 알 수 있다.
+- **앱에서 공간(space)을 지우면 안의 세션도 같이 꺼진다**(2026-11-17 실측 — 지운 뒤 `hc ls`에 없음). 세션을 살리려면 먼저 다른 공간으로 끌어 옮긴 뒤 지운다. 웹 휴지통은 다르다 — 공간만 지우고 세션은 떼어진 채 남긴다(3-2).
+- **resume-all(우상단 Resume):** 후보 = 이 PC의 살아 있는 셸 중 에이전트가 안 돌고, 세션 이름표 `claude.session`·`claude.project`가 있고, 화면에 창이 있는 것. 세션 이름표 훅(0.4.0~)이 깔리기 전에 시작한 세션은 이름표가 없어 안 나온다. `/exit`로 claude만 끄고 셸을 남긴 탭도 후보라 팝업에서 체크로 고른다. 이어한 claude가 상태를 보고하면 후보에서 빠져 버튼 숫자가 준다. 원격 기기(macOS 등) 터미널은 안 나온다(그쪽엔 이름표 훅이 없고 기록 읽기가 PowerShell).
+- **재부팅 재현 = `hc server stop` → `hc server start`**(herdr **밖** PowerShell에서 — herdr 안 터미널은 같이 죽는다). `hc server restart`는 프로그램을 안 끊어서 재현이 안 된다. 일하던 Claude의 진행 중 턴은 잘린다. 가벼운 시험: 아무 셸 탭에 `hc label <t> claude.session=<기존 세션 id> claude.project=<기록 폴더 이름>` → `Resume 1`로 뜬다(다른 폴더 세션이면 폴더 옮기기까지 시험됨). 끝나면 그 탭을 닫는다.
 - **Ctrl+N은 앱이 먼저 받는다**(터미널 안에서도) → Claude 입력 기록 이동은 ↓ 키로. Ctrl+N이 이미 다른 동작에 걸려 있으면 설치가 멈춘다. 예전 ccd-key(mod가 키를 받음)는 자주 안 먹어서 0.9.0에 앱 자체 `tab.new`로 바꿨다 — Claude 탭은 `+` 메뉴 ccd로 연다.
 - 탭 x 두 번 눌러 닫기는 **상단 탭 x만**이다. `Ctrl+Shift+W`(tab.close)·우클릭 메뉴 닫기는 그대로 바로 닫힌다.
 - 그림 붙여넣기 뒤 클립보드엔 그림 대신 파일(`C:\Users\Public\herdr-paste\paste-*.png`)이 남는다.

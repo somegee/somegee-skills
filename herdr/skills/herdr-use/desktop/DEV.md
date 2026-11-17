@@ -66,6 +66,19 @@ my-agents 가 3초마다 `hc get` 으로 읽어 `shared("agent.msgs")` 로 내�
 - 원본 `init()` 엔 cx 가 없어 `init(_props, cx)` 로 바꾸고 `cx.timer.every(CLOSE_TICK_MS, …)` 로 시간이 지나면 준비를 풀고 다시 그린다(spaces mod 와 같은 방식).
 - 상수는 mod 맨 위 `[herdr-use close-confirm]` 줄 아래.
 
+## 종료된 Claude 세션 일괄 이어하기 (resume-all, 0.9.2)
+
+- 재부팅·로그아웃·core 재시작으로 잃은 터미널은 같은 주소·이름표로 **셸만** 다시 뜬다(앱 AGENTS.md: 원래 명령은 다시 안 돌림). 플러그인 훅 `hooks/label_session.py` 가 붙인 `claude.session`(UUID)·`claude.project` 이름표는 남는다(재부팅 전 세션 id 그대로인 것 확인).
+- 구성: 팝업 mod `assets/resume-all/`(place none, dialog — 레이아웃 칸 없음) + my-tabs 의 `Resume` 버튼(`install_tabs_agent_name.py` 의 `RESUME_PATCHES`). 버튼은 **`mods/resume-all/main.js` 가 있을 때만** 넣는다(없는데 버튼만 있으면 눌러도 아무것도 안 뜸) → setup 순서 resume-all → my-tabs, `install_resume_all.py` 설치·`--remove` 뒤엔 `refresh()` 로 my-tabs 를 다시 맞춘다. `terminals` import 는 `ensure_imports` 로 넣는다(done-hold 가 `agents` 를 덧붙이므로 import 줄을 문장으로 패치하지 않음).
+- **후보 규칙이 두 곳에 있다** — my-tabs `resumableCount()` 와 resume-all `resumableTerminals()`(mod 끼리 import 불가). 한쪽만 고치면 버튼 숫자와 팝업 목록이 어긋난다 → `tests/test_resume_all.py::test_candidate_rule_matches_popup` 가 잡는다. 규칙: `state === "live"` · 주소에 `/` 없음(이 PC) · `!t.status && !t.program?.agent` · 두 이름표가 엄격한 패턴 · `panes()` 에 창이 있음.
+- 기록 읽기 `read_sessions.ps1`(읽기만): `$env:CLAUDE_CONFIG_DIR\projects` → `~\.claude\projects` 순으로 `<project>\<id>.jsonl` 을 한 번 훑는다. `cwd` = 처음 나오는 `"cwd"`, `last` = 마지막 assistant 줄(`{"parentUuid"` 로 시작 + `"role":"assistant"`)의 `timestamp`(없으면 파일 수정 시각으로 표시), 권한 모드 = `{"type":"permission-mode"…}` 줄 **과** user 줄의 최상위 `permissionMode`(도구 출력 속 같은 글자에 속지 않게 user 줄은 JSON 으로 파싱). 6MB 기록 약 2초. 입력 `-In "<id>:<project>,…"` 는 양쪽 다 패턴 검사(base64 안 씀).
+- PowerShell 5.1 함정: `... | ConvertFrom-Json` 은 배열을 한 덩어리로 감싼다 → 파이프 말고 `-InputObject`.
+- 권한 옵션: 기록에 `bypassPermissions` 가 **한 번이라도** 있으면 `--dangerously-skip-permissions`(그 플래그로 시작해야만 들어가는 모드). 아니면 마지막 모드가 `acceptEdits`/`auto`/`dontAsk`/`plan` 이면 `--permission-mode <값>`, 그 밖(`default`/`manual`/없음)은 옵션 없음(`claude --help` 의 choices 기준).
+- 폴더: claude 는 기록 폴더(`claude.project` = 시작 폴더의 영숫자 외 문자를 `-` 로 바꾼 이름)와 맞는 폴더에서 열어야 기록을 찾는다 → 셸 cwd·기록의 첫 cwd 중 slug 가 맞는 쪽, 셸 cwd 와 다르면 앞에 `Set-Location -LiteralPath '<폴더>'; `(cmd 면 `cd /d "<폴더>" && `). 줄 만들기 `resumeLine()` 은 `tests/test_resume_all.py` 가 node 로 확인.
+- 보내기: mod 의 `hc(["send", 주소, 줄])`. 앱 프로세스엔 `HC_TERMINAL_ID` 가 없어 `<hc from>` 태그로 안 감싸진다(셸에 그대로 입력됨 확인). 오버레이가 닫히면 진행 중인 호출이 취소될 수 있어 **전부 보낸 뒤** `closeOverlay`.
+- 원격 기기는 뺐다: 그쪽엔 이름표 훅이 안 돌았고 읽기 스크립트가 PowerShell 이다. 넣으려면 `exec(..., { on: machine })` + POSIX 판 읽기 스크립트.
+- 시험: 2026-11-17 사용자 PC(herdr-app 0.1.16, 플러그인 0.9.1 위 손 적용)에서 `hc server stop` → `start` 뒤 여러 세션을 한 번에 이어하는 것까지 사용자가 확인. 플러그인판(0.9.2) my-tabs 패치는 서버에 앱 원본이 없어 가짜 원본으로만 시험했다 → PC 에서 `setup.py --apply resume-all,my-tabs --force` 뒤 `herdr-app check` 로 확인.
+
 ## 예전 ccd-key (0.9.0 에 뺌)
 
 Ctrl+N 을 mod(`ccd-key.new`)가 받아 `tab.new {argv: claude --dangerously-skip-permissions}` 로 열었다. mod 파일을 다시 쓰거나 앱을 오래 켜 두면 키가 안 닿는 일이 잦아 뺐다. `install_newtab_key.py` 가 단축키(`ccd-key.new`)·레이아웃 칸·`mods/ccd-key/` 를 치우고 Ctrl+N 을 앱 자체 `tab.new` 로 건다. **키를 먼저 옮기고 칸을 뺀다** — 단축키가 mod 를 가리키는 동안엔 앱이 칸을 스스로 다시 넣는다.

@@ -8,7 +8,7 @@
   python setup.py --apply ... --ccd-folder "<경로>" # + 메뉴 ccd 새 탭 폴더 지정 ("" = 지정 해제)
   python setup.py --remove                          # 전부 되돌림
 
-기능 이름: title-sync, image-paste, my-agents, ccd-button, my-tabs, newtab-key, my-spaces
+기능 이름: title-sync, image-paste, my-agents, ccd-button, resume-all, my-tabs, newtab-key, my-spaces
 기능 하나만 볼 땐 scripts/install_<…>.py --status / --dry-run 도 된다. 언제 무엇을 돌릴지는 SKILL.md 2갈래(2-3 행동 가이드).
 """
 from __future__ import annotations
@@ -45,7 +45,7 @@ class Feature(NamedTuple):
 
 
 # 순서 중요: title-sync 가 기본 레이아웃을 my-main 으로 복제·전환한다.
-# ccd-button 이 my-tabs 보다 먼저 — my-new-menu 가 있어야 my-tabs 의 + 버튼이 그걸 연다.
+# ccd-button·resume-all 이 my-tabs 보다 먼저 — my-new-menu·resume-all 이 있어야 my-tabs 의 + 버튼·Resume 버튼이 그걸 연다.
 FEATURES = [
     Feature("title-sync", "install_title_sync", "/rename 하면 상단 탭 이름이 따라감 (+ 기본 레이아웃을 my-main 으로 복제)",
             "Claude 탭에서 /rename 테스트 → 2초쯤 뒤 상단 탭 이름이 '테스트'"),
@@ -55,15 +55,17 @@ FEATURES = [
             "Claude 가 일하는 중일 때 좌하단 Agents 에 세션명 + 아래 작은 글씨로 하는 일"),
     Feature("ccd-button", "install_ccd_button", "우상단 + 메뉴에 ccd (claude --dangerously-skip-permissions) + my-new-menu",
             "우상단 + → ccd → 새 탭이 정한 폴더(안 정했으면 공간 폴더)에서 열림", takes_folder=True),
-    Feature("my-tabs", "install_tabs_agent_name", "상단 탭: 이름 없는 Claude 탭 이름(앱 0.1.15 까지) + 끌 때 점선 + + 버튼 → my-new-menu + x 두 번 눌러 닫기",
-            "+ 로 새 Claude 탭 → 탭 이름이 번호가 아님(Claude Code 또는 Claude 제목) / 탭을 끌면 점선 / x 한 번 → 빨갛게, 3초 안에 한 번 더 → 닫힘"),
+    Feature("resume-all", "install_resume_all", "우상단 Resume: 재부팅 뒤 셸만 남은 Claude 세션 골라서 일괄 이어하기",
+            "hc server stop → hc server start(herdr 밖 PowerShell 에서) → 우상단 Resume N → 팝업에서 이어하기 → 각 탭에 claude 가 이전 대화로 열림"),
+    Feature("my-tabs", "install_tabs_agent_name", "상단 탭: 이름 없는 Claude 탭 이름(앱 0.1.15 까지) + 끌 때 점선 + + 버튼 → my-new-menu + x 두 번 눌러 닫기 + 우상단 Resume 버튼(resume-all 이 있을 때)",
+            "+ 로 새 Claude 탭 → 탭 이름이 번호가 아님(Claude Code 또는 Claude 제목) / 탭을 끌면 점선 / x 한 번 → 빨갛게, 3초 안에 한 번 더 → 닫힘 / 우상단 Files 왼쪽에 Resume 버튼"),
     Feature("newtab-key", "install_newtab_key", "Ctrl+N → 새 터미널 탭(앱 자체 tab.new, 예전 ccd-key 치움)",
             "Ctrl+N → 지금 공간에 새 터미널 탭 하나"),
     Feature("my-spaces", "install_spaces_tree", "좌상단 Spaces: ▾/▸ 로 공간별 세션 목록·상태 펼치기",
             "좌상단 ▾/▸ 펼치기·접기 / 세션 줄 누르면 그 창으로 / 다른 공간으로 끌어 옮기기 / 같은 공간 안 순서 바꾸기"),
 ]
 ALIASES = {"ccd 버튼": "ccd-button", "ccd-menu": "ccd-button", "my-new-menu": "ccd-button",
-           "ctrl+n": "newtab-key", "ccd-key": "newtab-key", "title": "title-sync"}
+           "ctrl+n": "newtab-key", "ccd-key": "newtab-key", "title": "title-sync", "resume": "resume-all"}
 BY_NAME = {f.name: f for f in FEATURES}
 
 
@@ -221,8 +223,9 @@ def report(chosen, changed, held, failed, after, touched) -> None:
     if not_latest:
         print("아직 최신 아님:", ", ".join(not_latest))
     print("바뀐 파일:", ", ".join(fl.rel(p) for p in touched) or "없음")
-    if "ccd-button" in changed and "my-tabs" not in chosen and any("my-tabs" in fl.rel(p) for p in touched):
-        print("  (my-tabs 는 ccd-button 이 + 버튼 연결을 맞추느라 같이 다시 만들었습니다)")
+    linked = [n for n in ("ccd-button", "resume-all") if n in changed]
+    if linked and "my-tabs" not in chosen and any("my-tabs" in fl.rel(p) for p in touched):
+        print("  (my-tabs 는 %s 이 버튼 연결을 맞추느라 같이 다시 만들었습니다)" % "·".join(linked))
     print(app_line())
     if changed:
         print("\n사람이 눌러 볼 것 (바뀐 기능만):")
@@ -251,7 +254,7 @@ def remove() -> None:
     from install_title_sync import app_exe
     subprocess.run([app_exe(), "do", "layout.switch", json.dumps({"name": "main"})])
     print("\n기본 레이아웃(main)으로 전환함. 복제본(layouts/my-main.json, mods/my-agents, mods/my-tabs, mods/my-spaces)은 남겨 둠 —"
-          " 완전히 지우려면 README 의 '완전 삭제' 참고. (mods/my-new-menu 는 지움)")
+          " 완전히 지우려면 README 의 '완전 삭제' 참고. (mods/my-new-menu·mods/resume-all 은 지움)")
 
 
 def main() -> int:

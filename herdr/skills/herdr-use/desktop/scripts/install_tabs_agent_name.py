@@ -10,6 +10,7 @@
 설치할 때마다 원본 mods/tabs/main.js 에서 다시 고쳐 덮어쓴다(patchlib).
 my-new-menu(install_ccd_button.py 가 만듦)가 있으면 + 버튼이 기본 new-menu 대신 그걸 열게 한다 —
 없는데 가리키면 + 버튼이 아무것도 안 열므로 있을 때만.
+resume-all(install_resume_all.py 가 깖)이 있으면 우상단 Files 왼쪽에 Resume 버튼을 넣는다 — 같은 이유로 있을 때만.
 """
 import os
 import sys
@@ -17,7 +18,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import ensure_own_layout  # noqa: E402
 from install_agents_name_only import clone_plan, point_layout  # noqa: E402
-from patchlib import apply_patches, mod_js, rebuild  # noqa: E402
+from patchlib import apply_patches, ensure_imports, mod_js, rebuild  # noqa: E402
 from featurelib import HAND, Plan, evaluate, run_cli, safe_plan  # noqa: E402
 import done_hold  # noqa: E402
 
@@ -74,13 +75,60 @@ NEW_MENU = "my-new-menu"
 # + 버튼 → my-new-menu (ccd 를 설치 때 정한 폴더에서 여는 + 메뉴)
 NEW_MENU_PATCH = ('openOverlay({ mod: "new-menu", kind: "popup"', 'openOverlay({ mod: "%s", kind: "popup"' % NEW_MENU)
 
+RESUME_MOD = "resume-all"
+# 우상단 Files/Changes 왼쪽 Resume 버튼 → resume-all 팝업. 후보 규칙은 assets/resume-all/main.js 의
+# resumableTerminals() 와 같아야 한다(mod 끼리 import 못 함 — 한쪽만 고치면 버튼 숫자와 팝업 목록이 어긋남).
+RESUME_JS = NL.join([
+    "// [herdr-use resume-all] 재부팅 뒤 셸로만 남은 Claude 세션(세션 이름표 있음) 수. mods/resume-all 의 resumableTerminals() 와 같은 규칙.",
+    "const RESUME_SESSION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;",
+    "const RESUME_PROJECT_RE = /^[A-Za-z0-9_-]{1,200}$/;",
+    "function resumableCount() {",
+    "  const shown = new Set(panes().filter((p) => p.terminal).map((p) => p.terminal));",
+    '  return terminals().filter((t) => t.state === "live" && !String(t.address).includes("/") && !t.status && !t.program?.agent',
+    '    && RESUME_SESSION_RE.test(t.labels?.["claude.session"] ?? "") && RESUME_PROJECT_RE.test(t.labels?.["claude.project"] ?? "")',
+    "    && shown.has(t.address)).length;",
+    "}",
+    "",
+])
+RESUME_RENDER = NL.join([
+    "    // [herdr-use resume-all] Files/Changes 옆: 이어할 세션이 있으면 강조 + 개수, 누르면 일괄 이어하기 팝업",
+    "    const resumeCount = resumableCount();",
+    '    const resumeButton = () => h_flex().id("resume-all").h(26).px(8).gap(5).flex_none().items_center().rounded(6)',
+    "      .text_size(12).bg(resumeCount ? t.selected : t.chrome).text_color(resumeCount ? t.accent : t.muted)",
+    '      .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)',
+    '      .on_click(() => openOverlay({ mod: "%s", kind: "dialog", width: 600, height: Math.min(620, 200 + Math.max(1, resumeCount) * 56) }))' % RESUME_MOD,
+    '      .child(svg("mods/%s/resume.svg").size(14)).child(resumeCount ? `Resume ${resumeCount}` : "Resume");' % RESUME_MOD,
+    "",
+])
+FILES_BUTTON = '      .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))'
+# close-confirm 패치 뒤에 건다(같은 class 줄을 기준으로 그 상수 아래에 들어감)
+RESUME_PATCHES = [
+    ("export default class Tabs extends View {", RESUME_JS + "export default class Tabs extends View {"),
+    ("    return h_flex().size_full().min_w(0).px(10)", RESUME_RENDER + "    return h_flex().size_full().min_w(0).px(10)"),
+    (FILES_BUTTON, "      .child(resumeButton())" + NL + FILES_BUTTON),
+]
+
+
+def has_resume() -> bool:
+    # rename_self 는 "mods/tabs/" 만 바꾸므로 "mods/resume-all/…" 경로는 그대로 남는다
+    return os.path.exists(mod_js(RESUME_MOD))
+
 
 def patches() -> list:
-    return PATCHES + ([NEW_MENU_PATCH] if os.path.exists(mod_js(NEW_MENU)) else [])
+    return (PATCHES + ([NEW_MENU_PATCH] if os.path.exists(mod_js(NEW_MENU)) else [])
+            + (RESUME_PATCHES if has_resume() else []))
 
 
 def patched(src: str) -> str:
-    return done_hold.apply(apply_patches(src, patches(), BASE), BASE)
+    src = apply_patches(src, patches(), BASE)
+    if has_resume():
+        src = ensure_imports(src, ("terminals",))
+    return done_hold.apply(src, BASE)
+
+
+def wiring() -> str:
+    return "+ 버튼 → %s / Resume 버튼 %s" % (NEW_MENU if os.path.exists(mod_js(NEW_MENU)) else "new-menu(기본)",
+                                             "있음" if has_resume() else "없음(resume-all 미설치)")
 
 
 def build() -> bool:
@@ -92,23 +140,22 @@ def plan() -> Plan:
 
 
 def refresh() -> None:
-    """my-new-menu 를 만들거나 지운 뒤 부른다 — my-tabs 가 이미 있으면 + 버튼 연결만 다시 맞춘다(레이아웃은 안 건드림)."""
+    """my-new-menu·resume-all 을 만들거나 지운 뒤 부른다 — my-tabs 가 이미 있으면 + 버튼·Resume 버튼만 다시 맞춘다(레이아웃은 안 건드림)."""
     if not os.path.exists(mod_js(CLONE)):
         return
     st = evaluate(safe_plan(FEATURE, plan))
     if st.state == HAND:  # ccd-button 적용이 손으로 고친 my-tabs 를 몰래 덮지 않게
-        print("!! my-tabs 는 손으로 고친 흔적이 있어 + 버튼 연결을 안 맞춤 — 확인 뒤 install_tabs_agent_name.py --force")
+        print("!! my-tabs 는 손으로 고친 흔적이 있어 + 버튼·Resume 버튼을 안 맞춤 — 확인 뒤 install_tabs_agent_name.py --force")
         return
     if build():
-        print("my-tabs 다시 만듦: + 버튼 →", NEW_MENU if os.path.exists(mod_js(NEW_MENU)) else "new-menu(기본)")
+        print("my-tabs 다시 만듦:", wiring())
 
 
 def install() -> None:
     target = ensure_own_layout()
     changed = build()
     n = point_layout(target, BASE, CLONE)
-    menu = NEW_MENU if os.path.exists(mod_js(NEW_MENU)) else "new-menu(기본)"
-    print("적용 완료: 레이아웃", target, "/ tabs → my-tabs 연결", n, "곳", "(코드 고침)" if changed else "(코드 변경 없음)", "/ + 버튼 →", menu)
+    print("적용 완료: 레이아웃", target, "/ tabs → my-tabs 연결", n, "곳", "(코드 고침)" if changed else "(코드 변경 없음)", "/", wiring())
 
 
 def remove() -> None:
