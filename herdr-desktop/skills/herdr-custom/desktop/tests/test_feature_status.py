@@ -327,3 +327,36 @@ def test_mine_chooses_every_feature(home, monkeypatch):
     setup.main()
     # Assert
     assert seen["names"].split(",") == [f.name for f in setup.FEATURES]
+
+
+def test_choices_lists_layouts(home):
+    (home / "layouts" / "somegee.json").write_text(json.dumps(LAYOUT), encoding="utf-8")
+    code, out = run(home, "setup.py", "--choices", "--json")
+    data = json.loads(out[out.index("{"):])
+    assert code == 0, out
+    assert data["layout"]["shown"] == "my-main"
+    assert data["layout"]["own"] == ["my-main", "somegee"]
+    assert data["layout"]["target"] == "my-main"
+
+
+def test_chosen_existing_layout_gets_the_block(home):
+    # Arrange: 지금 보이는 레이아웃이 somegee, 고른 것도 somegee → 앱 없이 거기에 얹힌다
+    (home / "layouts" / "somegee.json").write_text(json.dumps(LAYOUT), encoding="utf-8")
+    (home / "shared.json").write_text(json.dumps({"layout": "somegee"}), encoding="utf-8")
+    # Act
+    code, out = run(home, "setup.py", "--apply", "title-sync", "--layout", "somegee")
+    # Assert
+    assert code == 0, out
+    assert "title-sync" in (home / "layouts" / "somegee.json").read_text(encoding="utf-8")
+    assert "title-sync" not in (home / "layouts" / "my-main.json").read_text(encoding="utf-8")
+
+
+def test_chosen_new_layout_is_reported_as_todo(home):
+    env_home = home
+    code, out = run(env_home, "setup.py", "--dry-run", "title-sync", "--layout", "my-new")
+    assert "my-new" in out and "main 를 복제해 새로 만들고 전환" in out, out
+
+
+def test_shipped_layout_name_is_refused(home):
+    code, out = run(home, "setup.py", "--apply", "title-sync", "--layout", "main")
+    assert code != 0 and "기본 레이아웃(main)" in out

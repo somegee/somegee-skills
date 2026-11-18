@@ -7,6 +7,8 @@
   python setup.py --apply ... --force               # 손으로 고친 흔적이 있어도 백업 후 덮기
   python setup.py --apply ... --ccd-folder "<경로>" # + 메뉴 ccd 새 탭 폴더 지정 ("" = 지정 해제)
   python setup.py --mine [--ccd-folder "<경로>"]    # 내 세팅 그대로: 모든 기능 + 앱 설정을 한 번에 (최신은 안 건드림, 손으로 고친 흔적은 멈춤)
+  python setup.py --apply ... --layout <이름>       # 얹을 레이아웃 고르기: 있는 이름이면 거기에 얹고, 없는 이름이면 main 을 복제해 새로 만듦
+                                                    #   (안 주면 지금 보이는 내 레이아웃, 기본 레이아웃을 쓰는 중이면 my-<이름> 으로 복제)
   python setup.py --remove                          # 전부 되돌림
   python setup.py --choices --json                  # 고르기 화면용: 묶음별 기능·지금 상태·추천·함께 필요한 기능 (아무것도 안 바꿈)
 
@@ -135,6 +137,20 @@ def app_line() -> str:
     return "앱: 레이아웃 %s / 오류 %s" % (st.get("layout"), st.get("errors") or "없음")
 
 
+def layout_info() -> dict:
+    """레이아웃 고르기 질문용 — 지금 보이는 것, 내 레이아웃 목록, 안 고르면 얹힐 곳."""
+    from install_title_sync import LAYOUT_ENV, SHIPPED, own_layouts, shown_layout, target_layout
+    shown = shown_layout()
+    return {"shown": shown, "shown_is_shipped": shown in SHIPPED, "own": own_layouts(),
+            "target": target_layout(), "chosen": os.environ.get(LAYOUT_ENV) or None, "new_default": "my-main"}
+
+
+def layout_line() -> str:
+    info = layout_info()
+    own = ", ".join(info["own"]) or "없음"
+    return "레이아웃: 지금 %s / 얹힐 곳 %s / 내 레이아웃 %s" % (info["shown"], info["target"], own)
+
+
 def ccd_line() -> str:
     return "ccd 폴더(+ 메뉴): " + ccd_folder.describe(ccd_folder.installed_values()[ccd_folder.MENU_MOD])
 
@@ -148,6 +164,7 @@ def print_status(statuses: dict, as_json: bool) -> int:
             print(s.line())
         print()
         print(app_line())
+        print(layout_line())
         print(ccd_line())
         todo = [n for n, s in statuses.items() if s.state in fl.NEEDS_APPLY]
         if todo:
@@ -170,7 +187,7 @@ def choices(statuses: dict) -> dict:
                           "detail": st.detail, "recommended": st.state in fl.NEEDS_APPLY, "needs": list(NEEDS.get(n, ())),
                           "takes_folder": BY_NAME[n].takes_folder})
         groups.append({"title": title, "features": items})
-    return {"groups": groups, "app": app_line(), "ccd": ccd_line()}
+    return {"groups": groups, "app": app_line(), "ccd": ccd_line(), "layout": layout_info()}
 
 
 def managed_files(folder_arg) -> list:
@@ -262,6 +279,7 @@ def report(chosen, changed, held, failed, after, touched) -> None:
     if linked and "my-tabs" not in chosen and any("my-tabs" in fl.rel(p) for p in touched):
         print("  (my-tabs 는 %s 이 버튼 연결을 맞추느라 같이 다시 만들었습니다)" % "·".join(linked))
     print(app_line())
+    print(layout_line())
     if changed:
         print("\n사람이 눌러 볼 것 (바뀐 기능만):")
         for n in changed:
@@ -303,9 +321,14 @@ def main() -> int:
     ap.add_argument("--mine", action="store_true", help="내 세팅 그대로: 모든 기능 + 앱 설정을 한 번에")
     ap.add_argument("--remove", action="store_true", help="전부 되돌리기")
     ap.add_argument("--choices", action="store_true", help="고르기 화면용 묶음(--json 과 함께, 아무것도 안 바꿈)")
+    ap.add_argument("--layout", default=None, metavar="이름", help="얹을 레이아웃(있으면 거기, 없으면 main 복제로 새로)")
     ap.add_argument(ccd_folder.OPTION, dest="ccd_folder", default=None, metavar="경로", help='ccd 새 탭 폴더 ("" = 해제)')
     a = ap.parse_args()
     folder_arg = ccd_folder.clean(a.ccd_folder) if a.ccd_folder is not None else None
+    if a.layout is not None:
+        from install_title_sync import LAYOUT_ENV, chosen_layout
+        os.environ[LAYOUT_ENV] = a.layout.strip()  # 하위 기능 스크립트도 같은 값을 받는다
+        chosen_layout()  # 못 쓰는 이름이면 여기서 멈춤
     if a.remove:
         remove()
         return 0

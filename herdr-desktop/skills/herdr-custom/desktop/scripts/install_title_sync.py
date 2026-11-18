@@ -31,6 +31,8 @@ SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "
 MOD_DIR = os.path.join(APP_HOME, "mods", "title-sync")
 LAYOUTS = os.path.join(APP_HOME, "layouts")
 SHIPPED = {"main", "terminals", "win98"}
+LAYOUT_ENV = "HERDR_CUSTOM_LAYOUT"  # setup.py --layout <이름> 이 넘긴다: 그 레이아웃에 얹기(없으면 main 을 복제해 새로 만듦)
+NEW_LAYOUT_BASE = "main"
 
 
 def app_exe():
@@ -85,8 +87,31 @@ def save(name, layout):
     return write_json_if_changed(layout_path(name), layout)
 
 
+def chosen_layout():
+    """사용자가 고른 레이아웃 이름(없으면 None). 기본 레이아웃 이름은 읽기 전용이라 고를 수 없다."""
+    name = (os.environ.get(LAYOUT_ENV) or "").strip()
+    if not name:
+        return None
+    if name in SHIPPED:
+        sys.exit("기본 레이아웃(%s)에는 얹을 수 없음 — 앱이 시작할 때 원본으로 되돌린다. 다른 이름을 고르기" % name)
+    if any(ch in name for ch in '\\/:*?"<>|'):
+        sys.exit("레이아웃 이름에 쓸 수 없는 글자가 있음: " + name)
+    return name
+
+
+def own_layouts():
+    """layouts/ 안의 내 레이아웃(기본 레이아웃 빼고) 이름들."""
+    if not os.path.isdir(LAYOUTS):
+        return []
+    names = [os.path.splitext(n)[0] for n in sorted(os.listdir(LAYOUTS)) if n.endswith(".json")]
+    return [n for n in names if n not in SHIPPED and not n.endswith("-edited")]
+
+
 def target_layout():
     """적용하면 얹힐 레이아웃 이름 — 앱에 아무것도 안 시키고 계산만(상태 확인용)."""
+    chosen = chosen_layout()
+    if chosen:
+        return chosen
     name = shown_layout()
     return name if name not in SHIPPED else "my-" + name
 
@@ -99,6 +124,11 @@ def mod_blocks(layout, mod):
 
 def own_layout_check():
     shown = shown_layout()
+    chosen = chosen_layout()
+    if chosen:
+        how = "전환" if os.path.exists(layout_path(chosen)) else "%s 를 복제해 새로 만들고 전환" % NEW_LAYOUT_BASE
+        return Check("고른 레이아웃(%s)이 아니라 %s 사용 중" % (chosen, shown), shown == chosen,
+                     "레이아웃 %s 로 %s(앱에 시킴)" % (chosen, how))
     return Check("기본 레이아웃(%s) 사용 중" % shown, shown not in SHIPPED,
                  "기본 레이아웃 %s → my-%s 로 복제·전환(앱에 시킴)" % (shown, shown))
 
@@ -160,17 +190,25 @@ def asset_wants(src_dir, mod_dir, names):
 
 
 def ensure_own_layout():
-    """보이는 레이아웃이 기본 레이아웃이면 my-<name> 으로 복제해 전환하고 그 이름을 돌려준다."""
+    """얹을 레이아웃으로 전환하고 그 이름을 돌려준다.
+    고른 레이아웃이 있으면 그것(없으면 main 을 복제해 새로 만듦), 아니면 보이는 레이아웃 — 기본 레이아웃이면 my-<name> 으로 복제."""
     name = shown_layout()
-    if name not in SHIPPED:
+    chosen = chosen_layout()
+    if chosen:
+        if chosen == name:
+            return name
+        base, clone = NEW_LAYOUT_BASE, chosen
+    elif name not in SHIPPED:
         return name
-    clone = "my-" + name
+    else:
+        base, clone = name, "my-" + name
+    name = base
     if os.path.exists(layout_path(clone)):
         subprocess.run([app_exe(), "do", "layout.switch", json.dumps({"name": clone})], check=True)
         print("기존 복제본으로 전환:", clone)
     else:
         subprocess.run([app_exe(), "do", "layout.clone", json.dumps({"name": name, "as": clone})], check=True)
-        print("기본 레이아웃은 읽기 전용이라 복제함:", name, "→", clone)
+        print("새 레이아웃을 만듦(기본 레이아웃은 읽기 전용이라 복제):", name, "→", clone)
     for _ in range(20):  # 복제 파일이 생길 때까지
         if os.path.exists(layout_path(clone)):
             break
