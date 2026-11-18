@@ -321,7 +321,7 @@ def test_mine_chooses_every_feature(home, monkeypatch):
     sys.path.insert(0, DESKTOP)
     setup = importlib.import_module("setup")
     seen = {}
-    monkeypatch.setattr(setup, "apply", lambda names, folder, force: seen.setdefault("names", names) and 0)
+    monkeypatch.setattr(setup, "apply", lambda names, force: seen.setdefault("names", names) and 0)
     monkeypatch.setattr(sys, "argv", ["setup.py", "--mine"])
     # Act
     setup.main()

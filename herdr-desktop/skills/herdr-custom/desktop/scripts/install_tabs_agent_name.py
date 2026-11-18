@@ -8,9 +8,7 @@
   python install_tabs_agent_name.py --status   # 상태 한 줄(--json) / --dry-run 미리보기
   python install_tabs_agent_name.py --remove   # 기본 tabs 로 되돌림 (my-tabs 폴더는 남김)
 설치할 때마다 원본 mods/tabs/main.js 에서 다시 고쳐 덮어쓴다(patchlib).
-my-new-menu(install_ccd_button.py 가 만듦)가 있으면 + 버튼이 기본 new-menu 대신 그걸 열게 한다 —
-없는데 가리키면 + 버튼이 아무것도 안 열므로 있을 때만.
-resume-all(install_resume_all.py 가 깖)이 있으면 우상단 Files 왼쪽에 Resume 버튼을 넣는다 — 같은 이유로 있을 때만.
+resume-all(install_resume_all.py 가 깖)이 있으면 우상단 Files 왼쪽에 Resume 버튼을 넣는다 — 없는데 가리키면 버튼이 아무것도 안 하므로 있을 때만.
 """
 import os
 import sys
@@ -71,9 +69,6 @@ PATCHES = [
      ' if (this.closeArm === c.id && Date.now() - this.closeArmAt <= CLOSE_ARM_MS) { this.closeArm = null; run("tab.close", { id: c.id }); }'
      ' else { this.closeArm = c.id; this.closeArmAt = Date.now(); } cx.notify(); })'),
 ]
-NEW_MENU = "my-new-menu"
-# + 버튼 → my-new-menu (ccd 를 설치 때 정한 폴더에서 여는 + 메뉴)
-NEW_MENU_PATCH = ('openOverlay({ mod: "new-menu", kind: "popup"', 'openOverlay({ mod: "%s", kind: "popup"' % NEW_MENU)
 
 RESUME_MOD = "resume-all"
 # 우상단 Files/Changes 왼쪽 Resume 버튼 → resume-all 팝업. 후보 규칙은 assets/resume-all/main.js 의
@@ -115,8 +110,7 @@ def has_resume() -> bool:
 
 
 def patches() -> list:
-    return (PATCHES + ([NEW_MENU_PATCH] if os.path.exists(mod_js(NEW_MENU)) else [])
-            + (RESUME_PATCHES if has_resume() else []))
+    return PATCHES + (RESUME_PATCHES if has_resume() else [])
 
 
 def patched(src: str) -> str:
@@ -127,8 +121,7 @@ def patched(src: str) -> str:
 
 
 def wiring() -> str:
-    return "+ 버튼 → %s / Resume 버튼 %s" % (NEW_MENU if os.path.exists(mod_js(NEW_MENU)) else "new-menu(기본)",
-                                             "있음" if has_resume() else "없음(resume-all 미설치)")
+    return "Resume 버튼 %s" % ("있음" if has_resume() else "없음(resume-all 미설치)")
 
 
 def build() -> bool:
@@ -140,12 +133,12 @@ def plan() -> Plan:
 
 
 def refresh() -> None:
-    """my-new-menu·resume-all 을 만들거나 지운 뒤 부른다 — my-tabs 가 이미 있으면 + 버튼·Resume 버튼만 다시 맞춘다(레이아웃은 안 건드림)."""
+    """resume-all 을 만들거나 지운 뒤 부른다 — my-tabs 가 이미 있으면 Resume 버튼만 다시 맞춘다(레이아웃은 안 건드림)."""
     if not os.path.exists(mod_js(CLONE)):
         return
     st = evaluate(safe_plan(FEATURE, plan))
-    if st.state == HAND:  # ccd-button 적용이 손으로 고친 my-tabs 를 몰래 덮지 않게
-        print("!! my-tabs 는 손으로 고친 흔적이 있어 + 버튼·Resume 버튼을 안 맞춤 — 확인 뒤 install_tabs_agent_name.py --force")
+    if st.state == HAND:  # resume-all 적용이 손으로 고친 my-tabs 를 몰래 덮지 않게
+        print("!! my-tabs 는 손으로 고친 흔적이 있어 Resume 버튼을 안 맞춤 — 확인 뒤 install_tabs_agent_name.py --force")
         return
     if build():
         print("my-tabs 다시 만듦:", wiring())

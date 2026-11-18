@@ -5,7 +5,7 @@
 
 ## 원본에서 다시 고치기 (patchlib, 0.3.0~)
 
-- my-agents·my-tabs·my-spaces(와 ccd-button 의 my-new-menu)는 기본 mod 코드의 문장을 찾아 고친다. **적용할 때마다 원본 `mods/<기본>/main.js` 에서 처음부터 다시 고친 내용을 만들고, 복제본과 다를 때만 덮어쓴다**(`scripts/patchlib.py`).
+- my-agents·my-tabs·my-spaces는 기본 mod 코드의 문장을 찾아 고친다. **적용할 때마다 원본 `mods/<기본>/main.js` 에서 처음부터 다시 고친 내용을 만들고, 복제본과 다를 때만 덮어쓴다**(`scripts/patchlib.py`).
 - 복제본을 손으로 고쳤으면 상태가 `손으로 고친 흔적` 이 되고 `--force` 없이는 덮지 않는다(덮을 땐 백업) → 계속 쓸 수정이면 설치 스크립트를 고친다.
 - 덮어쓸 때 `mod.clone` 처럼 자기 이름 참조(`mods/tabs/…` 아이콘, `openOverlay({ mod: "agents" })`)를 복제본 이름으로 바꾸고, 줄바꿈은 원본(CRLF)을 따른다 — 안 하면 아이콘·팝업이 원본 mod 를 가리킨다.
 - 앱 업데이트로 문장이 바뀌면 "고칠 문장을 못 찾음" 으로 멈춘다(엉뚱하게 고친 채 남지 않음) → 그 스크립트의 `PATCHES` 를 새 원본에 맞춘다. 원본에서 다시 만들기 때문에 앱 업데이트의 화면 개선도 설치를 다시 돌리면 들어온다.
@@ -46,15 +46,9 @@
 
 my-agents 가 3초마다 `hc get` 으로 읽어 `shared("agent.msgs")` 로 내놓고, my-spaces 는 레이아웃에 my-agents 가 있으면 그걸 읽는다(없을 때만 직접 읽음) — 같은 조회를 두 번 돌리지 않게.
 
-## ccd 폴더 (ccd-button)
+## + 메뉴 ccd 버튼 (0.11.2 에 뺌)
 
-- 앱 API `tab.new` 는 `folder` 를 받지만 programs.json 의 `run` 엔 폴더 칸이 없다 → `+` 메뉴는 기본 new-menu 를 my-new-menu 로 복제해 고치고(patchlib), `+` 버튼은 tabs mod 안에 있어서 my-tabs 가 `openOverlay({ mod: "my-new-menu" … })` 로 연다.
-- **my-new-menu 가 있을 때만 그렇게 고친다**(없는데 가리키면 `+` 가 아무것도 안 엶) → setup 순서는 ccd 버튼 → my-tabs, ccd-button 설치·`--remove` 뒤엔 my-tabs 를 다시 맞춘다(`refresh()`). my-new-menu 는 팝업이라 레이아웃 칸이 없다. `KNOWN`("new-menu.agents") 캐시 키는 원본과 같이 쓴다.
-- 원격 공간은 늘 그 공간 폴더: `spaces()[i].machine` 이 null 일 때만 정한 폴더를 쓴다(이 PC 경로는 원격에 없음).
-- PowerShell `ccd` 함수를 부르지 않는 이유: herdr 는 bash/zsh 함수만 설치 확인을 해서 PowerShell 함수는 "not installed" 로 보임 → 탭은 늘 `claude` 를 직접 실행.
-- 폴더 정하는 순서(`scripts/ccd_folder.py`): ① 옵션 ② **설치본 값 유지**(my-new-menu `const CCD_FOLDER` 줄 — 안 그러면 setup 을 다시 돌릴 때마다 폴더가 사라짐, `""` 로 해제해 둔 것도 유지) ③ 설치본에 그 줄이 없을 때만 PowerShell 프로필의 `function ccd { Set-Location "<경로>" … }`(프로필 위치는 `$PROFILE` 을 powershell·pwsh 에 물어봄 — OneDrive 문서 폴더 대비. `cd`·`-Path`·변수·`Push-Location` 등 다른 형식이면 조용히 건너뜀) ④ `""`.
-- 설치 때 폴더가 없으면 경고하고 `""`(없는 폴더로 `tab.new` 하면 탭이 안 열림), `claude` 가 PATH 에 없으면 경고(`+` 메뉴는 "not installed" 로 흐림). 상태표 아래 `ccd 폴더(+ 메뉴): …` 줄.
-- 설치 뒤 폴더가 지워진 경우: mod 가 누를 때 `exec("cmd", ["/c","exit"], {cwd})` 로 확인(`exec` 는 cwd 가 없으면 거절)하고, 없으면 공간 폴더로 열고 `notify` 로 알린다. `run()` 은 null 이라 tab.new 실패를 직접 알 수 없어서다. `+` 메뉴는 메뉴를 열 때 미리 확인하고 결과가 오기 전에 누르면 폴더를 믿고 넘긴다. **이 확인은 실제로 시험해 보지 않았다**(폴더 지정 자체는 2026-11-11 herdr-app 에서 확인됨).
+우상단 `+` 메뉴에 `claude --dangerously-skip-permissions` 를 정한 폴더에서 여는 버튼(programs.json 항목 + new-menu 복제본 my-new-menu + my-tabs 의 `+` 가 그걸 열게 하는 패치)이었다. 다른 사람에겐 "ccd 가 뭐지?"라 공개 플러그인에서 뺐다. 이미 깔린 PC 의 programs.json 항목·`mods/my-new-menu` 는 지우지 않는다(손으로 지움). my-tabs 를 다시 깔면 `+` 는 기본 new-menu 를 연다.
 
 ## 그림 붙여넣기 (image-paste)
 
