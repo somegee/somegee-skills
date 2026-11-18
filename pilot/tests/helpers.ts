@@ -22,6 +22,12 @@ export type Fake = {
   limits: { kind: string; percentUsed: number; resetsAt?: string }[]
   /** 엔진(밑)이 마지막으로 받은 요청의 effort. */
   sent: unknown[]
+  /** 판정 답 대신 돌려줄 실패(api-error 등). */
+  completeFail: { reason: string; status?: number } | null
+  /** 있으면 판정 답을 이 약속이 풀릴 때까지 붙잡는다(느린 Haiku 흉내). */
+  completeGate: Promise<void> | null
+  /** 가짜 파일: 경로 → 글. */
+  files: Map<string, string>
   clock: MockClock
 }
 
@@ -44,6 +50,9 @@ export function fakeEngine(on: On, over: Partial<Fake> = {}): Fake {
       { kind: 'seven_day', percentUsed: 18 },
     ],
     sent: [],
+    completeFail: null,
+    completeGate: null,
+    files: new Map(),
     ...over,
     clock: mock.clock(on),
   }
@@ -65,8 +74,19 @@ export function fakeEngine(on: On, over: Partial<Fake> = {}): Fake {
     }) as never,
   )
   on('process.run', () => ({ value: { exitCode: 0, stdout: 'main\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }) as never)
-  on('model.complete', (_$, e) => {
+  on('fs.read', (_$, e) => {
+    const text = f.files.get(e.path)
+    if (text === undefined) throw new Error(`ENOENT ${e.path}`)
+    return { value: text } as never
+  })
+  on('fs.write', (_$, e) => {
+    f.files.set(e.path, e.text)
+    return { value: undefined } as never
+  })
+  on('model.complete', async (_$, e) => {
     f.completes.push({ model: e.model, system: String(e.system ?? ''), prompt: String(e.prompt) })
+    if (f.completeGate) await f.completeGate
+    if (f.completeFail) return { value: { isAnswered: false, ...f.completeFail, usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } } as never
     return { value: { isAnswered: true, text: f.judgeReply, usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } } as never
   })
   on('model.fork', (_$, e) => {

@@ -7,8 +7,9 @@ import { isSavingNow } from '../limits'
 import { readAuto, readPick, readStage, readStatus, writeAppEffort, writeAuto, writeJudgeDown, writeJudging, writePick } from '../state'
 import type { Ctx } from '../state'
 import { modelLabel } from '../status/statusline'
-import { EFFORT_LABEL, T } from '../text'
+import { EFFORT_LABEL, T, judgeFailText } from '../text'
 import { contextFrom, helperQuestion, judge, judgeQuestion, lastAnswerOf } from './judge'
+import type { JudgeInfo } from './judge'
 import { atLeast, cacheSafe, capForSave, clamp, endsOnQuestion, helperFloor, isEffort, isFollowUp, isHaiku, namedEffort } from './levels'
 
 const DEEP_WORDS = /ultrathink/i
@@ -18,6 +19,13 @@ const HELPER_PICKS_MAX = 50
 // 앱의 effort 로 마지막에 본 값과 그때의 모델. 모델이 바뀌면 앱 기본값도 바뀌므로 다시 본다. 다시 불러오면 처음부터.
 let seenApp: string | undefined
 let seenModel: string | undefined
+
+/** 판정 기록에 남길 상황. judgeNo 는 이번 판정이 몇 번째인가(ctx.judged 는 판정 뒤에 오른다). */
+async function judgeInfo($: EngineInterface, ctx: Ctx, kind: JudgeInfo['kind']): Promise<JudgeInfo> {
+  const now = await $.clock.now().catch(() => null)
+  const sessionAgeMs = now !== null && ctx.startedAt !== null ? now - ctx.startedAt : null
+  return { kind, sessionAgeMs, judgeNo: ctx.judged + 1, turnRunning: ctx.isTurnRunning }
+}
 
 /** 직접 적은 값 → 짧은 답이면 그대로 → 아니면 Haiku 판정. 판정 못 하면 null. */
 async function decide($: EngineInterface, ctx: Ctx, text: string, model: string): Promise<Pick | null> {
@@ -32,10 +40,10 @@ async function decide($: EngineInterface, ctx: Ctx, text: string, model: string)
 
   await writeJudging($, true)
   try {
-    const got = await judge($, judgeQuestion(text, current, modelLabel(model), contextFrom(messages)))
+    const got = await judge($, judgeQuestion(text, current, modelLabel(model), contextFrom(messages)), await judgeInfo($, ctx, 'main'))
     ctx.judged += 1
     if ('fail' in got) {
-      await writeJudgeDown($, got.fail)
+      await writeJudgeDown($, judgeFailText(got.fail, got.ms))
       return null
     }
     await writeJudgeDown($, null)
@@ -152,7 +160,7 @@ export async function requestFor($: EngineInterface, ctx: Ctx, e: TurnStepInput)
 /** 하위 에이전트를 띄우기 전에 판정. 판정 못 하면 null(그 에이전트는 메인 질문의 값을 따른다). */
 export async function beforeSpawn($: EngineInterface, ctx: Ctx, e: AgentSpawnInput): Promise<Waiting | null> {
   if (!ctx.config.subagentEffort || e.fork || e.isTeammate || e.workflow || !(await readAuto($))) return null
-  const got = await judge($, helperQuestion(e.prompt, e.subagentType)).catch(() => null)
+  const got = await judge($, helperQuestion(e.prompt, e.subagentType), await judgeInfo($, ctx, 'helper')).catch(() => null)
   if (!got || 'fail' in got) return null
   ctx.judged += 1
   const { floor, ceiling } = ctx.config

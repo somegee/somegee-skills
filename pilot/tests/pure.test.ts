@@ -6,6 +6,7 @@ import { cells } from '../hooks/band/look'
 import { effortParts, effortText } from '../hooks/band/effort-row'
 import { AFTERS, choiceLabel, readConfig } from '../hooks/config'
 import { parseVerdict } from '../hooks/effort/judge'
+import { judgeFailText } from '../hooks/text'
 import { cacheSafe, capForSave, clamp, helperFloor, isFollowUp, namedEffort } from '../hooks/effort/levels'
 import { handoffMessage, parseHint, safeMemo } from '../hooks/handoff/prompts'
 import { hottest, resetTime } from '../hooks/limits'
@@ -175,4 +176,11 @@ test('막대 내용을 파일로 남길 모양으로 바꾼다', async () => {
   expect(snapshotDir('C:/Users/me/.claude/plugins/cache/somegee-skills/pilot/0.2.0')).toBe('C:/Users/me/.claude/pilot-data')
   expect(snapshotDir('/home/me/.claude/plugins/cache/x/pilot/0.2.0')).toBe('/home/me/.claude/pilot-data')
   expect(snapshotDir('/work/pilot')).toBe('/work/pilot/data')
+})
+
+test('판정 실패 문구에 걸린 초를 붙이고, 6초 전에 끊긴 건 시간 초과라 하지 않는다', () => {
+  expect(judgeFailText('slow', 6000)).toBe('6.0초 무응답')
+  expect(judgeFailText('api-error 529', 420)).toBe('API 오류 529 · 0.4초')
+  expect(judgeFailText('aborted', 1200)).toBe('중단됨 · 1.2초')
+  expect(judgeFailText('unreadable', 900)).toBe('답을 못 읽음 · 0.9초')
 })

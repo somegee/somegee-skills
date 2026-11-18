@@ -13,10 +13,17 @@ export const EFFORT_LABEL: Readonly<Record<Effort, string>> = {
 /** 실패 사유 → 짧은 한국어. */
 export function failWhy(reason: string): string {
   if (reason === 'unreadable') return '답을 못 읽음'
-  if (reason === 'aborted') return '시간 초과'
+  // 'aborted' 는 기다리는 시간(6초)보다 먼저 끊긴 경우다: 시간 초과가 아니다.
+  if (reason === 'aborted') return '중단됨'
   if (reason === 'empty-reply') return '빈 답'
   if (reason.startsWith('api-error')) return `API 오류${reason.slice('api-error'.length)}`
   return reason
+}
+
+/** 판정 실패 → 막대에 보일 한 줄(걸린 초 포함). 'slow' = 화면이 기다리다 포기함. */
+export function judgeFailText(reason: string, ms: number): string {
+  const sec = (ms / 1000).toFixed(1)
+  return reason === 'slow' ? `${sec}초 무응답` : `${failWhy(reason)} · ${sec}초`
 }
 
 export const T = {
@@ -34,7 +41,7 @@ export const T = {
   cache: (min: number) => `캐시 ${min}분`,
   manualTook: (level: string) => `직접 고른 ${level}(으)로 갑니다. 자동은 꺼졌어요 — [자동 켜짐]을 누르면 다시 맡깁니다.`,
   pausedWhy: '이 모델은 effort 를 바꾸면 캐시가 깨져서 자동이 쉽니다',
-  judgeDown: (why: string) => `Haiku 판정 실패(${failWhy(why)}) — 이번엔 앱 설정대로 보냅니다.`,
+  judgeDown: (why: string) => `Haiku 판정 실패(${why}) — 이번엔 앱 설정대로 보냅니다.`,
   coldAlert: '캐시가 만료됐어요. 다음 질문은 대화 전체를 처음부터 다시 읽어서 느리고 한도를 더 씁니다.',
   limitAlert: (label: string, percent: number) => `${label} 한도 ${percent}%`,
   limitSaveHint: '절약을 켜면 한도가 풀릴 때까지 effort 를 medium 이하로 묶어요',

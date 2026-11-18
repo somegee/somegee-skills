@@ -32,6 +32,8 @@ export type Ctx = {
   lastRequest: { appEffort: string; sentEffort: string; model: string; at: number } | null
   /** 판정 횟수(/pilot 상태). */
   judged: number
+  /** session.start 를 본 때(ms). 세션 도중 다시 불러왔으면 null(판정 기록용). */
+  startedAt: number | null
   /** 이번 질문에 ultrathink 가 있었나(엔진이 그 턴만 올리므로 건드리지 않는다). */
   deepTurn: boolean
   /** 메인 턴이 도는 중인가(turn.start ~ turn.complete). */
@@ -41,7 +43,7 @@ export type Ctx = {
 }
 
 export function makeCtx(config: Config, options: Readonly<Record<string, unknown>>): Ctx {
-  return { config, options, isHuman: false, modelId: '', prompts: 0, lastRequest: null, judged: 0, deepTurn: false, isTurnRunning: false, held: null }
+  return { config, options, isHuman: false, modelId: '', prompts: 0, lastRequest: null, judged: 0, startedAt: null, deepTurn: false, isTurnRunning: false, held: null }
 }
 
 // 읽기·쓰기는 이 파일 안의 함수로만 한다: 검사기가 read/update 의 대상을 같은 파일의 atom 으로만 받는다.

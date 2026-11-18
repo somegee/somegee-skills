@@ -219,3 +219,49 @@ test('인계 메모 모델을 Opus 로 고르면 fork 대신 Opus 가 대화 글
   expect(f.completes.some(c => c.model === 'claude-opus-5-5')).toBe(true)
   expect(f.submits[f.submits.length - 1]).toContain('Opus 가 쓴 메모')
 })
+
+function judgeLog(f: { files: Map<string, string> }): Record<string, unknown>[] {
+  const entry = [...f.files.entries()].find(([path]) => path.endsWith('/judge-log.jsonl'))
+  return entry ? entry[1].trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>) : []
+}
+
+test('세션의 첫 판정은 성공해도 기록하고, 두 번째 성공은 기록하지 않는다(질문 글은 남기지 않음)', async ($, on) => {
+  const f = fakeEngine(on, { judgeReply: '{"effort":"low","why":"짧은 조회"}' })
+  await startHuman($)
+  await submit($, '날씨 알려줘')
+  await submit($, '이 폴더 전체를 리팩터해줘')
+  await f.clock.settle()
+  const rows = judgeLog(f)
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({ kind: 'main', judgeNo: 1, gaveUp: false, result: 'ok', turnRunning: false })
+  expect(typeof rows[0]!.sessionAgeMs).toBe('number')
+  expect(JSON.stringify(rows)).not.toContain('날씨')
+})
+
+test('API 오류로 실패하면 사유와 걸린 초를 기록하고 앱 설정대로 보낸다', async ($, on) => {
+  const f = fakeEngine(on, { completeFail: { reason: 'api-error', status: 529 } })
+  await startHuman($)
+  await submit($, '날씨 알려줘')
+  await submit($, '이 폴더 전체를 리팩터해줘')
+  await f.clock.settle()
+  expect((await step($, f, { effort: 'medium' })).sentEffort).toBe('medium')
+  const rows = judgeLog(f)
+  expect(rows).toHaveLength(2)
+  expect(rows[1]).toMatchObject({ judgeNo: 2, gaveUp: false, result: 'api-error 529' })
+})
+
+test('6초 안에 답이 없으면 포기하고, 늦게 온 답은 쓰지 않되 어떻게 끝났는지 기록한다', async ($, on) => {
+  let release = (): void => undefined
+  const f = fakeEngine(on, { completeGate: new Promise<void>(done => (release = done)) })
+  await startHuman($)
+  const sending = submit($, '이 폴더 전체를 리팩터해줘')
+  await f.clock.advance(6000)
+  await sending
+  expect((await step($, f, { effort: 'medium' })).sentEffort).toBe('medium')
+  await f.clock.advance(1500)
+  release()
+  await f.clock.settle()
+  const rows = judgeLog(f)
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({ gaveUp: true, result: 'ok', ms: 7500 })
+})

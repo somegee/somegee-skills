@@ -4,9 +4,15 @@ import type { EngineInterface } from 'claude-code'
 
 import type { Effort, Pick } from '../../types'
 import { askHaiku, firstJsonObject } from '../haiku'
+import type { Asked } from '../haiku'
+import { logJudge } from './judge-log'
+import type { JudgeLogRow } from './judge-log'
 import { isEffort } from './levels'
 
-const JUDGE_TIMEOUT_MS = 6000
+// 화면이 판정을 기다리는 시간(질문 전송을 이만큼 붙잡는다). 평소 판정은 1초 안팎.
+const JUDGE_WAIT_MS = 6000
+// 포기한 뒤에도 요청은 이만큼 더 지켜보며 결국 어떻게 끝났는지 기록한다(늦게 온 답은 쓰지 않음).
+const JUDGE_WATCH_MS = 30_000
 // 생각(adaptive reasoning)이 몫을 먹어 JSON 이 잘리지 않게 넉넉히.
 const JUDGE_MAX_TOKENS = 300
 const WHY_MAX = 40
@@ -71,11 +77,39 @@ export function helperQuestion(prompt: string, type: string): string {
   return `A subagent (type: ${type}) is about to start this task on its own and report back. Pick its effort.\n\nTask:\n${prompt.slice(0, 4000)}`
 }
 
-export type Judged = { verdict: Verdict } | { fail: string }
+export type Judged = { verdict: Verdict } | { fail: string; ms: number }
 
-export async function judge($: EngineInterface, question: string): Promise<Judged> {
-  const asked = await askHaiku($, { system: JUDGE_SYSTEM, prompt: question, maxTokens: JUDGE_MAX_TOKENS, timeoutMs: JUDGE_TIMEOUT_MS })
-  if ('fail' in asked) return asked
+/** 기록에 남길 판정 상황(질문 글은 남기지 않는다). */
+export type JudgeInfo = { kind: JudgeLogRow['kind']; sessionAgeMs: number | null; judgeNo: number; turnRunning: boolean }
+
+/** 포기한 판정 사유: 화면이 JUDGE_WAIT_MS 동안 답을 못 받음. */
+export const GAVE_UP = 'slow'
+
+function outcome(asked: Asked): { result: string; verdict?: Verdict } {
+  if ('fail' in asked) return { result: asked.fail }
   const verdict = parseVerdict(asked.text)
-  return verdict ? { verdict } : { fail: 'unreadable' }
+  return verdict ? { result: 'ok', verdict } : { result: 'unreadable' }
+}
+
+/** 판정. JUDGE_WAIT_MS 안에 답이 없으면 포기하고(fail: GAVE_UP), 요청은 뒤에서 끝까지 지켜보며 기록한다.
+ *  실패와 세션의 첫 판정은 judge-log 에 남긴다. */
+export async function judge($: EngineInterface, question: string, info: JudgeInfo): Promise<Judged> {
+  const started = await $.clock.now()
+  const call = askHaiku($, { system: JUDGE_SYSTEM, prompt: question, maxTokens: JUDGE_MAX_TOKENS, timeoutMs: JUDGE_WATCH_MS })
+  const first = await Promise.race([call, $.clock.sleep(JUDGE_WAIT_MS).then(() => null)])
+  const base = { ...info, at: new Date().toISOString(), promptChars: question.length }
+  if (first === null) {
+    void watchLate($, call, started, base).catch(() => undefined)
+    return { fail: GAVE_UP, ms: JUDGE_WAIT_MS }
+  }
+  const ms = (await $.clock.now()) - started
+  const { result, verdict } = outcome(first)
+  if (!verdict || info.judgeNo === 1) await logJudge($, { ...base, gaveUp: false, result, ms }).catch(() => undefined)
+  return verdict ? { verdict } : { fail: result, ms }
+}
+
+async function watchLate($: EngineInterface, call: Promise<Asked>, started: number, base: JudgeInfo & { at: string; promptChars: number }): Promise<void> {
+  const asked = await call
+  const ms = (await $.clock.now()) - started
+  await logJudge($, { ...base, gaveUp: true, result: outcome(asked).result, ms })
 }

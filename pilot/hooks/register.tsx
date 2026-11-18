@@ -23,6 +23,7 @@ export const register: Register = (on, options) => {
     // notes 와 같은 기준: 화면(surface)은 시작 뒤에 붙기도 하므로 대화형 여부만 본다.
     ctx.isHuman = e.isInteractive
     if (!ctx.isHuman) return result
+    ctx.startedAt = await $.clock.now().catch(() => null)
     await writeAuto($, ctx.config.autoEffort)
     await restoreSave($)
     await $.command.register(COMMAND)
