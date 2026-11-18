@@ -1,6 +1,6 @@
 # somegee-skills
 
-개인 Claude Code 플러그인 마켓플레이스. 현재 `terminal-swarm`, `notes`(mod — 옆 창 노트), `pilot`(mod — 입력창 위 막대), `tree`(mod — 오른쪽 창 파일 트리), `herdr`(스킬 — herdr 터미널 관리자) 플러그인 관리.
+개인 Claude Code 플러그인 마켓플레이스. 현재 `terminal-swarm`, `notes`(mod — 옆 창 노트), `pilot`(mod — 입력창 위 막대), `tree`(mod — 오른쪽 창 파일 트리), `herdr-desktop`(스킬 `herdr-custom` — herdr 데스크톱 앱 커스텀) 플러그인 관리.
 
 ## 구조
 
@@ -30,10 +30,10 @@ tree/                  # mod 플러그인 (오른쪽 창 파일 트리, 마우�
   hooks/actions.ts     # 누르기·미리보기·diff·크기 그림·활동 표시
   hooks/view/*.tsx     # 그리기 (Acts 콜백만 받음)
   NOTICE               # claude-code-filetree MIT 고지
-herdr/                 # 스킬 플러그인 (herdr 터미널 관리자)
+herdr-desktop/         # 스킬 플러그인 (herdr 데스크톱 앱 커스텀)
   .claude-plugin/plugin.json
-  skills/herdr-use/
-    SKILL.md           # 함정 모음 + 설치 안내
+  skills/herdr-custom/
+    SKILL.md           # 커스텀 설치 안내(내세팅·설치·상태) + 함정
     desktop/           # Windows 데스크톱 앱 커스텀 일괄 설치 (setup.py, scripts/, assets/, *.bat)
     server/            # 서버 상주 탭 이름 동기화 (herdr_title_sync.py, systemd 서비스, tests/)
 ```
@@ -94,9 +94,9 @@ _swarm_py="$(ls ~/.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm
 - `read`/`update` 는 `hooks/state.ts` 안에서만(pilot 과 같은 검사기 제약).
 - purisia/project-tree 는 라이선스가 없어 코드를 가져오지 않는다(아이디어만).
 
-## herdr (스킬) 규칙
+## herdr-desktop (스킬) 규칙
 
-- 테스트: `python -m pytest herdr/skills/herdr-use/server/tests`, 검증: `claude plugin validate herdr`
+- 테스트: `python -m pytest herdr-desktop/skills/herdr-custom/server/tests`, 검증: `claude plugin validate herdr-desktop`
 - 공개 저장소다: 집 PC IP·사용자명·개인 서비스(웹 관제 화면) 코드 경로를 넣지 않는다. 그런 건 비공개 메모리에 둔다.
 - 서버 서비스는 플러그인 캐시 경로를 직접 가리키지 않는다(버전마다 바뀜) → `~/.local/share/herdr-title-sync/`로 복사해 돌린다.
 - `*.bat`은 CRLF(`.gitattributes`). 키·화면 동작은 SSH로 시험할 수 없다 — 사람이 그 PC에서 눌러 본다.

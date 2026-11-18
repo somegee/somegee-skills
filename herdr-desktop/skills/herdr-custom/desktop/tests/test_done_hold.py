@@ -1,6 +1,6 @@
 """done_hold.py — mod 코드에 '끝남 유지' 넣기 + 그 JS 의 동작(node 가 있으면).
 
-  python -m pytest herdr/skills/herdr-use/desktop/tests
+  python -m pytest herdr-desktop/skills/herdr-custom/desktop/tests
 """
 import os
 import shutil

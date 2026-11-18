@@ -2,7 +2,7 @@
 
 앱 없이 되는 기능(title-sync·newtab-key·image-paste 의 이미 깔린 상태)만 끝까지 돌리고,
 복제본 기능(my-agents 등)은 상태 판정만 본다.
-  python -m pytest herdr/skills/herdr-use/desktop/tests
+  python -m pytest herdr-desktop/skills/herdr-custom/desktop/tests
 """
 import json
 import os
@@ -291,3 +291,39 @@ def test_choices_cover_every_feature_once(home):
     assert flat["title-sync"]["state"] == "missing" and flat["title-sync"]["recommended"]
     assert flat["resume-all"]["needs"] == ["my-tabs"]
     assert tree(home) == before
+
+
+def test_app_settings_sets_only_its_keys_and_removes_back(home):
+    # Arrange
+    (home / "settings.json").write_text(json.dumps({"zoom": 1.2, "appearance": "light"}), encoding="utf-8")
+    # Act
+    code, out = run(home, "install_app_settings.py")
+    data = json.loads((home / "settings.json").read_text(encoding="utf-8"))
+    status_code, _ = run(home, "install_app_settings.py", "--status")
+    run(home, "install_app_settings.py", "--remove")
+    restored = json.loads((home / "settings.json").read_text(encoding="utf-8"))
+    # Assert
+    assert code == 0, out
+    assert data == {"zoom": 1.2, "appearance": "dark", "telemetry": False}
+    assert status_code == fl.EXIT_CODES[fl.LATEST]
+    assert restored == {"zoom": 1.2, "appearance": "light"}
+
+
+def test_app_settings_status_is_missing_on_fresh_app(home):
+    code, out = run(home, "install_app_settings.py", "--status")
+    assert code == fl.EXIT_CODES[fl.MISSING], out
+
+
+def test_mine_chooses_every_feature(home, monkeypatch):
+    # Arrange: 실제 적용 대신 고른 이름만 받는다
+    import importlib
+    monkeypatch.setenv("HERDR_APP_HOME", str(home))
+    sys.path.insert(0, DESKTOP)
+    setup = importlib.import_module("setup")
+    seen = {}
+    monkeypatch.setattr(setup, "apply", lambda names, folder, force: seen.setdefault("names", names) and 0)
+    monkeypatch.setattr(sys, "argv", ["setup.py", "--mine"])
+    # Act
+    setup.main()
+    # Assert
+    assert seen["names"].split(",") == [f.name for f in setup.FEATURES]

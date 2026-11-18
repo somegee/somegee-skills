@@ -6,10 +6,11 @@
   python setup.py --apply title-sync,my-spaces      # 고른 기능만 (그중 최신인 건 '변경 없음')
   python setup.py --apply ... --force               # 손으로 고친 흔적이 있어도 백업 후 덮기
   python setup.py --apply ... --ccd-folder "<경로>" # + 메뉴 ccd 새 탭 폴더 지정 ("" = 지정 해제)
+  python setup.py --mine [--ccd-folder "<경로>"]    # 내 세팅 그대로: 모든 기능 + 앱 설정을 한 번에 (최신은 안 건드림, 손으로 고친 흔적은 멈춤)
   python setup.py --remove                          # 전부 되돌림
   python setup.py --choices --json                  # 고르기 화면용: 묶음별 기능·지금 상태·추천·함께 필요한 기능 (아무것도 안 바꿈)
 
-기능 이름: title-sync, image-paste, my-agents, ccd-button, resume-all, my-tabs, newtab-key, my-spaces
+기능 이름: title-sync, image-paste, my-agents, ccd-button, resume-all, my-tabs, newtab-key, my-spaces, app-settings
 기능 하나만 볼 땐 scripts/install_<…>.py --status / --dry-run 도 된다. 언제 무엇을 돌릴지는 SKILL.md 2갈래(2-3 행동 가이드).
 """
 from __future__ import annotations
@@ -64,9 +65,12 @@ FEATURES = [
             "Ctrl+N → 지금 공간에 새 터미널 탭 하나"),
     Feature("my-spaces", "install_spaces_tree", "좌상단 Spaces: ▾/▸ 로 공간별 세션 목록·상태 펼치기",
             "좌상단 ▾/▸ 펼치기·접기 / 세션 줄 누르면 그 창으로 / 다른 공간으로 끌어 옮기기 / 같은 공간 안 순서 바꾸기"),
+    Feature("app-settings", "install_app_settings", "앱 설정: 어두운 화면 + 사용 통계 안 보냄 (settings.json 두 항목만)",
+            "앱 화면이 어두운 테마 (안 바뀌면 앱을 다시 켜기)"),
 ]
 ALIASES = {"ccd 버튼": "ccd-button", "ccd-menu": "ccd-button", "my-new-menu": "ccd-button",
-           "ctrl+n": "newtab-key", "ccd-key": "newtab-key", "title": "title-sync", "resume": "resume-all"}
+           "ctrl+n": "newtab-key", "ccd-key": "newtab-key", "title": "title-sync", "resume": "resume-all",
+           "settings": "app-settings", "설정": "app-settings"}
 BY_NAME = {f.name: f for f in FEATURES}
 
 # 고르기 화면(SKILL.md 「인자」 — AskUserQuestion 다중 선택)용 묶음. 질문 하나에 선택지 4개까지라 4개 이하로 묶는다.
@@ -74,12 +78,13 @@ BY_NAME = {f.name: f for f in FEATURES}
 GROUPS = [
     ("화면", ("my-tabs", "my-spaces", "my-agents", "title-sync")),
     ("버튼·메뉴", ("resume-all", "ccd-button")),
-    ("키", ("image-paste", "newtab-key")),
+    ("키·앱 설정", ("image-paste", "newtab-key", "app-settings")),
 ]
 SHORT = {
     "my-tabs": "상단 탭 바", "my-spaces": "좌상단 Spaces 펼치기", "my-agents": "좌하단 Agents 목록",
     "title-sync": "/rename → 탭 이름", "resume-all": "Resume 세션 이어하기", "ccd-button": "+ 메뉴 ccd 버튼",
     "image-paste": "Ctrl+Shift+V 그림 붙여넣기", "newtab-key": "Ctrl+N 새 터미널 탭",
+    "app-settings": "어두운 화면·통계 끔",
 }
 # 이 기능의 버튼이 들어가 있는 곳 — 같이 깔리지 않으면 눌러 볼 데가 없다
 NEEDS = {"resume-all": ("my-tabs",), "ccd-button": ("my-tabs",)}
@@ -170,7 +175,7 @@ def choices(statuses: dict) -> dict:
 
 def managed_files(folder_arg) -> list:
     """적용 전후로 시각을 비교할 파일 — 기능 파일 + 섞인 설정 파일 + 레이아웃 전부."""
-    paths = {os.path.join(APP_HOME, n) for n in ("keys.json", "programs.json")}
+    paths = {os.path.join(APP_HOME, n) for n in ("keys.json", "programs.json", "settings.json")}
     layouts = os.path.join(APP_HOME, "layouts")
     if os.path.isdir(layouts):
         paths |= {os.path.join(layouts, n) for n in os.listdir(layouts) if n.endswith(".json")}
@@ -295,6 +300,7 @@ def main() -> int:
     ap.add_argument("--apply", nargs="?", const="", default=None, metavar="이름,이름", help="낡음·없음 적용, 또는 고른 기능만")
     ap.add_argument("--dry-run", nargs="?", const="", default=None, metavar="이름,이름", help="미리보기")
     ap.add_argument("--force", action="store_true", help="손으로 고친 흔적도 백업 후 덮기")
+    ap.add_argument("--mine", action="store_true", help="내 세팅 그대로: 모든 기능 + 앱 설정을 한 번에")
     ap.add_argument("--remove", action="store_true", help="전부 되돌리기")
     ap.add_argument("--choices", action="store_true", help="고르기 화면용 묶음(--json 과 함께, 아무것도 안 바꿈)")
     ap.add_argument(ccd_folder.OPTION, dest="ccd_folder", default=None, metavar="경로", help='ccd 새 탭 폴더 ("" = 해제)')
@@ -313,6 +319,8 @@ def main() -> int:
                 for it in g["features"]:
                     print("  %-12s %-24s %s%s" % (it["name"], it["label"], it["state_label"], " (추천)" if it["recommended"] else ""))
         return 0
+    if a.mine:
+        return apply(",".join(BY_NAME), folder_arg, a.force)
     if a.apply is not None:
         return apply(a.apply, folder_arg, a.force)
     if a.dry_run is not None:

@@ -1,6 +1,6 @@
 """ccd_folder.py — 폴더 옵션 읽기·PowerShell 프로필 ccd 함수 읽기·설치본 값 왕복.
 
-  python -m pytest herdr/skills/herdr-use/desktop/tests
+  python -m pytest herdr-desktop/skills/herdr-custom/desktop/tests
 """
 import os
 import sys

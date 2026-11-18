@@ -1,6 +1,6 @@
 """resume-all — 설치·제거, my-tabs Resume 버튼 패치, 버튼 숫자·팝업 후보 규칙 일치, 이어하기 줄 만들기.
 
-  python -m pytest herdr/skills/herdr-use/desktop/tests/test_resume_all.py
+  python -m pytest herdr-desktop/skills/herdr-custom/desktop/tests/test_resume_all.py
 """
 import json
 import os

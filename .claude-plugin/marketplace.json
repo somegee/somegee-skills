@@ -33,9 +33,9 @@
       "category": "productivity"
     },
     {
-      "name": "herdr",
-      "description": "herdr 터미널 관리자 쓰기·잇기 함정 + 데스크톱 앱 커스텀 기능별 설치(탭 이름·그림 붙여넣기·Agents 목록·Ctrl+N 새 터미널·탭 x 두 번 눌러 닫기·Spaces 세션 펼치기) + 서버 탭 이름 동기화",
-      "source": "./herdr",
+      "name": "herdr-desktop",
+      "description": "herdr 데스크톱 앱 커스텀 — 내 세팅 한 번에 깔기 또는 기능별 골라 깔기(탭 이름·그림 붙여넣기·Agents 목록·Ctrl+N 새 터미널·탭 x 두 번 눌러 닫기·Spaces 세션 펼치기·Resume·앱 설정) + 서버 탭 이름 동기화",
+      "source": "./herdr-desktop",
       "category": "productivity"
     }
   ]
