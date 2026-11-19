@@ -34,3 +34,13 @@ def test_main_outside_herdr_does_nothing(monkeypatch):
     monkeypatch.setattr(label_session.subprocess, "run", lambda *a, **k: called.append(a))
     assert label_session.main() == 0
     assert called == []
+
+
+def test_hook_command_runs_in_any_windows_shell():
+    """cmd 로 켠 claude 는 훅을 cmd 문법으로 돌린다 — bash 전용 >/dev/null 이 있으면 통째로 실패했다(0.11.3)."""
+    import json
+    from pathlib import Path
+    config = json.loads((Path(__file__).resolve().parents[1] / "hooks.json").read_text(encoding="utf-8"))
+    for group in config["hooks"]["SessionStart"]:
+        for hook in group["hooks"]:
+            assert "/dev/null" not in hook["command"] and "true" not in hook["command"]

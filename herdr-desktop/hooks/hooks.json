@@ -1,12 +1,12 @@
 {
-  "description": "herdr 터미널에 Claude 세션 id 이름표 달기 (웹 관제 화면의 대화 보기용). python 이 없거나 막혀도 조용히 넘어간다",
+  "description": "herdr 터미널에 Claude 세션 id 이름표 달기 (웹 관제 화면의 대화 보기용). bash·cmd·PowerShell 어디서 켜도 도는 명령만 쓴다(>/dev/null 금지 — cmd로 켠 탭에서 통째로 실패했음, 0.11.3). 스크립트는 아무것도 출력하지 않고 항상 0으로 끝난다",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "(python \"${CLAUDE_PLUGIN_ROOT}/hooks/label_session.py\" || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/label_session.py\") >/dev/null 2>&1 || true",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/label_session.py\" || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/label_session.py\"",
             "timeout": 10,
             "async": true
           }
