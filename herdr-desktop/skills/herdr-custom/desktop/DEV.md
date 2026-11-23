@@ -70,6 +70,7 @@ my-agents 가 3초마다 `hc get` 으로 읽어 `shared("agent.msgs")` 로 내�
 - 권한 옵션: 기록에 `bypassPermissions` 가 **한 번이라도** 있으면 `--dangerously-skip-permissions`(그 플래그로 시작해야만 들어가는 모드). 아니면 마지막 모드가 `acceptEdits`/`auto`/`dontAsk`/`plan` 이면 `--permission-mode <값>`, 그 밖(`default`/`manual`/없음)은 옵션 없음(`claude --help` 의 choices 기준).
 - 폴더: claude 는 기록 폴더(`claude.project` = 시작 폴더의 영숫자 외 문자를 `-` 로 바꾼 이름)와 맞는 폴더에서 열어야 기록을 찾는다 → 셸 cwd·기록의 첫 cwd 중 slug 가 맞는 쪽, 셸 cwd 와 다르면 앞에 `Set-Location -LiteralPath '<폴더>'; `(cmd 면 `cd /d "<폴더>" && `). 줄 만들기 `resumeLine()` 은 `tests/test_resume_all.py` 가 node 로 확인.
 - 보내기: mod 의 `hc(["send", 주소, 줄])`. 앱 프로세스엔 `HC_TERMINAL_ID` 가 없어 `<hc from>` 태그로 안 감싸진다(셸에 그대로 입력됨 확인). 오버레이가 닫히면 진행 중인 호출이 취소될 수 있어 **전부 보낸 뒤** `closeOverlay`.
+- **삭제(0.12.0):** Ctrl+C·`/exit` 로 일부러 끈 세션도 후보가 돼서 줄마다 `삭제` 를 뒀다. `hc label <주소> claude.session= claude.project=`(`key=` 는 지우기, 서버 hc 로 확인)로 이름표만 지운다 → 두 곳 후보 규칙에서 빠져 버튼 숫자도 준다. 탭·셸·`.jsonl` 은 안 건드린다(되돌리기 어려운 지우기를 피함). 줄 클릭은 체크 토글이라 버튼은 `on_mouse_down`·`on_click` 둘 다 `stop_propagation`. 인자 만들기 `forgetArgs()` 는 테스트가 node 로 확인.
 - 원격 기기는 뺐다: 그쪽엔 이름표 훅이 안 돌았고 읽기 스크립트가 PowerShell 이다. 넣으려면 `exec(..., { on: machine })` + POSIX 판 읽기 스크립트.
 - 시험: 2026-11-17 사용자 PC(herdr-app 0.1.16, 플러그인 0.9.1 위 손 적용)에서 `hc server stop` → `start` 뒤 여러 세션을 한 번에 이어하는 것까지 사용자가 확인. 플러그인판(0.9.2) my-tabs 패치는 서버에 앱 원본이 없어 가짜 원본으로만 시험했다 → PC 에서 `setup.py --apply resume-all,my-tabs --force` 뒤 `herdr-app check` 로 확인.
 

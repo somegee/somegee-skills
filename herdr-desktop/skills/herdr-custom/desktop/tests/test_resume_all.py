@@ -164,3 +164,21 @@ def test_resume_line():
     r = subprocess.run([NODE, "-e", script], capture_output=True, text=True, timeout=30)
     assert r.returncode == 0, r.stderr
     assert json.loads(r.stdout) == [want for _, want in CASES]
+
+
+# ---- 삭제 = 세션 이름표 두 개 지우기 (main.js 의 forgetArgs 를 떼어 node 로) ----
+
+@pytest.mark.skipif(not NODE, reason="node 없음")
+def test_forget_args_clear_both_labels():
+    fn = re.search(r"^export function forgetArgs\(address\) \{\n.*?^\}$", read_main(), re.S | re.M).group(0)
+    script = fn.replace("export ", "") + '\nconsole.log(JSON.stringify(forgetArgs("t7")));'
+    r = subprocess.run([NODE, "-e", script], capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == ["label", "t7", "claude.session=", "claude.project="]
+
+
+def test_forget_button_does_not_toggle_row():
+    src = read_main()
+    btn = re.search(r"^  forgetButton\(r\) \{\n.*?^  \}$", src, re.S | re.M).group(0)
+    assert 'on_mouse_down("left", (_e, cx) => cx.stop_propagation())' in btn
+    assert "cx.stop_propagation(); if (enabled) this.forget(r, cx);" in btn

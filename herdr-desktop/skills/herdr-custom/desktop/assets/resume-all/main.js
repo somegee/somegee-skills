@@ -8,6 +8,8 @@
 // 대화 기록(~/.claude/projects/<project>/<id>.jsonl)은 read_sessions.ps1 이 읽는다(읽기만 함):
 //   마지막 답변 시각, 시작 폴더, 권한 모드(한 번이라도 bypassPermissions 였으면 --dangerously-skip-permissions).
 // 열 때: my-tabs 의 Resume 버튼 → openOverlay({ mod: "resume-all", kind: "dialog", ... }).
+// 줄마다 `삭제`: 일부러 끈(Ctrl+C) 세션은 그 터미널의 세션 이름표를 지워 목록·버튼 숫자에서 뺀다.
+//   탭·셸·대화 기록(.jsonl)은 그대로 — 나중에 claude 안 /resume 으로 여전히 이어할 수 있다.
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -48,6 +50,11 @@ function candidates() {
   });
 }
 
+// 삭제 = 이 터미널의 세션 이름표 두 개를 지움(`key=` 는 지우기). 다시 claude 를 켜면 훅이 새로 단다.
+export function forgetArgs(address) {
+  return ["label", address, "claude.session=", "claude.project="];
+}
+
 const slug = (path) => path.replace(/[^A-Za-z0-9]/g, "-");
 const samePath = (a, b) => (a ?? "").replace(/[\\/]+$/, "").toLowerCase() === (b ?? "").replace(/[\\/]+$/, "").toLowerCase();
 const isCmd = (shell) => /(^|[\\/])cmd(\.exe)?$/i.test(shell);
@@ -85,6 +92,7 @@ export default class ResumeAll extends View {
     this.checked = new Set();
     this.loading = this.rows.length > 0;
     this.sending = false;
+    this.forgetting = new Set();
     this.error = null;
     this.handle = cx.focus_handle();
     this.handle.focus();
@@ -147,6 +155,26 @@ export default class ResumeAll extends View {
     });
   }
 
+  forget(r, cx) {
+    if (this.sending || this.forgetting.has(r.address)) return;
+    this.forgetting.add(r.address);
+    cx.notify();
+    cx.spawn(async (cx) => {
+      let failed = null;
+      try {
+        const res = await hc(forgetArgs(r.address));
+        if (res.code !== 0) failed = (res.stderr || res.stdout || `종료 코드 ${res.code}`).trim().slice(0, 120);
+      } catch (e) { failed = String(e?.message ?? e).slice(0, 120); }
+      this.forgetting.delete(r.address);
+      if (failed) notify({ title: `${r.tab}: 삭제 실패`, body: failed, level: "warning", timeout: 12000 });
+      else {
+        this.rows = this.rows.filter((x) => x.address !== r.address);
+        this.checked.delete(r.address);
+      }
+      cx.notify();
+    });
+  }
+
   checkbox(on, enabled) {
     const t = theme();
     return div().size(16).flex_none().rounded(4).border_1().border_color(on ? t.accent : t.input)
@@ -175,7 +203,19 @@ export default class ResumeAll extends View {
         .when(Boolean(elsewhere), (el) => el.child(div().text_size(11).truncate().text_color(t.dim).child(`시작 폴더로 옮겨서 이어함: ${r.info.cwd}`))))
       .when(Boolean(mode), (el) => el.child(div().flex_none().px(7).h(20).rounded(10).flex().items_center().text_size(11)
         .bg(mode === "bypass" ? t.raised : t.chrome).text_color(mode === "bypass" ? t.foreground : t.muted).child(MODE_LABEL[mode] ?? mode)))
-      .child(div().flex_none().text_size(11).text_color(t.dim).child(r.address));
+      .child(div().flex_none().text_size(11).text_color(t.dim).child(r.address))
+      .child(this.forgetButton(r));
+  }
+
+  forgetButton(r) {
+    const t = theme();
+    const busy = this.forgetting.has(r.address), enabled = !busy && !this.sending;
+    return div().id(`forget-${r.address}`).flex_none().h(24).px(8).rounded(6).flex().items_center().text_size(11.5)
+      .border_1().border_color(t.input).text_color(t.muted).opacity(enabled ? 1 : 0.45)
+      .when(enabled, (el) => el.cursor_pointer().hover((s) => s.text_color(WARN).border_color(WARN)))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); if (enabled) this.forget(r, cx); })
+      .child(busy ? "삭제 중…" : "삭제");
   }
 
   render() {
@@ -200,7 +240,7 @@ export default class ResumeAll extends View {
         .child(div().flex_1().text_size(15).font_semibold().text_color(t.foreground).child("종료된 Claude 세션 이어하기"))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().text_size(12).text_color(t.muted).child(this.rows.length
-        ? "재부팅 등으로 셸만 남은 탭입니다. 이어할 세션을 고르면 각 탭에서 claude --resume 을 실행합니다."
+        ? "재부팅 등으로 셸만 남은 탭입니다. 이어할 세션을 고르면 각 탭에서 claude --resume 을 실행합니다. 일부러 끈 세션은 '삭제'로 목록에서 뺍니다(탭·대화 기록은 남음)."
         : "이어할 세션이 없습니다. (claude 가 꺼지고 셸만 남은 탭이 없음)"))
       .when(Boolean(this.error), (el) => el.child(div().text_size(11.5).text_color(WARN).child(this.error)))
       .child(v_flex().flex_1().min_h(0).gap(2).overflow_y_scrollbar().children(this.rows.map((r) => this.row(r))))
