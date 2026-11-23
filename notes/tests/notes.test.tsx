@@ -1,5 +1,6 @@
 import { expect, mock, test, type Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
+import { TEXT } from '../hooks/i18n'
 
 // 노트 파일을 메모리에 둔다. 쓴 횟수를 돌려준다. 경로는 / 로 맞춰 둔다(엔진이 \ 로 바꿔 넘기기도 한다).
 // sessionId 를 넘기면 엔진이 물을 때마다 그 값을 세션 id 로 답한다(/resume 처럼 도중에 바뀌는 경우).
@@ -1065,4 +1066,49 @@ test('notes 도구를 등록하지 않은 헤드리스 세션에는 알림을 �
   await $.turn.start({ text: '크론', turnId: 't1' } as never)
   const r = (await $.tool.call({ tool: 'Bash', command: 'ls' } as never)) as { context?: string[] }
   expect((r.context ?? []).some(c => c.startsWith('[notes]'))).toBe(false)
+})
+
+test('턴 첫 알림에 notes 도구 다섯 개 이름과 notes_check 로 끝난 단계를 체크하라는 말이 들어 있다(ko·en)', async ($, on) => {
+  for (const lang of ['ko', 'en'] as const) {
+    const text = TEXT[lang].turnReminder
+    for (const name of ['notes_write', 'notes_check', 'notes_read', 'notes_status', 'notes_close']) expect(text).toContain(name)
+    expect(text).toContain('#N')
+  }
+  // 실제로 붙는 알림에도 들어 있다.
+  fakeFiles(on)
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  await startSession($, on)
+  await $.turn.start({ text: '조사해줘', turnId: 't1' } as never)
+  const r = (await $.tool.call({ tool: 'Bash', command: 'ls' } as never)) as { context?: string[] }
+  expect((r.context ?? []).some(c => c.startsWith('[notes]') && c.includes('notes_check'))).toBe(true)
+})
+
+test('이 세션이 마지막으로 쓴 탭에 체크 안 한 단계가 있으면 턴 첫 알림에 미체크 줄이 붙고, 다 체크하면 안 붙는다', async ($, on) => {
+  fakeFiles(on)
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  await startSession($, on)
+  const pending = (r: unknown) => ((r as { context?: string[] }).context ?? []).filter(c => c.includes('미체크'))
+
+  // 탭이 없으면 미체크 줄은 없다(기본 알림만).
+  await $.turn.start({ text: '조사해줘', turnId: 't1' } as never)
+  expect(pending(await $.tool.call({ tool: 'Bash', command: 'ls' } as never))).toEqual([])
+
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '피이관', items: ['A', 'B', 'C'] } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '피이관', items: [1] } as never)
+
+  await $.turn.start({ text: '계속', turnId: 't2' } as never)
+  const lines = pending(await $.tool.call({ tool: 'Bash', command: 'ls' } as never))
+  expect(lines).toEqual(["[notes] '피이관' 탭 미체크 2/3 — 끝난 단계는 notes_check, 막힌 단계는 notes_status."])
+
+  // 서브에이전트 호출에는 붙지 않는다.
+  await $.turn.start({ text: '맡겨', turnId: 't3' } as never)
+  expect(pending(await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'a1' } as never))).toEqual([])
+
+  await $.tool.call({ tool: 'mcp__notes__notes_check', tab: '피이관', items: [2, 3] } as never)
+  await $.turn.start({ text: '마무리', turnId: 't4' } as never)
+  const r = (await $.tool.call({ tool: 'Bash', command: 'ls' } as never)) as { context?: string[] }
+  expect((r.context ?? []).some(c => c.startsWith('[notes]'))).toBe(true)
+  expect(pending(r)).toEqual([])
 })

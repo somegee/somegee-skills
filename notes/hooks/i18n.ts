@@ -63,7 +63,12 @@ const ko = {
   guide: GUIDE_KO,
   // 턴마다 처음 부르는 도구 결과 뒤에 붙는 알림(모델만 읽음). 서버 안내 칸은 mod 로 못 바꾸고 시스템 프롬프트 훅은 회사 PC 에서 막혀서 이 길을 쓴다.
   turnReminder:
-    '[notes] 이번 턴의 첫 도구 호출이다. 이 요청이 ① 할 일 2개 이상 ② 파일 수정·배포·게시 ③ 끝에 판단·선택지를 사용자에게 넘김 ④ 스킬 절차 진행 중 하나라도 해당하면, 다음 도구 호출 전에 notes_write 로 탭부터 만든다(이어지는 일이면 기존 탭에 add_items). 한 번 조회하고 답하면 끝나는 질문·잡담이면 무시한다.',
+    '[notes] 이번 턴의 첫 도구 호출이다. notes 도구: notes_write / notes_check / notes_read / notes_status / notes_close. ' +
+    '이 요청이 ① 할 일 2개 이상 ② 파일 수정·배포·게시 ③ 끝에 판단·선택지를 사용자에게 넘김 ④ 스킬 절차 진행 중 하나라도 해당하면, 다음 도구 호출 전에 notes_write 로 탭부터 만든다(이어지는 일이면 기존 탭에 add_items). 한 번 조회하고 답하면 끝나는 질문·잡담이면 탭은 만들지 않는다. ' +
+    '이미 진행 중인 탭이 있으면 끝난 단계를 notes_check 로 바로 체크한다(items = notes_read 의 #N 위치 번호).',
+  // 턴 첫 알림에 덧붙이는 줄: 이 세션이 마지막으로 쓴 탭에 체크 안 한 단계가 남았을 때.
+  pendingReminder: (tab: string, open: number, total: number) =>
+    `[notes] '${tab}' 탭 미체크 ${open}/${total} — 끝난 단계는 notes_check, 막힌 단계는 notes_status.`,
   // 갱신 시각
   justNow: '방금',
   minAgo: (n: number) => `${n}분 전`,
@@ -165,7 +170,11 @@ export type Strings = typeof ko
 const en: Strings = {
   guide: GUIDE_EN,
   turnReminder:
-    '[notes] This is the first tool call of this turn. If the request (1) has 2 or more things to do, (2) edits files, deploys or posts, (3) ends by handing the user a decision or options, or (4) follows a skill procedure, create the tab with notes_write before your next tool call (append with add_items for follow-up work). Ignore this for a one-lookup question or small talk.',
+    '[notes] This is the first tool call of this turn. notes tools: notes_write / notes_check / notes_read / notes_status / notes_close. ' +
+    'If the request (1) has 2 or more things to do, (2) edits files, deploys or posts, (3) ends by handing the user a decision or options, or (4) follows a skill procedure, create the tab with notes_write before your next tool call (append with add_items for follow-up work). Do not create a tab for a one-lookup question or small talk. ' +
+    'If a tab is already in progress, check finished steps right away with notes_check (items = the #N position numbers from notes_read).',
+  pendingReminder: (tab, open, total) =>
+    `[notes] Tab '${tab}' has ${open}/${total} steps unchecked. Check finished steps with notes_check; mark blocked ones with notes_status.`,
   justNow: 'just now',
   minAgo: n => `${n} min ago`,
   hourAgo: n => `${n} h ago`,

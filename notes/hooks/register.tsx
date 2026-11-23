@@ -164,6 +164,15 @@ function shouldRemind(tool: string, agentId: string | undefined): boolean {
   turnNotes = 'done'
   return !tool.startsWith(NOTES_TOOL_PREFIX)
 }
+// 턴 첫 알림에 덧붙일 줄: 이 세션이 만들었거나 마지막으로 쓴 탭에 체크 안 한 단계가 남았으면 그 개수를 알린다.
+// 탭이 없거나 다 체크했으면 덧붙이지 않는다. 체크 규칙이 도구 설명(검색 결과에서 잘림)으로는 잘 안 전해져서 둔다.
+async function pendingReminder($: EngineInterface): Promise<string[]> {
+  if (sessionId === '') return []
+  const b = await read($, book)
+  const tab = findTab(b, latestTabs(b.tabs).get(sessionId))
+  const open = tab?.items.filter(i => !i.isDone).length ?? 0
+  return tab === undefined || open === 0 ? [] : [L.pendingReminder(tab.title, open, tab.items.length)]
+}
 const livePath = ($: EngineInterface, id: string) => `${dataDir($.plugin.root)}/live/${id.replace(/[^A-Za-z0-9-]/g, '')}.json`
 async function setLive($: EngineInterface, state: LiveState) {
   if (sessionId === '' || state === myLive.state) return
@@ -434,13 +443,14 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined) await setLive($, 'ask')
     return next(e)
   })
-  // 턴마다 메인 에이전트가 처음 부르는 도구(notes 도구 말고)의 결과 뒤에 탭부터 만들 일인지 한 줄 알린다(shouldRemind).
+  // 턴마다 메인 에이전트가 처음 부르는 도구(notes 도구 말고)의 결과 뒤에 탭부터 만들 일인지·끝난 단계 체크를 알린다(shouldRemind).
+  // 이 세션 탭에 체크 안 한 단계가 남았으면 한 줄 더 붙인다(pendingReminder).
   on('tool.call', async ($, e, next) => {
     const isReminding = shouldRemind(e.tool, e.agentId)
     const result = await next(e)
     if (myLive.state === 'ask') await setLive($, 'working')
     if (!isReminding || result.deny !== undefined) return result
-    return { ...result, context: [...(result.context ?? []), L.turnReminder] }
+    return { ...result, context: [...(result.context ?? []), L.turnReminder, ...(await pendingReminder($))] }
   })
   on('session.end', async ($, e, next) => {
     await setLive($, 'idle')
