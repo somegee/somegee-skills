@@ -9,6 +9,7 @@
   python install_tabs_agent_name.py --remove   # 기본 tabs 로 되돌림 (my-tabs 폴더는 남김)
 설치할 때마다 원본 mods/tabs/main.js 에서 다시 고쳐 덮어쓴다(patchlib).
 resume-all(install_resume_all.py 가 깖)이 있으면 우상단 Files 왼쪽에 Resume 버튼을 넣는다 — 없는데 가리키면 버튼이 아무것도 안 하므로 있을 때만.
+claude-oauth(install_claude_oauth.py 가 깖)도 같은 규칙으로 OAuth 버튼(Claude 계정 전환 팝업)을 넣는다.
 """
 import os
 import sys
@@ -104,13 +105,35 @@ RESUME_PATCHES = [
 ]
 
 
+OAUTH_MOD = "claude-oauth"
+# 우상단 Files 왼쪽 OAuth 버튼 → claude-oauth 팝업(Claude 계정 전환). 크기는 assets/claude-oauth/mod.json 과 같게.
+OAUTH_RENDER = NL.join([
+    "    // [herdr-custom claude-oauth] Files/Changes 옆: Claude 계정(OAuth 토큰) 전환 팝업",
+    '    const oauthButton = () => h_flex().id("claude-oauth").h(26).px(8).gap(5).flex_none().items_center().rounded(6)',
+    "      .text_size(12).bg(t.chrome).text_color(t.muted)",
+    '      .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)',
+    '      .on_click(() => openOverlay({ mod: "%s", kind: "dialog", width: 540, height: 660 }))' % OAUTH_MOD,
+    '      .child(svg("mods/%s/key.svg").size(14)).child("OAuth");' % OAUTH_MOD,
+    "",
+])
+# RESUME_PATCHES 뒤에 건다 — 둘 다 있으면 Resume · OAuth · Files 순서
+OAUTH_PATCHES = [
+    ("    return h_flex().size_full().min_w(0).px(10)", OAUTH_RENDER + "    return h_flex().size_full().min_w(0).px(10)"),
+    (FILES_BUTTON, "      .child(oauthButton())" + NL + FILES_BUTTON),
+]
+
+
+def has_oauth() -> bool:
+    return os.path.exists(mod_js(OAUTH_MOD))
+
+
 def has_resume() -> bool:
     # rename_self 는 "mods/tabs/" 만 바꾸므로 "mods/resume-all/…" 경로는 그대로 남는다
     return os.path.exists(mod_js(RESUME_MOD))
 
 
 def patches() -> list:
-    return PATCHES + (RESUME_PATCHES if has_resume() else [])
+    return PATCHES + (RESUME_PATCHES if has_resume() else []) + (OAUTH_PATCHES if has_oauth() else [])
 
 
 def patched(src: str) -> str:
@@ -121,7 +144,8 @@ def patched(src: str) -> str:
 
 
 def wiring() -> str:
-    return "Resume 버튼 %s" % ("있음" if has_resume() else "없음(resume-all 미설치)")
+    return "Resume 버튼 %s / OAuth 버튼 %s" % ("있음" if has_resume() else "없음(resume-all 미설치)",
+                                            "있음" if has_oauth() else "없음(claude-oauth 미설치)")
 
 
 def build() -> bool:
@@ -133,12 +157,12 @@ def plan() -> Plan:
 
 
 def refresh() -> None:
-    """resume-all 을 만들거나 지운 뒤 부른다 — my-tabs 가 이미 있으면 Resume 버튼만 다시 맞춘다(레이아웃은 안 건드림)."""
+    """resume-all·claude-oauth 를 만들거나 지운 뒤 부른다 — my-tabs 가 이미 있으면 버튼만 다시 맞춘다(레이아웃은 안 건드림)."""
     if not os.path.exists(mod_js(CLONE)):
         return
     st = evaluate(safe_plan(FEATURE, plan))
     if st.state == HAND:  # resume-all 적용이 손으로 고친 my-tabs 를 몰래 덮지 않게
-        print("!! my-tabs 는 손으로 고친 흔적이 있어 Resume 버튼을 안 맞춤 — 확인 뒤 install_tabs_agent_name.py --force")
+        print("!! my-tabs 는 손으로 고친 흔적이 있어 Resume·OAuth 버튼을 안 맞춤 — 확인 뒤 install_tabs_agent_name.py --force")
         return
     if build():
         print("my-tabs 다시 만듦:", wiring())

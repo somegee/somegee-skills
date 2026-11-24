@@ -1,6 +1,6 @@
 # herdr 데스크톱 앱 커스텀 (Windows)
 
-herdr 데스크톱 앱(herdr-app)에 아래 9가지를 깔아 주는 묶음입니다. **기능마다 상태를 보고, 낡았거나 없는 것만 고칩니다** — 이미 최신인 기능의 파일은 건드리지 않습니다(다시 쓰면 그 직후 단축키가 잠깐 안 먹는 일이 있었음).
+herdr 데스크톱 앱(herdr-app)에 아래 10가지를 깔아 주는 묶음입니다. **기능마다 상태를 보고, 낡았거나 없는 것만 고칩니다** — 이미 최신인 기능의 파일은 건드리지 않습니다(다시 쓰면 그 직후 단축키가 잠깐 안 먹는 일이 있었음).
 다른 PC 에서도 이 폴더를 통째로 옮겨 `1_설치.bat` 을 더블클릭하면 됩니다.
 
 | # | 기능 | 어디서 보이나 |
@@ -13,7 +13,8 @@ herdr 데스크톱 앱(herdr-app)에 아래 9가지를 깔아 주는 묶음입�
 | 6 | **Ctrl+N → 새 터미널 탭** — 앱 자체 기능(`tab.new`)을 Ctrl+N 에 건다. 예전판(Ctrl+N → 새 Claude 탭)은 키가 자주 안 먹어서 뺐고, 깔려 있으면 치운다. Claude 탭은 우상단 `+` 메뉴로 | 어디서든 Ctrl+N |
 | 7 | **좌상단 Spaces 접기/펼치기** — 공간 줄 왼쪽 ▾/▸ 로 그 공간의 세션 목록을 펼침. 세션마다 이름 + 상태(작업 중 도는 표시 / `Needs you` / 끝남 채운 점 / 쉬는 중 빈 동그라미), 작업 중이면 아래 작은 글씨로 하는 일. 세션 줄을 누르면 그 창으로 이동, **끌어서 다른 공간 줄에 놓으면 그 공간으로 옮김**(같은 기기만, 대화는 안 끊김). 펼침 상태는 앱을 다시 켜도 유지(처음엔 선택된 공간만 펼침). **마지막 세션을 닫아 세션이 0개가 된 공간은 흐린 빈 줄로 남는다**(이름을 붙인 공간만) — 누르면 같은 이름·폴더·색으로 다시 열리고(기본 셸 탭 1개), 다른 세션을 끌어다 놓을 수도 있다. 줄 오른쪽 `×` 는 완전히 없애기 | 좌상단 Spaces |
 | 8 | **우상단 `Resume` — 종료된 Claude 세션 일괄 이어하기** — 재부팅·로그아웃 뒤 herdr 를 켜면 탭은 그대로인데 claude 는 꺼지고 셸만 남습니다. Files 왼쪽 `Resume` 버튼(이어할 세션이 있으면 강조 + `Resume 3` 처럼 개수)을 누르면 그런 탭 목록이 뜨고(마지막 답변 시각·권한 모드, 최근 순), 고른 탭마다 `claude --resume` 으로 이전 대화를 엽니다. 권한 옵션(`--dangerously-skip-permissions` 등)은 대화 기록을 보고 자동으로 붙입니다. 일부러 끈 세션은 줄 오른쪽 `삭제`로 목록에서 뺍니다(탭·대화 기록은 남음). 이 PC 탭만 | 우상단 |
-| 9 | **앱 설정** — 어두운 화면 + 사용 통계 안 보냄 (`settings.json` 의 `appearance`·`telemetry` 두 항목만, 되돌리면 적용 전 값) | 앱 전체 |
+| 9 | **우상단 `OAuth` — Claude 계정(OAuth 토큰) 전환** — 누르면 계정 목록·5시간/7일 한도 사용량·서버/로컬PC 반영 상태가 뜨고, 여유 많은 순 한 줄 목록, 지금 계정이 70% 넘으면 가장 여유 있는 계정으로 바꾸기 추천, 다른 계정으로 바꾸기·로그인 계정으로 되돌리기·토큰 추가·이름 바꾸기·지우기를 합니다. 보관함과 반영은 서버 쪽 백엔드가 맡고 이 팝업은 부탁만 합니다 — 설정 파일 `.herdr-custom\claude-oauth.json` 이 있어야 동작(`install_claude_oauth.py --on <기기> --command "<명령>"`) | 우상단 |
+| 10 | **앱 설정** — 어두운 화면 + 사용 통계 안 보냄 (`settings.json` 의 `appearance`·`telemetry` 두 항목만, 되돌리면 적용 전 값) | 앱 전체 |
 
 4·5·7번(좌하단 Agents·상단 탭·좌상단 Spaces)에서 **'끝남' 세션은 눌러 봐도 끝남(채운 점)으로 남고, 다른 세션을 누를 때 '쉬는 중'(빈 동그라미)으로 바뀝니다**(앱 기본은 누르는 순간 바뀜 — 표시만 늦춤).
 
@@ -34,7 +35,7 @@ herdr 데스크톱 앱(herdr-app)에 아래 9가지를 깔아 주는 묶음입�
 
 여러 번 실행해도 결과는 같습니다(최신이면 `변경 없음`, 파일 시각도 그대로).
 
-- 기능 이름: `title-sync`(1·2) · `image-paste`(3) · `my-agents`(4) · `my-tabs`(5) · `newtab-key`(6) · `my-spaces`(7) · `resume-all`(8 — 버튼은 5번 `my-tabs` 안에 있어 둘 다 필요)
+- 기능 이름: `title-sync`(1·2) · `image-paste`(3) · `my-agents`(4) · `my-tabs`(5) · `newtab-key`(6) · `my-spaces`(7) · `resume-all`(8 — 버튼은 5번 `my-tabs` 안에 있어 둘 다 필요) · `claude-oauth`(9 — 마찬가지로 `my-tabs` 필요, 설정 파일 필요)
 - **손으로 고친 흔적**: 설치본 mod 파일을 직접 고쳐 둔 경우입니다(설치 기록 `%USERPROFILE%\.config\herdr-app\.herdr-custom\installed.json` 과 비교). 그대로 두고 멈추며, 덮으려면 `--apply <이름> --force` — 덮기 전에 `.herdr-custom\backup\<시각>\` 로 백업합니다.
 - 기능 하나만: `python scripts\install_<…>.py --status` / `--dry-run` / (옵션 없음 = 적용) / `--remove` 이 PC 의 앱 설정 폴더는 `%USERPROFILE%\.config\herdr-app\` 입니다.
 
@@ -49,6 +50,7 @@ herdr 데스크톱 앱(herdr-app)에 아래 9가지를 깔아 주는 묶음입�
 | 5 | 상단 탭의 x 를 한 번 누름 → x 바탕이 빨갛게(탭은 그대로) → 3초 안에 한 번 더 → 닫힘 / 한 번 누르고 3초 기다리면 원래 색으로 |
 | 6 | `Ctrl+N` → 지금 공간에 새 터미널 탭 **하나** |
 | 8 | 우상단 Files 왼쪽에 흐린 `Resume` → herdr **밖** PowerShell 에서 `hc server stop` → `hc server start`(재부팅과 같은 상태, 일하던 Claude 의 진행 중 답변은 잘림) → `Resume N` 으로 강조 → 누르면 팝업에 탭별 마지막 답변 시각·권한 배지 → `선택한 N개 이어하기`(Enter) → 각 탭에서 claude 가 이전 대화로 열리고 버튼 숫자가 줄어듦. 가볍게: 아무 셸 탭에 `hc label <t> claude.session=<기존 세션 id> claude.project=<기록 폴더 이름>` → `Resume 1` (끝나면 그 탭 닫기) |
+| 9 | 우상단 `OAuth` → 팝업에 계정이 여유 많은 순 한 줄씩(이름·초기화까지 남은 시간·막대·%) → 줄 이름을 누르면 펼쳐져 토큰 끝자리·한도별 막대·이름 바꾸기·삭제 → 다른 계정 줄의 `쓰기` → 맨 위 '지금 새 세션이 쓰는 계정'이 바뀌고 서버·로컬PC 칩이 '반영 중…' → '반영됨'. `+ 토큰 추가`에 이름·`claude setup-token` 값 → `저장`(확인 중… 뒤 목록에 추가). 설정이 없으면 '설정이 필요합니다' |
 | 4·5·7 | 다른 세션에 있을 때 끝난(채운 점) 세션을 누름 → **계속 채운 점**(탭 점·공간 점도 그대로) → 다른 세션을 누르면 그때 빈 동그라미 |
 | 7 | 좌상단 공간 줄 왼쪽 ▾ 누르면 세션 목록이 접히고(▸) 다시 누르면 펼쳐짐 — 이때 **선택된 공간은 안 바뀜** / 세션 줄 누르면 그 창으로 이동 / 앱 껐다 켜도 펼침·접힘 그대로 / 공간을 끌어 순서 바꾸기도 그대로 됨 / 세션 없는 공간엔 버튼 없음 / 세션 줄을 다른 공간 줄로 끌면 그 줄에 점선 → 놓으면 그 공간으로 넘어가고 대화가 그대로 이어지며 탭 이름도 그대로 / 다시 원래 공간으로 끌어 옮기기 / 같은 공간 안에서 세션 줄을 다른 세션 줄 위로 끌면 그 줄에 점선 → 놓으면 그 탭 자리로 순서가 바뀜(상단 탭 순서도 같이, 0.7.2) / 목록 밖에 놓으면 취소 |
 
@@ -57,7 +59,7 @@ herdr 데스크톱 앱(herdr-app)에 아래 9가지를 깔아 주는 묶음입�
 ## 상태 확인 · 되돌리기
 
 - **`2_상태확인.bat`** — 아무것도 바꾸지 않고 기능별 상태만 보여 줌 (`python setup.py --status`, `--json` 가능)
-- **`3_되돌리기.bat`** — 전부 해제하고 기본 레이아웃(`main`)으로 돌아감. 복제본 파일은 남겨 둠(`mods\resume-all\` 만 지움)
+- **`3_되돌리기.bat`** — 전부 해제하고 기본 레이아웃(`main`)으로 돌아감. 복제본 파일은 남겨 둠(`mods\resume-all\`·`mods\claude-oauth\` 만 지움, OAuth 설정 파일은 남김)
 - **완전 삭제** — 되돌리기 후 `%USERPROFILE%\.config\herdr-app\` 에서 `layouts\my-main.json`, `mods\my-agents\`, `mods\my-tabs\`, `mods\my-spaces\` 를 지움
 - 화면이 망가졌을 때 비상 탈출: 앱에서 **`Ctrl+Alt+Shift+Esc`** (기본 화면으로 복귀)
 
@@ -95,6 +97,7 @@ herdr-custom/
 │   ├── install_tabs_agent_name.py  5
 │   ├── install_newtab_key.py       6 (예전 Ctrl+N 새 Claude 탭 치우기 포함)
 │   ├── install_resume_all.py       8 (버튼은 5번 my-tabs 가 넣음)
+│   ├── install_claude_oauth.py     9 (버튼은 5번 my-tabs 가 넣음, --on/--command 로 설정 파일)
 │   ├── done_hold.py                4·5·8 공용: '끝남'을 다른 세션 누를 때까지 끝남으로 보이기
 │   ├── install_spaces_tree.py      8
 │   ├── patchlib.py                 4·5·7 공용: 원본 mod 에서 다시 고친 내용 만들기(다를 때만 덮어씀)
@@ -104,7 +107,8 @@ herdr-custom/
 └── assets/
     ├── title-sync/                 mod 원본 (main.js, mod.json)
     ├── image-paste/                mod 원본 + clipimg.cs (설치 때 빌드)
-    └── resume-all/                 9 팝업 mod (main.js, read_sessions.ps1 — 대화 기록 읽기만, mod.json, resume.svg)
+    ├── resume-all/                 9 팝업 mod (main.js, read_sessions.ps1 — 대화 기록 읽기만, mod.json, resume.svg)
+    └── claude-oauth/               9 팝업 mod (main.js — 서버 명령에 부탁만, mod.json, key.svg)
 ```
 
 
