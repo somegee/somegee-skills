@@ -17,7 +17,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import children_lists, ensure_own_layout, layout_path, load, save, target_layout  # noqa: E402
 import done_hold  # noqa: E402
-from patchlib import apply_patches, desired_clone, mod_js, rebuild  # noqa: E402
+from patchlib import apply_patches, desired_clone, mod_js, rebuild, register  # noqa: E402
+import addons  # noqa: E402
 from featurelib import Check, Plan, Want, run_cli  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -132,11 +133,16 @@ def build(src: str) -> str:
     return done_hold.apply(src, BASE)
 
 
+register(BASE, CLONE, build)
+
+
 def install() -> None:
     target = ensure_own_layout()
     changed = rebuild(BASE, CLONE, build)
     n = point_layout(target, BASE, CLONE)
-    print("적용 완료: 레이아웃", target, "/ agents → my-agents 연결", n, "곳", "(코드 고침)" if changed else "(코드 변경 없음)")
+    note = addons.summary(CLONE)
+    extra = ["/", note] if note else []
+    print("적용 완료: 레이아웃", target, "/ agents → my-agents 연결", n, "곳", "(코드 고침)" if changed else "(코드 변경 없음)", *extra)
 
 
 def remove() -> None:

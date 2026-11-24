@@ -35,7 +35,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import ensure_own_layout  # noqa: E402
 from install_agents_name_only import clone_plan, point_layout  # noqa: E402
-from patchlib import apply_patches, ensure_imports, rebuild  # noqa: E402
+from patchlib import apply_patches, ensure_imports, rebuild, register  # noqa: E402
+import addons  # noqa: E402
 from featurelib import Plan, run_cli  # noqa: E402
 import done_hold  # noqa: E402
 
@@ -632,6 +633,9 @@ def build(src: str) -> str:
     return done_hold.apply(ensure_imports(src, NEEDED), BASE)
 
 
+register(BASE, CLONE, build)
+
+
 def plan() -> Plan:
     return clone_plan(FEATURE, BASE, CLONE, build)
 
@@ -640,7 +644,9 @@ def install() -> None:
     target = ensure_own_layout()
     changed = rebuild(BASE, CLONE, build)
     n = point_layout(target, BASE, CLONE)
-    print("적용 완료: 레이아웃", target, "/ spaces → my-spaces 연결", n, "곳", "(코드 고침)" if changed else "(코드 변경 없음)")
+    note = addons.summary(CLONE)
+    extra = ["/", note] if note else []
+    print("적용 완료: 레이아웃", target, "/ spaces → my-spaces 연결", n, "곳", "(코드 고침)" if changed else "(코드 변경 없음)", *extra)
 
 
 def remove() -> None:

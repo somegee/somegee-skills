@@ -16,7 +16,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import ensure_own_layout  # noqa: E402
 from install_agents_name_only import clone_plan, point_layout  # noqa: E402
-from patchlib import apply_patches, ensure_imports, mod_js, rebuild  # noqa: E402
+from patchlib import apply_patches, ensure_imports, mod_js, rebuild, register  # noqa: E402
+import addons  # noqa: E402
 from featurelib import HAND, Plan, evaluate, run_cli, safe_plan  # noqa: E402
 import done_hold  # noqa: E402
 
@@ -121,7 +122,11 @@ def patched(src: str) -> str:
 
 
 def wiring() -> str:
-    return "Resume 버튼 %s" % ("있음" if has_resume() else "없음(resume-all 미설치)")
+    extra = addons.summary(CLONE)
+    return "Resume 버튼 %s%s" % ("있음" if has_resume() else "없음(resume-all 미설치)", " / " + extra if extra else "")
+
+
+register(BASE, CLONE, patched)
 
 
 def build() -> bool:

@@ -58,6 +58,7 @@ herdr 데스크톱 앱(herdr-app)에 아래 9가지를 깔아 주는 묶음입�
 
 - **`2_상태확인.bat`** — 아무것도 바꾸지 않고 기능별 상태만 보여 줌 (`python setup.py --status`, `--json` 가능)
 - **`3_되돌리기.bat`** — 전부 해제하고 기본 레이아웃(`main`)으로 돌아감. 복제본 파일은 남겨 둠(`mods\resume-all\` 만 지움)
+- **각자 덧붙인 기능**(복제본에 넣은 내 버튼·코드)은 `%USERPROFILE%\.config\herdr-app\.herdr-custom\addons\<이름>.json` 에 적어 두면 다시 설치해도 지켜집니다 — 꼴은 `scripts\addons.py` 맨 위. 이 폴더는 되돌리기도 안 건드립니다
 - **완전 삭제** — 되돌리기 후 `%USERPROFILE%\.config\herdr-app\` 에서 `layouts\my-main.json`, `mods\my-agents\`, `mods\my-tabs\`, `mods\my-spaces\` 를 지움
 - 화면이 망가졌을 때 비상 탈출: 앱에서 **`Ctrl+Alt+Shift+Esc`** (기본 화면으로 복귀)
 

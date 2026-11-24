@@ -137,6 +137,23 @@ def layout_info() -> dict:
             "target": target_layout(), "chosen": os.environ.get(LAYOUT_ENV) or None, "new_default": "my-main"}
 
 
+def addon_rows() -> list:
+    import addons
+    return addons.status()
+
+
+def addons_lines(rows=None) -> list:
+    """각자 덧붙인 기능(.herdr-custom/addons) — 복제본을 다시 만들 때도 같이 들어간다. 없으면 빈 목록.
+    못 넣은 것은 '!!' 로 시작한다 — 기능 상태는 '최신'이어도 그 버튼·코드가 빠진 채 만들어진 것."""
+    import addons
+    rows = addons.status() if rows is None else rows
+    lines = []
+    for r in rows:
+        where = r["clone"] or "파일"
+        lines.append(("!! %s: %s 못 넣음 — %s" % (where, r["name"], r["problem"])) if r["problem"] else "%s: %s 들어감" % (where, r["name"]))
+    return lines
+
+
 def layout_line() -> str:
     info = layout_info()
     own = ", ".join(info["own"]) or "없음"
@@ -145,7 +162,7 @@ def layout_line() -> str:
 
 def print_status(statuses: dict, as_json: bool) -> int:
     if as_json:
-        print(json.dumps({"features": [s.as_dict() for s in statuses.values()], "app": app_line(), "layout": layout_info()},
+        print(json.dumps({"features": [s.as_dict() for s in statuses.values()], "app": app_line(), "layout": layout_info(), "addons": addon_rows()},
                          ensure_ascii=False, indent=2))
     else:
         for s in statuses.values():
@@ -153,6 +170,8 @@ def print_status(statuses: dict, as_json: bool) -> int:
         print()
         print(app_line())
         print(layout_line())
+        for line in addons_lines():
+            print("덧붙이기 —", line)
         todo = [n for n, s in statuses.items() if s.state in fl.NEEDS_APPLY]
         if todo:
             print("\n적용하려면: python setup.py --apply  (낡음·없음만: %s)  — 미리보기는 --dry-run" % ", ".join(todo))
@@ -173,7 +192,7 @@ def choices(statuses: dict) -> dict:
             items.append({"name": n, "label": SHORT[n], "desc": BY_NAME[n].desc, "state": st.state, "state_label": st.label,
                           "detail": st.detail, "recommended": st.state in fl.NEEDS_APPLY, "needs": list(NEEDS.get(n, ()))})
         groups.append({"title": title, "features": items})
-    return {"groups": groups, "app": app_line(), "layout": layout_info()}
+    return {"groups": groups, "app": app_line(), "layout": layout_info(), "addons": addons_lines()}
 
 
 def managed_files() -> list:
@@ -264,6 +283,8 @@ def report(chosen, changed, held, failed, after, touched) -> None:
         print("  (my-tabs 는 %s 이 버튼 연결을 맞추느라 같이 다시 만들었습니다)" % "·".join(linked))
     print(app_line())
     print(layout_line())
+    for line in addons_lines():
+        print("덧붙이기 —", line)
     if changed:
         print("\n사람이 눌러 볼 것 (바뀐 기능만):")
         for n in changed:

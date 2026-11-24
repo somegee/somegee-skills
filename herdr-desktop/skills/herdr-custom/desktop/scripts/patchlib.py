@@ -4,6 +4,7 @@
 **원본에서 처음부터 다시 고쳐** 복제본(mods/<clone>/main.js)을 덮어쓴다.
 - 고친 판을 또 고치는 '덧대기'가 없어서, 패치 문장은 늘 원본 문장 기준이다.
 - 복제본을 손으로 고친 내용은 다음 설치 때 사라진다 → 고칠 땐 설치 스크립트를 고친다.
+- 플러그인 밖에서 각자 덧붙인 것은 .herdr-custom/addons/*.json 에 적어 두면 다시 만들 때마다 같이 들어간다(addons.py).
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from typing import Callable, Sequence, Union
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import APP_HOME, app_exe  # noqa: E402
 from featurelib import PatchError, write_if_changed  # noqa: E402
+import addons  # noqa: E402
 
 CLONE_WAIT_TRIES = 20  # mod.clone 뒤 복제 폴더가 생길 때까지 확인하는 횟수
 CLONE_WAIT_SECONDS = 0.25  # 그 간격
@@ -86,10 +88,32 @@ def desired_clone(base: str, clone: str, build: Callable[[str], str]) -> bytes:
     except OSError:
         sys.exit("기본 mod 가 없음: " + mod_js(base))
     crlf = "\r\n" in raw
-    new = rename_self(build(raw.replace("\r\n", "\n")), base, clone)
+    built, _report = addons.apply(build(raw.replace("\r\n", "\n")), clone)
+    new = rename_self(built, base, clone)
     if crlf:
         new = new.replace("\n", "\r\n")
     return new.encode("utf-8")
+
+
+# 복제본 이름 → (원본, build) — addons.summary 가 '실제로 만들어 보고' 어떤 덧붙이기가 걸렸는지 보려고. 각 설치 스크립트가 등록한다
+BUILDERS: dict = {}
+
+
+def register(base: str, clone: str, build: Callable[[str], str]) -> None:
+    BUILDERS[clone] = (base, build)
+
+
+def desired_clone_report(clone: str) -> list:
+    """이 복제본에 덧붙이기가 어떻게 걸리는지 [(이름, 문제 또는 "")] — 파일은 안 씀. 원본이 없으면 []."""
+    if clone not in BUILDERS:
+        return []
+    base, build = BUILDERS[clone]
+    try:
+        with io.open(mod_js(base), encoding="utf-8", newline="") as f:
+            raw = f.read().replace("\r\n", "\n")
+        return addons.apply(build(raw), clone)[1]
+    except (OSError, PatchError):
+        return []
 
 
 def rebuild(base: str, clone: str, build: Callable[[str], str]) -> bool:
