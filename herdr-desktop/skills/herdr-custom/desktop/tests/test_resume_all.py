@@ -182,3 +182,25 @@ def test_forget_button_does_not_toggle_row():
     btn = re.search(r"^  forgetButton\(r\) \{\n.*?^  \}$", src, re.S | re.M).group(0)
     assert 'on_mouse_down("left", (_e, cx) => cx.stop_propagation())' in btn
     assert "cx.stop_propagation(); if (enabled) this.forget(r, cx);" in btn
+
+
+# ---- 앱 0.1.15 호환: 0.1.16 에만 있는 이름을 "herdr" 에서 이름으로 import 하면 mod 가 아예 안 뜬다 ----
+
+APP_0116_ONLY = {"checking"}
+NAMED_IMPORT_RE = re.compile(r'import\s*\{([^}]*)\}\s*from\s*"herdr"')
+
+
+def test_no_named_import_of_0116_only_exports():
+    assets = os.path.join(DESKTOP, "assets")
+    bad = []
+    for root, _dirs, files in os.walk(assets):
+        for name in files:
+            if not name.endswith(".js"):
+                continue
+            path = os.path.join(root, name)
+            with open(path, encoding="utf-8") as f:
+                src = f.read()
+            for m in NAMED_IMPORT_RE.finditer(src):
+                names = {n.strip().split(" as ")[0] for n in m.group(1).split(",") if n.strip()}
+                bad += [f"{os.path.relpath(path, assets)}: {n}" for n in names & APP_0116_ONLY]
+    assert not bad, bad

@@ -11,7 +11,7 @@
   python setup.py --remove                          # 전부 되돌림
   python setup.py --choices --json                  # 고르기 화면용: 묶음별 기능·지금 상태·추천·함께 필요한 기능 (아무것도 안 바꿈)
 
-기능 이름: title-sync, image-paste, my-agents, resume-all, my-tabs, newtab-key, my-spaces, app-settings
+기능 이름: title-sync, image-paste, my-agents, resume-all, claude-notes, my-tabs, newtab-key, my-spaces, app-settings
 기능 하나만 볼 땐 scripts/install_<…>.py --status / --dry-run 도 된다. 언제 무엇을 돌릴지는 SKILL.md 2갈래(2-3 행동 가이드).
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ class Feature(NamedTuple):
 
 
 # 순서 중요: title-sync 가 기본 레이아웃을 my-main 으로 복제·전환한다.
-# resume-all 이 my-tabs 보다 먼저 — resume-all 이 있어야 my-tabs 의 Resume 버튼이 그걸 연다.
+# resume-all·claude-notes 가 my-tabs 보다 먼저 — 그 mod 가 있어야 my-tabs 의 Resume·Notes 버튼이 그걸 연다.
 FEATURES = [
     Feature("title-sync", "install_title_sync", "/rename 하면 상단 탭 이름이 따라감 (+ 기본 레이아웃을 my-main 으로 복제)",
             "Claude 탭에서 /rename 테스트 → 2초쯤 뒤 상단 탭 이름이 '테스트'"),
@@ -56,7 +56,9 @@ FEATURES = [
             "Claude 가 일하는 중일 때 좌하단 Agents 에 세션명 + 아래 작은 글씨로 하는 일 / 쉬는 중 줄 우클릭 → 「끝남으로 표시」 → 끝남(채운 점)으로 바뀜"),
     Feature("resume-all", "install_resume_all", "우상단 Resume: 재부팅 뒤 셸만 남은 Claude 세션 골라서 일괄 이어하기",
             "hc server stop → hc server start(herdr 밖 PowerShell 에서) → 우상단 Resume N → 팝업에서 이어하기 → 각 탭에 claude 가 이전 대화로 열림"),
-    Feature("my-tabs", "install_tabs_agent_name", "상단 탭: 이름 없는 Claude 탭 이름(앱 0.1.15 까지) + 끌 때 점선 + x 두 번 눌러 닫기 + 우상단 Resume 버튼(resume-all 이 있을 때)",
+    Feature("claude-notes", "install_claude_notes", "우상단 Notes: 보고 있는 Claude 세션의 notes 를 오른쪽 패널에서 보기(notes 플러그인 0.22.0+ 는 herdr 안에서 TUI 옆 창을 숨김)",
+            "Claude 탭을 누른 채 우상단 Notes → 오른쪽 패널에 그 세션 notes 탭 / 다른 Claude 탭을 누르면 2초 안에 그 세션 노트로 / Notes 한 번 더 → 접힘"),
+    Feature("my-tabs", "install_tabs_agent_name", "상단 탭: 이름 없는 Claude 탭 이름(앱 0.1.15 까지) + 끌 때 점선 + x 두 번 눌러 닫기 + 우상단 Resume·Notes 버튼(그 기능이 있을 때)",
             "+ 로 새 Claude 탭 → 탭 이름이 번호가 아님(Claude Code 또는 Claude 제목) / 탭을 끌면 점선 / x 한 번 → 빨갛게, 3초 안에 한 번 더 → 닫힘 / 우상단 Files 왼쪽에 Resume 버튼"),
     Feature("newtab-key", "install_newtab_key", "Ctrl+N → 새 터미널 탭(앱 자체 tab.new, 예전 ccd-key 치움)",
             "Ctrl+N → 지금 공간에 새 터미널 탭 하나"),
@@ -65,7 +67,7 @@ FEATURES = [
     Feature("app-settings", "install_app_settings", "앱 설정: 어두운 화면 + 사용 통계 안 보냄 (settings.json 두 항목만)",
             "앱 화면이 어두운 테마 (안 바뀌면 앱을 다시 켜기)"),
 ]
-ALIASES = {"ctrl+n": "newtab-key", "ccd-key": "newtab-key", "title": "title-sync", "resume": "resume-all",
+ALIASES = {"ctrl+n": "newtab-key", "ccd-key": "newtab-key", "title": "title-sync", "resume": "resume-all", "notes": "claude-notes",
            "settings": "app-settings", "설정": "app-settings"}
 BY_NAME = {f.name: f for f in FEATURES}
 
@@ -73,16 +75,17 @@ BY_NAME = {f.name: f for f in FEATURES}
 # 묶음 이름은 질문 머리표(12자 이하), SHORT 는 선택지 이름(다섯 낱말 이하).
 GROUPS = [
     ("화면", ("my-tabs", "my-spaces", "my-agents", "title-sync")),
-    ("버튼·키·설정", ("resume-all", "image-paste", "newtab-key", "app-settings")),
+    ("버튼·패널", ("resume-all", "claude-notes")),
+    ("키·설정", ("image-paste", "newtab-key", "app-settings")),
 ]
 SHORT = {
     "my-tabs": "상단 탭 바", "my-spaces": "좌상단 Spaces 펼치기", "my-agents": "좌하단 Agents 목록",
-    "title-sync": "/rename → 탭 이름", "resume-all": "Resume 세션 이어하기",
+    "title-sync": "/rename → 탭 이름", "resume-all": "Resume 세션 이어하기", "claude-notes": "Notes 패널",
     "image-paste": "Ctrl+Shift+V 그림 붙여넣기", "newtab-key": "Ctrl+N 새 터미널 탭",
     "app-settings": "어두운 화면·통계 끔",
 }
 # 이 기능의 버튼이 들어가 있는 곳 — 같이 깔리지 않으면 눌러 볼 데가 없다
-NEEDS = {"resume-all": ("my-tabs",)}
+NEEDS = {"resume-all": ("my-tabs",), "claude-notes": ("my-tabs",)}
 
 
 def pick(names: str) -> list:
@@ -278,7 +281,7 @@ def report(chosen, changed, held, failed, after, touched) -> None:
     if not_latest:
         print("아직 최신 아님:", ", ".join(not_latest))
     print("바뀐 파일:", ", ".join(fl.rel(p) for p in touched) or "없음")
-    linked = [n for n in ("resume-all",) if n in changed]
+    linked = [n for n in ("resume-all", "claude-notes") if n in changed]
     if linked and "my-tabs" not in chosen and any("my-tabs" in fl.rel(p) for p in touched):
         print("  (my-tabs 는 %s 이 버튼 연결을 맞추느라 같이 다시 만들었습니다)" % "·".join(linked))
     print(app_line())
@@ -312,7 +315,7 @@ def remove() -> None:
     from install_title_sync import app_exe
     subprocess.run([app_exe(), "do", "layout.switch", json.dumps({"name": "main"})])
     print("\n기본 레이아웃(main)으로 전환함. 복제본(layouts/my-main.json, mods/my-agents, mods/my-tabs, mods/my-spaces)은 남겨 둠 —"
-          " 완전히 지우려면 README 의 '완전 삭제' 참고. (mods/resume-all 은 지움)")
+          " 완전히 지우려면 README 의 '완전 삭제' 참고. (mods/resume-all·claude-notes 는 지움)")
 
 
 def main() -> int:

@@ -105,13 +105,24 @@ RESUME_PATCHES = [
 ]
 
 
+NOTES_MOD = "claude-notes"
+# 우상단 Files 왼쪽 Notes 버튼 → 오른쪽 패널의 claude-notes 칸을 펴고 접는다(Files·Changes 와 같은 panelButton).
+NOTES_PATCHES = [
+    (FILES_BUTTON, '      .child(panelButton("%s", "Notes", "mods/%s/notes.svg"))' % (NOTES_MOD, NOTES_MOD) + NL + FILES_BUTTON),
+]
+
+
+def has_notes() -> bool:
+    return os.path.exists(mod_js(NOTES_MOD))
+
+
 def has_resume() -> bool:
     # rename_self 는 "mods/tabs/" 만 바꾸므로 "mods/resume-all/…" 경로는 그대로 남는다
     return os.path.exists(mod_js(RESUME_MOD))
 
 
 def patches() -> list:
-    return PATCHES + (RESUME_PATCHES if has_resume() else [])
+    return PATCHES + (RESUME_PATCHES if has_resume() else []) + (NOTES_PATCHES if has_notes() else [])
 
 
 def patched(src: str) -> str:
@@ -123,7 +134,8 @@ def patched(src: str) -> str:
 
 def wiring() -> str:
     extra = addons.summary(CLONE)
-    return "Resume 버튼 %s%s" % ("있음" if has_resume() else "없음(resume-all 미설치)", " / " + extra if extra else "")
+    return "Resume 버튼 %s / Notes 버튼 %s%s" % ("있음" if has_resume() else "없음(resume-all 미설치)",
+                                              "있음" if has_notes() else "없음(claude-notes 미설치)", " / " + extra if extra else "")
 
 
 register(BASE, CLONE, patched)
@@ -138,7 +150,7 @@ def plan() -> Plan:
 
 
 def refresh() -> None:
-    """resume-all 을 만들거나 지운 뒤 부른다 — my-tabs 가 이미 있으면 Resume 버튼만 다시 맞춘다(레이아웃은 안 건드림)."""
+    """resume-all·claude-notes 를 만들거나 지운 뒤 부른다 — my-tabs 가 이미 있으면 버튼만 다시 맞춘다(레이아웃은 안 건드림)."""
     if not os.path.exists(mod_js(CLONE)):
         return
     st = evaluate(safe_plan(FEATURE, plan))

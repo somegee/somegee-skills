@@ -13,7 +13,12 @@
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { terminals, panes, spaces, exec, hc, appHome, props, closeOverlay, theme, notify, checking } from "herdr";
+import { terminals, panes, spaces, exec, hc, appHome, props, closeOverlay, theme, notify } from "herdr";
+import * as herdrApi from "herdr";
+
+// checking() 은 앱 0.1.16 부터 있다. 이름으로 import 하면 0.1.15 에선 mod 가 아예 안 뜬다
+// ("Could not find export 'checking'") → 네임스페이스로 읽고, 없으면 늘 false.
+const checking = typeof herdrApi.checking === "function" ? herdrApi.checking : () => false;
 
 const SESSION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PROJECT_RE = /^[A-Za-z0-9_-]{1,200}$/;

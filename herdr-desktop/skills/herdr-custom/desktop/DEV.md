@@ -81,6 +81,14 @@ my-agents 가 3초마다 `hc get` 으로 읽어 `shared("agent.msgs")` 로 내�
 - 원격 기기는 뺐다: 그쪽엔 이름표 훅이 안 돌았고 읽기 스크립트가 PowerShell 이다. 넣으려면 `exec(..., { on: machine })` + POSIX 판 읽기 스크립트.
 - 시험: 2026-11-17 사용자 PC(herdr-app 0.1.16, 플러그인 0.9.1 위 손 적용)에서 `hc server stop` → `start` 뒤 여러 세션을 한 번에 이어하는 것까지 사용자가 확인. 플러그인판(0.9.2) my-tabs 패치는 서버에 앱 원본이 없어 가짜 원본으로만 시험했다 → PC 에서 `setup.py --apply resume-all,my-tabs --force` 뒤 `herdr-app check` 로 확인.
 
+## 오른쪽 패널 Notes (claude-notes, 0.16.0)
+
+- 레이아웃의 오른쪽 패널은 `panel`(column) 안 stack `panel-body` 로, 원본 tabs 의 `panelButton(id, …)` 이 `layout.select {stack: "panel-body", child: id}` + `layout.show {id: "panel"}` 로 펴고, 같은 칸이 켜져 있으면 `layout.hide` 로 접는다. 그래서 칸 id 를 `claude-notes` 로 stack 맨 앞에 넣고 FILES_BUTTON 앞에 `panelButton("claude-notes", …)` 한 줄만 넣으면 Files·Changes 와 똑같이 동작한다(`enabled` 목록과 상관없이 늘 보임).
+- **`herdr-app do mod.open {name}` 은 쓰지 않는다** — 레이아웃 맨 바깥에 그 mod 칸(320px)을 새로 넣고, 다시 불러도 그 칸은 안 빠진다(2026-11-25 실측, 팝업만 닫힘).
+- 팝업(dialog)은 옮길 수 없고 가운데 세션을 가려서 패널로 바꿨다. mod 는 `props().overlay` 가 있으면 팝업 모양(Esc 닫기·둥근 테두리)으로도 그린다.
+- 세션 찾기: `focused().terminal` → `terminals()` 의 `labels["claude.session"]`. 원격 주소는 `<기기>/tNN` 이라 `readTextFile(<홈 기준 상대 경로>, { on: 기기 })`, 이 PC 는 `appHome()` 의 `\.config\herdr-app` 앞을 홈으로 본다(HERDR_APP_HOME 을 바꾼 PC 는 못 찾음).
+- `checking` 은 앱 0.1.16 부터라 이름으로 import 하지 않는다(`tests/test_resume_all.py::test_no_named_import_of_0116_only_exports` 가 assets 전부를 본다).
+
 ## 예전 ccd-key (0.9.0 에 뺌)
 
 Ctrl+N 을 mod(`ccd-key.new`)가 받아 `tab.new {argv: claude --dangerously-skip-permissions}` 로 열었다. mod 파일을 다시 쓰거나 앱을 오래 켜 두면 키가 안 닿는 일이 잦아 뺐다. `install_newtab_key.py` 가 단축키(`ccd-key.new`)·레이아웃 칸·`mods/ccd-key/` 를 치우고 Ctrl+N 을 앱 자체 `tab.new` 로 건다. **키를 먼저 옮기고 칸을 뺀다** — 단축키가 mod 를 가리키는 동안엔 앱이 칸을 스스로 다시 넣는다.
