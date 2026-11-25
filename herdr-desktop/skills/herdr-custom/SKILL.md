@@ -58,7 +58,7 @@ K="$(ls -d ~/.claude/plugins/cache/*/herdr-desktop/*/skills/herdr-custom 2>/dev/
 |---|---|---|
 | `title-sync` | 기본 레이아웃을 내 것(`my-<이름>`)으로 복제(나머지가 이 위에 얹힘) + `/rename`·Claude 자동 제목 → 상단 탭 이름 | `install_title_sync.py` |
 | `image-paste` | Ctrl+Shift+V 그림 붙여넣기 (image-paste mod + `clipimg.exe`) — **키를 받는 mod** | `install_image_paste.py` |
-| `my-agents` | 좌하단 Agents: 세션명만 + 작업 중이면 "지금 하는 일" | `install_agents_name_only.py` |
+| `my-agents` | 좌하단 Agents: 세션명만 + 작업 중이면 "지금 하는 일" + **줄 우클릭 「끝남으로 표시」**(슬랙 '읽지 않음으로 표시'처럼 쉬는 중 세션을 다시 끝남으로, 0.15.0 — `mark_done.py`) | `install_agents_name_only.py` |
 | `resume-all` | 우상단 `Resume` 버튼(Files 왼쪽, my-tabs 안) → 팝업: 재부팅·core 재시작 뒤 **셸만 남은 Claude 세션**을 골라 각 탭에 `claude --resume <id> [권한 옵션]` 입력(탭 자리·이름 그대로). 마지막 답변 시각·권한 모드 배지, 권한 옵션은 기록에서 자동 판별, 시작 폴더가 다르면 옮겨서 엶. 줄마다 `삭제`(일부러 끈 세션을 목록에서 뺌 — 0.12.0). 이 PC 터미널만(0.9.2) | `install_resume_all.py` |
 | `my-tabs` | 상단 탭: 이름 없는 Claude 탭은 `Claude Code`(앱 0.1.16부터는 원본 `label()`이 프로그램 이름·Claude 실시간 제목을 보여서 그대로 둠) + 끌 때 점선 + **x는 두 번 눌러 닫기**(첫 번째엔 빨간 바탕, 3초 안에 한 번 더 — 0.9.0) + resume-all이 있으면 우상단 `Resume` 버튼(이어할 세션이 있으면 강조 + 개수) | `install_tabs_agent_name.py` |
 | `newtab-key` | Ctrl+N → 앱 자체 `tab.new`(새 터미널 탭). mod 없이 keys.json 한 줄. 예전 `ccd-key`(Ctrl+N → ccd 새 Claude 탭, 키를 받는 mod)가 남아 있으면 치운다(0.9.0 — 키가 자주 안 먹어서 뺌) | `install_newtab_key.py` |
@@ -161,6 +161,7 @@ Claude는 `/rename` 이름을 **창 제목**으로 내보내고, 서버 herdr-co
 엔진 상태 `done` = "사용자가 안 보는 사이 끝남". 엔진 상태는 `done`으로 남고, '봤음'은 이름표로 따로 둔다.
 - **앱**: 앱이 탭을 보면 엔진 터미널에 이름표 `herdr.seen=<본 턴 번호>`를 붙인다 → `turn`과 같으면 봤음. 엔진 이름표라 서버에서도 `hc get --json`의 `labels`로 보인다(앱 실행 파일에도 이 이름이 있다).
 - **다른 화면(웹 관제 등)**: 이 이름표를 읽으면 앱에서 본 끝남을 쉬는 중으로 보일 수 있고, 그 화면에서 봤을 때 `hc label <t> herdr.seen=<turn>`으로 올리면 앱과 맞춰진다. 앱이 남이 올린 이름표를 따르는지는 아직 확인 안 됨.
+- **끝남으로 되돌리기(0.15.0, 회사 PC 앱 0.1.18 실측)**: `hc label <t> herdr.seen=<turn-1>`이면 앱을 다시 켜지 않아도 Agents·Spaces·상단 탭이 다시 끝남이 된다(원격 기기 세션 `macmini/t2`도 같음) — 앱은 남이 바꾼 이름표를 따른다. 이름표를 지우기만(`herdr.seen=`) 하면 화면이 안 바뀐다. 지금 보고 있는 세션에 붙이면 앱이 곧바로 다시 봤음으로 붙인다. 앱의 Agents 우클릭 「끝남으로 표시」(1갈래 my-agents)가 이것이다.
 - 언제 '봤음'으로 치나: **done 세션을 연 순간이 아니라, 열어 본 뒤 다른 세션을 누를 때.** 앱은 1갈래 done-hold로 표시만 늦춘다. 다른 화면도 같은 규칙을 따르는 게 좋다(페이지를 그냥 떠나면 기록 안 함).
 
 ## 2-4. 세션 이름표 훅 — `hooks/label_session.py`

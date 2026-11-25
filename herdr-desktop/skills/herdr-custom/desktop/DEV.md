@@ -42,6 +42,13 @@
 - 보는 중에 끝난 세션은 앱이 처음부터 idle 로 두므로 그대로 idle. 앱·엔진 상태·소리는 그대로이고, mod 마다 따로 계산한다(같은 규칙이라 답이 같음).
 - 동작 시험: `python -m pytest desktop/tests`(node 있으면 JS 까지).
 
+## Agents 우클릭 「끝남으로 표시」 (mark-done, 0.15.0)
+
+- `scripts/mark_done.py` 가 my-agents 를 만들 때 넣는다(따로 고르는 기능이 아니라 my-agents 의 일부 — 이미 깔린 PC 는 my-agents 가 `낡음`으로 보이고 `--apply my-agents` 로 들어온다).
+- 원리: 앱은 이름표 `herdr.seen` 이 `turn` 보다 작으면 끝남으로 다시 보여 준다. 그래서 `hc(["label", 주소, "herdr.seen=<turn-1>"])`. 지우기(`herdr.seen=`)는 화면이 안 바뀐다. 앱 명령에는 이름표 바꾸기가 없다(0.1.18).
+- 팝업은 정렬 메뉴처럼 이 mod 자신을 `props.agentMenu = {address, status, focused}` 로 다시 연다. 보고 있는 세션·끝남·작업 중이면 흐리게 막고 이유를 보인다(보고 있는 세션은 앱이 곧바로 봤음으로 되돌림).
+- 넓은 줄의 `.on_click(pane.focus)` 바로 뒤 `.when(Boolean(pic)` 문장을 짚어 우클릭을 단다 — 좁힌 줄·하위 에이전트 줄엔 안 넣는다.
+
 ## 지금 하는 일(status.msg) 나눠 쓰기
 
 my-agents 가 3초마다 `hc get` 으로 읽어 `shared("agent.msgs")` 로 내놓고, my-spaces 는 레이아웃에 my-agents 가 있으면 그걸 읽는다(없을 때만 직접 읽음) — 같은 조회를 두 번 돌리지 않게.

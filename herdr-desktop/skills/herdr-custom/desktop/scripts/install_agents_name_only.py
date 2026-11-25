@@ -1,6 +1,7 @@
 """herdr 앱 왼쪽 Agents 목록을 고친다.
 - '공간이름 · 세션명' 대신 세션명만 보이게 한다.
 - working 인 줄 아래에 지금 하는 일(Claude 가 보낸 status.msg)을 작은 글씨로 보여 준다.
+- 줄을 우클릭하면 「끝남으로 표시」(읽지 않음으로 되돌리기, mark_done.py).
 
 기본 agents mod 는 읽기 전용(앱 시작 때 원본 복구)이라 my-agents 로 복제해 고치고,
 내 레이아웃이 my-agents 를 쓰게 바꾼다.
@@ -17,6 +18,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from install_title_sync import children_lists, ensure_own_layout, layout_path, load, save, target_layout  # noqa: E402
 import done_hold  # noqa: E402
+import mark_done  # noqa: E402
 from patchlib import apply_patches, desired_clone, mod_js, rebuild, register  # noqa: E402
 import addons  # noqa: E402
 from featurelib import Check, Plan, Want, run_cli  # noqa: E402
@@ -130,7 +132,7 @@ def build(src: str) -> str:
     src = apply_patches(src, PATCHES, BASE)
     if "setShared" not in src.split('from "herdr";')[0]:
         src = src.replace(', hc } from "herdr";', ', hc, setShared } from "herdr";', 1)
-    return done_hold.apply(src, BASE)
+    return done_hold.apply(mark_done.apply(src, BASE), BASE)
 
 
 register(BASE, CLONE, build)
