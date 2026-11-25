@@ -78,6 +78,25 @@ test('에이전트가 만든 탭이 옆 창에 보이고, 체크하면 취소선
   expect(String(read.result)).toContain('(2/3)')
 })
 
+test('단계 문구 앞 [ ]·[x] 체크 상자 글자는 떼고, [x] 는 체크된 단계로 받는다', async ($, on) => {
+  fakeFiles(on)
+  await startSession($, on)
+  await $.tool.call({
+    tool: 'mcp__notes__notes_write',
+    tab: '상자',
+    items: ['[x] 끝낸 일', '[ ] 남은 일', '- [X] 목록식 끝낸 일', '[결정] 머리표는 그대로', '[]'],
+  } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '상자', add_items: ['[ ] 덧붙인 일'] } as never)
+  const read = String((await $.tool.call({ tool: 'mcp__notes__notes_read', tab: '상자' } as never)).result)
+  expect(read).toContain('(2/6)')
+  expect(read).toContain('#1 [x] 끝낸 일\n#2 [ ] 남은 일\n#3 [x] 목록식 끝낸 일\n#4 [ ] [결정] 머리표는 그대로\n#5 [ ] []\n#6 [ ] 덧붙인 일')
+
+  // 같은 문구를 [x] 로 다시 쓰면 체크된다(이미 체크된 건 [ ] 로 써도 풀지 않는다)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '상자', items: ['[ ] 끝낸 일', '[x] 남은 일'] } as never)
+  const again = String((await $.tool.call({ tool: 'mcp__notes__notes_read', tab: '상자' } as never)).result)
+  expect(again).toContain('(2/2)')
+})
+
 test('탭이 여러 개면 탭 버튼으로 전환된다', async ($, on) => {
   fakeFiles(on)
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)

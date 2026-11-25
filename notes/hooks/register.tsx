@@ -246,6 +246,16 @@ const asText = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v.tri
 const asList = (v: unknown) =>
   Array.isArray(v) ? v.map(asText).filter((s): s is string => s !== undefined) : []
 
+// 에이전트가 단계 문구 앞에 체크 상자를 직접 쓰는 일이 있다('[x] 할 일'). 창이 체크 칸을 따로 그리므로 글자는 떼고,
+// 체크 표시가 있으면 체크된 단계로 받는다. '[결정]' 같은 머리표는 건드리지 않는다.
+const CHECK_BOX_RE = /^\s*(?:[-*]\s*)?\[([ xXvV✓✔]?)\]\s*/
+const parseItemText = (raw: string): NoteItem => {
+  const m = CHECK_BOX_RE.exec(raw)
+  const text = m ? raw.slice(m[0].length).trim() : raw
+  if (!m || text === '') return { text: raw, isDone: false }
+  return { text, isDone: m[1] !== '' && m[1] !== ' ' }
+}
+
 const findTab = (b: NotesBook, title: string | undefined) =>
   title === undefined ? undefined : b.tabs.find(t => t.title === title)
 
@@ -606,14 +616,17 @@ export const register: Register = (on, options) => {
       const items: NoteItem[] =
         a.items === undefined
           ? (old?.items ?? [])
-          : asList(a.items).map(text => old?.items.find(i => i.text === text) ?? { text, isDone: false })
+          : asList(a.items).map(parseItemText).map(p => {
+              const kept = old?.items.find(i => i.text === p.text)
+              return kept === undefined ? p : p.isDone ? { ...kept, isDone: true } : kept
+            })
       const results = a.results === undefined ? (old?.results ?? []) : asList(a.results)
       const tab: NoteTab = {
         title,
         goal: asText(a.goal) ?? old?.goal,
         doneWhen: asText(a.done_when) ?? old?.doneWhen,
         memo: asText(a.memo) ?? old?.memo,
-        items: [...items, ...asList(a.add_items).map(text => ({ text, isDone: false }))],
+        items: [...items, ...asList(a.add_items).map(parseItemText)],
         results: [...results, ...asList(a.add_results)],
         session: sessionTag(),
         updatedAt: now(),
