@@ -1,6 +1,7 @@
 import { expect, mock, test, type Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import { TEXT } from '../hooks/i18n'
+import { notesDataDir } from '../hooks/share-scope'
 
 // 노트 파일을 메모리에 둔다. 쓴 횟수를 돌려준다. 경로는 / 로 맞춰 둔다(엔진이 \ 로 바꿔 넘기기도 한다).
 // sessionId 를 넘기면 엔진이 물을 때마다 그 값을 세션 id 로 답한다(/resume 처럼 도중에 바뀌는 경우).
@@ -1196,4 +1197,12 @@ test('herdr 안: 다시 불러올 때 창이 떠 있으면 닫는다', async ($,
 test('herdr 밖에서는 떠 있는 창을 닫지 않는다', async ($, on) => {
   const { closed } = await herdrSession($, on, {}, true)
   expect(closed).toHaveLength(0)
+})
+
+test('노트 폴더는 설정 폴더가 .claude-keyring 이어도 <홈>/.claude/notes-data 하나다(버전별 data 로 흩어지지 않게)', async () => {
+  expect(notesDataDir('C:\\Users\\u\\.claude\\plugins\\cache\\somegee-skills\\notes\\0.22.3')).toBe('C:\\Users\\u/.claude/notes-data')
+  expect(notesDataDir('C:\\Users\\u\\.claude-keyring\\plugins\\cache\\somegee-skills\\notes\\0.22.3')).toBe('C:\\Users\\u/.claude/notes-data')
+  expect(notesDataDir('/Users/u/.claude-keyring/plugins/cache/somegee-skills/notes/0.22.3')).toBe('/Users/u/.claude/notes-data')
+  expect(notesDataDir('/home/u/.claude/plugins/marketplaces/somegee-skills/notes')).toBe('/home/u/.claude/notes-data')
+  expect(notesDataDir('/home/u/dev/notes')).toBe('/home/u/dev/notes/data')
 })

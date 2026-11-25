@@ -4,7 +4,7 @@ import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 import { callSummary, toCallDisplay } from './call-summary'
 import { TEXT, toLang, type Strings } from './i18n'
 import { BASE_THEME, toTheme, type NotesTheme } from './theme'
-import { mergeTabs, noteFileName, SHARED_FILE, toShareScope, type ShareScope } from './share-scope'
+import { mergeTabs, noteFileName, notesDataDir, SHARED_FILE, toShareScope, type ShareScope } from './share-scope'
 import type { LiveState, NoteChange, NoteChangePart, NoteItem, NoteItemStatus, NotesBook, NoteSession, NoteTab } from '../types'
 
 const PANE = 'notes'
@@ -232,14 +232,11 @@ async function syncLive($: EngineInterface) {
   const cur = await read($, live)
   if (JSON.stringify(cur) !== JSON.stringify(next)) await update($, live, () => next)
 }
-// 노트는 <.claude>/notes-data/ 아래 한 파일에 두고, 그 파일을 쓰는 세션들이 함께 읽고 쓴다(공유 범위는 share-scope.ts).
+// 노트는 <홈>/.claude/notes-data/ 아래(설정 폴더가 .claude-keyring 이어도 같은 자리) 한 파일에 두고, 그 파일을 쓰는 세션들이 함께 읽고 쓴다(공유 범위는 share-scope.ts).
 // 전체 = _all.json, 같은 폴더 = <작업 폴더>.json, 세션마다 = sessions/<세션 id>.json.
 // 마켓플레이스 설치본은 버전마다 폴더가 바뀌므로 모드 폴더 밖에 둔다. .claude 아래가 아니면 모드 폴더의 data/.
 let shareScope: ShareScope = '전체'
-const dataDir = (pluginRoot: string) => {
-  const claudeDir = pluginRoot.match(/^(.*?[\\/]\.claude)[\\/]/)?.[1]
-  return claudeDir === undefined ? `${pluginRoot}/data` : `${claudeDir}/notes-data`
-}
+const dataDir = notesDataDir
 const dataPath = ($: EngineInterface, root: string) => `${dataDir($.plugin.root)}/${noteFileName(shareScope, root, sessionId)}`
 const now = () => new Date().toISOString()
 const asText = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined)

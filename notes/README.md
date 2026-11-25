@@ -58,7 +58,7 @@ claude plugin install notes@somegee-skills --scope user
 
 ## 알아 둘 것
 
-- 노트 파일은 `~/.claude/notes-data/` 아래에 있다(플러그인 버전이 바뀌어도 유지): 전체 = `_all.json`, 같은 폴더 = `<작업폴더>.json`, 세션마다 = `sessions/<세션 id>.json`. PC마다 따로이고 외부로 아무것도 보내지 않는다.
+- 노트 파일은 `~/.claude/notes-data/` 아래에 있다(플러그인 버전이 바뀌어도 유지): 전체 = `_all.json`, 같은 폴더 = `<작업폴더>.json`, 세션마다 = `sessions/<세션 id>.json`. PC마다 따로이고 외부로 아무것도 보내지 않는다. 설정 폴더를 바꿔 써도(`CLAUDE_CONFIG_DIR=~/.claude-keyring` 등) 노트는 늘 `~/.claude/notes-data/` 에 둔다(0.22.3~). 0.22.2 이하에서 키링을 쓰던 PC는 노트가 버전별 `<플러그인 캐시>/notes/<버전>/data/` 에 흩어져 있으니 `python notes/scripts/merge_notes_data.py`(미리보기) → `--apply` 로 한 번 합친다.
 - 이어 하기(`claude --resume`, 창 안에서 `/resume`)를 하면 3초 안에 그 세션의 노트로 바뀐다. `세션마다` 로 써도 이어 간 세션의 노트가 다시 보인다.
 - 처음 `전체` 로 쓸 때 `_all.json` 이 없으면 지금까지 폴더별로 쓰던 노트 탭을 모아 만든다(같은 이름의 탭은 최근 것, 최대 30개). 폴더별 파일은 그대로 남으므로 `같은 폴더` 로 되돌리면 예전 노트가 다시 보인다.
 - 본문은 마우스 휠로만 스크롤한다. 방향키는 버튼 사이 초점 이동에만 쓰인다.

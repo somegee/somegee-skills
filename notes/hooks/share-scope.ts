@@ -11,6 +11,15 @@ export const toShareScope = (value: unknown): ShareScope =>
 export const SHARED_FILE = '_all.json'
 export const SESSION_DIR = 'sessions'
 
+// 노트 폴더. 설정 폴더가 무엇이든(~/.claude, CLAUDE_CONFIG_DIR=~/.claude-keyring 등) 늘 <홈>/.claude/notes-data 에 둔다.
+// 계정을 바꿔 써도 노트가 한 곳에 모이고, herdr 앱 Notes 패널(claude-notes)도 이 자리만 읽는다.
+// 플러그인 경로 <홈>/.claude*/plugins/... 에서 홈을 뽑는다. 못 뽑으면(개발 중 --plugin-dir 등) 플러그인 폴더 아래 data.
+// 2026-11-26: 예전엔 '/.claude/' 만 찾아서 .claude-keyring 에선 버전별 <캐시>/<버전>/data 로 흩어졌다.
+export const notesDataDir = (pluginRoot: string) => {
+  const home = pluginRoot.match(/^(.*?)[\\/]\.claude[^\\/]*[\\/]/)?.[1]
+  return home === undefined ? `${pluginRoot}/data` : `${home}/.claude/notes-data`
+}
+
 // notes-data 폴더 안에서 노트 파일의 상대 경로.
 export const noteFileName = (scope: ShareScope, root: string, sessionId: string) => {
   if (scope === '전체') return SHARED_FILE
