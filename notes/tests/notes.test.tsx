@@ -1116,21 +1116,27 @@ test('이 세션이 마지막으로 쓴 탭에 체크 안 한 단계가 있으�
 
 // herdr(터미널 관리자) 안: HC_TERMINAL_ID 가 있으면 창을 저절로 열지 않고, herdr 앱이 노트를 찾게 상태 파일에 노트 파일 위치를 남긴다.
 // 훅은 엔진을 처음 부르기 전에 다 달아야 해서 startSession 대신 여기서 직접 시작한다. 연 창 요청을 opened 에 모은다.
-async function herdrSession($: Engine, on: On, env: Record<string, string> = { HC_TERMINAL_ID: 't65' }) {
+async function herdrSession($: Engine, on: On, env: Record<string, string> = { HC_TERMINAL_ID: 't65' }, paneShown = false) {
   const { files, writes } = fakeFiles(on)
   mock.env(on, env)
   const opened: unknown[] = []
+  const closed: unknown[] = []
   on('tool.register', () => ({ value: undefined }) as never)
   on('ui.open', (_$, e) => {
     opened.push(e)
     return { value: { isPlaced: true } } as const
   })
-  on('ui.panes', () => ({ value: [] }) as never)
+  on('ui.panes', () => ({ value: paneShown ? [{ id: 'notes', isShown: true, isPlaced: true }] : [] }) as never)
+  on('ui.close', (_$, e) => {
+    closed.push(e)
+    return { value: undefined } as never
+  })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('clock.every', () => ({ value: undefined }) as never)
+  on('clock.after', () => ({ value: undefined }) as never)
   on('command.register', () => ({ value: undefined }) as never)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true } as never)
-  return { files, writes, opened }
+  return { files, writes, opened, closed }
 }
 
 test('herdr 안: 세션을 시작해도, 새 탭을 만들어도 창을 열지 않는다', async ($, on) => {
@@ -1161,4 +1167,14 @@ test('herdr 밖에서는 창을 열고, 상태 파일은 시작할 때 쓰지 �
   const { opened, writes } = await herdrSession($, on, {})
   expect(opened.length).toBeGreaterThan(0)
   expect(writes.some(p => p.includes('/live/'))).toBe(false)
+})
+
+test('herdr 안: 다시 불러올 때 창이 떠 있으면 닫는다', async ($, on) => {
+  const { closed } = await herdrSession($, on, { HC_TERMINAL_ID: 't65' }, true)
+  expect(closed.length).toBeGreaterThan(0)
+})
+
+test('herdr 밖에서는 떠 있는 창을 닫지 않는다', async ($, on) => {
+  const { closed } = await herdrSession($, on, {}, true)
+  expect(closed).toHaveLength(0)
 })

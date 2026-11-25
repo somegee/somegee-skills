@@ -161,6 +161,16 @@ let isInHerdr = false
 let isPaneHidden = false
 // 지금 세션의 작업 폴더. 상태 파일에 노트 파일 위치(file)를 같이 적을 때 쓴다.
 let currentRoot = ''
+// 숨김 설정인데 창이 떠 있으면 닫는다. 설정을 바꿔 다시 불러올 때 창이 되살아난 일이 있어(2026-11-26, 원인 미확인)
+// 시작할 때와 조금 뒤에 한 번씩 본다.
+const REHIDE_MS = 1500
+async function closeIfShown($: EngineInterface) {
+  try {
+    if ((await $.ui.panes()).some(p => p.id === PANE && p.isShown)) await $.ui.close({ id: PANE })
+  } catch {
+    // 창 목록을 못 읽으면 그대로 둔다.
+  }
+}
 async function herdrTerminal($: EngineInterface): Promise<boolean> {
   try {
     return ((await $.env.get('HC_TERMINAL_ID')) ?? '').trim() !== ''
@@ -497,6 +507,10 @@ export const register: Register = (on, options) => {
     // 기본은 세션을 열면 창도 연다. /config 의 notes.autoOpen 을 끄면 /notes 로만 연다.
     // herdr 안이고 hideInHerdr(기본 켬)면 열지 않는다 — /notes 로는 열 수 있다.
     if (options.autoOpen !== false && e.isInteractive && !isPaneHidden) void openPane($)
+    if (isPaneHidden && e.isInteractive) {
+      await closeIfShown($)
+      $.clock.after(REHIDE_MS, () => void closeIfShown($))
+    }
     // herdr 앱이 이 세션의 노트 파일을 찾을 수 있게 상태 파일을 시작할 때 한 번 남긴다(herdr 밖에선 예전처럼 첫 턴부터).
     if (isInHerdr) await writeLive($)
 
