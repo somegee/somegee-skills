@@ -1112,3 +1112,53 @@ test('이 세션이 마지막으로 쓴 탭에 체크 안 한 단계가 있으�
   expect((r.context ?? []).some(c => c.startsWith('[notes]'))).toBe(true)
   expect(pending(r)).toEqual([])
 })
+
+
+// herdr(터미널 관리자) 안: HC_TERMINAL_ID 가 있으면 창을 저절로 열지 않고, herdr 앱이 노트를 찾게 상태 파일에 노트 파일 위치를 남긴다.
+// 훅은 엔진을 처음 부르기 전에 다 달아야 해서 startSession 대신 여기서 직접 시작한다. 연 창 요청을 opened 에 모은다.
+async function herdrSession($: Engine, on: On, env: Record<string, string> = { HC_TERMINAL_ID: 't65' }) {
+  const { files, writes } = fakeFiles(on)
+  mock.env(on, env)
+  const opened: unknown[] = []
+  on('tool.register', () => ({ value: undefined }) as never)
+  on('ui.open', (_$, e) => {
+    opened.push(e)
+    return { value: { isPlaced: true } } as const
+  })
+  on('ui.panes', () => ({ value: [] }) as never)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('clock.every', () => ({ value: undefined }) as never)
+  on('command.register', () => ({ value: undefined }) as never)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true } as never)
+  return { files, writes, opened }
+}
+
+test('herdr 안: 세션을 시작해도, 새 탭을 만들어도 창을 열지 않는다', async ($, on) => {
+  const { opened } = await herdrSession($, on)
+  await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '숨김', items: ['가'] } as never)
+  expect(opened).toHaveLength(0)
+})
+
+test('herdr 안: /notes 로는 창을 연다', async ($, on) => {
+  const { opened } = await herdrSession($, on)
+  await $.command.run({ command: 'notes', args: '' } as never)
+  expect(opened).toHaveLength(1)
+})
+
+test('herdr 안: 시작할 때 상태 파일에 노트 파일 위치(file)를 남긴다', { options: { shareScope: '세션마다' } }, async ($, on) => {
+  const { files } = await herdrSession($, on)
+  const live = [...files].find(([k]) => k.endsWith('/live/s1.json'))
+  expect(live).toBeDefined()
+  expect(JSON.parse(live![1])).toMatchObject({ state: 'idle', file: 'sessions/s1.json' })
+})
+
+test('herdr 안이어도 hideInHerdr 를 끄면 예전처럼 창을 연다', { options: { hideInHerdr: false } }, async ($, on) => {
+  const { opened } = await herdrSession($, on)
+  expect(opened.length).toBeGreaterThan(0)
+})
+
+test('herdr 밖에서는 창을 열고, 상태 파일은 시작할 때 쓰지 않는다(예전처럼 첫 턴부터)', async ($, on) => {
+  const { opened, writes } = await herdrSession($, on, {})
+  expect(opened.length).toBeGreaterThan(0)
+  expect(writes.some(p => p.includes('/live/'))).toBe(false)
+})

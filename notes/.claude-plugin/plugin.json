@@ -1,6 +1,6 @@
 {
   "name": "notes",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "에이전트가 계획·진행상황·종료조건을 탭별 노트로 기록하고, 사용자가 옆 창에서 바로 확인하는 모드",
   "types": "./types/index.d.ts",
   "author": {
@@ -22,6 +22,12 @@
       "type": "boolean",
       "title": "세션 시작 시 notes 창 자동 열기 / Open notes pane on session start",
       "description": "켜 두면 세션을 시작할 때 notes 옆 창이 저절로 열린다. 끄면 /notes 로만 연다.",
+      "default": true
+    },
+    "hideInHerdr": {
+      "type": "boolean",
+      "title": "herdr 안에서는 notes 창 숨기기 / Hide notes pane inside herdr",
+      "description": "켜 두면 herdr 터미널 안에서 켠 세션은 notes 옆 창을 저절로 열지 않는다(herdr 앱의 notes 보기로 본다). /notes 로는 열 수 있다. herdr 밖에서는 상관없다. 새 세션부터 적용. / When on, sessions started inside a herdr terminal don't open the notes pane on their own (view them in the herdr app instead). /notes still opens it.",
       "default": true
     },
     "callDisplay": {

@@ -155,6 +155,19 @@ let myLive: { state: LiveState; at: number } = { state: 'idle', at: 0 }
 let turnNotes: 'fresh' | 'done' = 'done'
 // notes 도구를 등록한 세션인지(헤드리스에서 설정을 안 켜면 등록하지 않는다).
 let hasTools = false
+// herdr(터미널 관리자) 터미널 안에서 켜진 세션인지. herdr 는 자기 터미널에 HC_TERMINAL_ID 를 넣는다.
+// 그 안에서는 herdr 앱 쪽 notes 보기가 같은 파일을 읽어 보여 주므로, 설정(hideInHerdr, 기본 켬)에 따라 창을 저절로 열지 않는다.
+let isInHerdr = false
+let isPaneHidden = false
+// 지금 세션의 작업 폴더. 상태 파일에 노트 파일 위치(file)를 같이 적을 때 쓴다.
+let currentRoot = ''
+async function herdrTerminal($: EngineInterface): Promise<boolean> {
+  try {
+    return ((await $.env.get('HC_TERMINAL_ID')) ?? '').trim() !== ''
+  } catch {
+    return false
+  }
+}
 const NOTES_TOOL_PREFIX = 'mcp__notes__'
 // 서버 안내(instructions) 칸은 엔진이 만드는 고정 문구라 mod 로 못 바꾸고, prompt.compose 는 회사 PC 보안 모듈이 건너뛴다.
 // 그래서 tool.call 결과의 context(모델만 읽고 사람에게는 안 보임)로 사용 규칙의 핵심을 턴마다 한 번 알린다.
@@ -180,8 +193,14 @@ async function setLive($: EngineInterface, state: LiveState) {
   await update($, live, m => ({ ...m, [sessionId]: state }))
   await writeLive($)
 }
+// file: notes-data 안에서 이 세션이 쓰는 노트 파일(공유 범위에 따라 다름). 밖에서 보는 쪽(herdr 앱)이 이걸 보고 그 파일을 읽는다.
 const writeLive = ($: EngineInterface) =>
-  $.fs.write(livePath($, sessionId), JSON.stringify({ state: myLive.state, at: new Date(myLive.at).toISOString() })).catch(() => undefined)
+  $.fs
+    .write(
+      livePath($, sessionId),
+      JSON.stringify({ state: myLive.state, at: new Date(myLive.at || Date.now()).toISOString(), file: noteFileName(shareScope, currentRoot, sessionId) }),
+    )
+    .catch(() => undefined)
 // 3초 동기화 때: 내 상태가 일하는 중이면 1분마다 at 갱신, 탭에 걸린 다른 세션들의 상태 파일을 읽는다.
 async function syncLive($: EngineInterface) {
   if (sessionId === '') return
@@ -306,6 +325,7 @@ async function projectRoot($: EngineInterface) {
   const { root } = await read($, book)
   if (id === sessionId && root !== '') return root
   const fresh = await $.session.root()
+  currentRoot = fresh
   if (sessionId !== '' && id !== sessionId) return switchSession($, id, fresh)
   sessionId = id
   await update($, book, c => ({ ...c, root: fresh }))
@@ -320,8 +340,10 @@ async function switchSession($: EngineInterface, id: string, root: string) {
   const left = sessionId
   sessionId = id
   sessionTitle = undefined
+  currentRoot = root
   await $.fs.write(livePath($, left), JSON.stringify({ state: 'idle', at: now() })).catch(() => undefined)
-  if (myLive.state !== 'idle') await writeLive($)
+  // herdr 안에서는 쉬는 중이어도 새 id 의 상태 파일(노트 파일 위치)을 바로 남긴다 — herdr 앱이 /resume 뒤 노트를 찾게.
+  if (myLive.state !== 'idle' || isInHerdr) await writeLive($)
   const saved = await loadFile($, root)
   await update($, book, c => ({ ...c, root, ...saved, active: saved.tabs.at(-1)?.title }))
   return root
@@ -462,6 +484,9 @@ export const register: Register = (on, options) => {
     if (!e.isInteractive && !useHeadless) return next(e)
     const root = await $.session.root()
     sessionId = await $.session.id()
+    currentRoot = root
+    isInHerdr = await herdrTerminal($)
+    isPaneHidden = isInHerdr && options.hideInHerdr !== false
     if (shareScope === '전체') await seedShared($, root)
     const saved = await loadFile($, root)
     await update($, book, () => ({ root, ...saved, active: saved.tabs.at(-1)?.title }))
@@ -470,7 +495,10 @@ export const register: Register = (on, options) => {
     $.clock.every(TICK_MS, () => void update($, tick, n => (n + 1) % 100000).then(() => refreshTitle($)))
     void refreshTitle($)
     // 기본은 세션을 열면 창도 연다. /config 의 notes.autoOpen 을 끄면 /notes 로만 연다.
-    if (options.autoOpen !== false && e.isInteractive) void openPane($)
+    // herdr 안이고 hideInHerdr(기본 켬)면 열지 않는다 — /notes 로는 열 수 있다.
+    if (options.autoOpen !== false && e.isInteractive && !isPaneHidden) void openPane($)
+    // herdr 앱이 이 세션의 노트 파일을 찾을 수 있게 상태 파일을 시작할 때 한 번 남긴다(herdr 밖에선 예전처럼 첫 턴부터).
+    if (isInHerdr) await writeLive($)
 
     await $.command.register({ name: 'notes', description: L.command })
     hasTools = true
@@ -579,7 +607,7 @@ export const register: Register = (on, options) => {
       const rest = cur.tabs.filter(t => t.title !== title)
       return { ...cur, tabs: (old ? cur.tabs.map(t => (t.title === title ? tab : t)) : [...rest, tab]).slice(-MAX_TABS), active: title }
     })
-    if (isNew) void openPane($)
+    if (isNew && !isPaneHidden) void openPane($)
     // 기존 탭에 새로 생긴 단계가 있으면 그 첫 단계로 창을 옮긴다. 새 탭은 맨 위부터 보이게 그대로 둔다.
     const prev = isNew ? [] : (findTab(cur0, title)?.items ?? [])
     const after = findTab(b, title)?.items ?? []
