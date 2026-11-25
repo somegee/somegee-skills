@@ -57,7 +57,7 @@ FEATURES = [
     Feature("resume-all", "install_resume_all", "우상단 Resume: 재부팅 뒤 셸만 남은 Claude 세션 골라서 일괄 이어하기",
             "hc server stop → hc server start(herdr 밖 PowerShell 에서) → 우상단 Resume N → 팝업에서 이어하기 → 각 탭에 claude 가 이전 대화로 열림"),
     Feature("claude-notes", "install_claude_notes", "우상단 Notes: 보고 있는 Claude 세션의 notes 를 오른쪽 패널에서 보기(notes 플러그인 0.22.0+ 는 herdr 안에서 TUI 옆 창을 숨김)",
-            "Claude 탭을 누른 채 우상단 Notes → 오른쪽 패널에 그 세션 notes 탭 / 다른 Claude 탭을 누르면 2초 안에 그 세션 노트로 / Notes 한 번 더 → 접힘"),
+            "Claude 탭을 누른 채 우상단 Notes → 오른쪽 패널에 그 세션 notes 탭 / 다른 공간의 Claude 탭을 눌러도 패널은 열린 채 2초 안에 그 세션 노트로 / Notes 한 번 더 → 접힘"),
     Feature("my-tabs", "install_tabs_agent_name", "상단 탭: 이름 없는 Claude 탭 이름(앱 0.1.15 까지) + 끌 때 점선 + x 두 번 눌러 닫기 + 우상단 Resume·Notes 버튼(그 기능이 있을 때)",
             "+ 로 새 Claude 탭 → 탭 이름이 번호가 아님(Claude Code 또는 Claude 제목) / 탭을 끌면 점선 / x 한 번 → 빨갛게, 3초 안에 한 번 더 → 닫힘 / 우상단 Files 왼쪽에 Resume 버튼"),
     Feature("newtab-key", "install_newtab_key", "Ctrl+N → 새 터미널 탭(앱 자체 tab.new, 예전 ccd-key 치움)",
@@ -75,12 +75,12 @@ BY_NAME = {f.name: f for f in FEATURES}
 # 묶음 이름은 질문 머리표(12자 이하), SHORT 는 선택지 이름(다섯 낱말 이하).
 GROUPS = [
     ("화면", ("my-tabs", "my-spaces", "my-agents", "title-sync")),
-    ("버튼·패널", ("resume-all", "claude-notes")),
+    ("우상단 버튼", ("resume-all", "claude-notes")),
     ("키·설정", ("image-paste", "newtab-key", "app-settings")),
 ]
 SHORT = {
     "my-tabs": "상단 탭 바", "my-spaces": "좌상단 Spaces 펼치기", "my-agents": "좌하단 Agents 목록",
-    "title-sync": "/rename → 탭 이름", "resume-all": "Resume 세션 이어하기", "claude-notes": "Notes 패널",
+    "title-sync": "/rename → 탭 이름", "resume-all": "Resume 버튼: 세션 이어하기", "claude-notes": "Notes 버튼: 노트 패널",
     "image-paste": "Ctrl+Shift+V 그림 붙여넣기", "newtab-key": "Ctrl+N 새 터미널 탭",
     "app-settings": "어두운 화면·통계 끔",
 }

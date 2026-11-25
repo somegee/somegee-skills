@@ -1,6 +1,6 @@
 {
   "name": "herdr-desktop",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "description": "herdr 데스크톱 앱(Windows)을 만든 사람 세팅 그대로 맞추는 커스텀 설치 — 한 번에 깔기(내세팅) 또는 기능별로 골라 깔기(탭 이름 따라가기·그림 붙여넣기·Agents 목록·Ctrl+N 새 터미널 탭·탭 x 두 번 눌러 닫기·Spaces 공간별 세션 펼치기·빈 공간 남기기·재부팅 뒤 Claude 세션 일괄 이어하기·보고 있는 세션 notes 오른쪽 패널·앱 설정) + 각자 덧붙인 버튼·코드를 다시 설치해도 지키는 덧붙이기(addons) + 서버용 탭 이름 동기화·세션 이름표 훅",
   "author": {
     "name": "somegee",

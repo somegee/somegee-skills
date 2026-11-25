@@ -109,10 +109,48 @@ def test_notes_patch_only_when_mod_exists(tmp_path, monkeypatch):
 
 
 def test_notes_button_sits_left_of_files_with_resume():
-    out = apply_patches(FAKE_TABS, tabs.RESUME_PATCHES[2:] + tabs.NOTES_PATCHES, "tabs")
+    out = apply_patches(FAKE_TABS, tabs.RESUME_PATCHES[2:] + tabs.NOTES_PATCHES[:1], "tabs")
     lines = [ln.strip() for ln in out.splitlines()]
     i = lines.index('.child(panelButton("claude-notes", "Notes", "mods/claude-notes/notes.svg"))')
     assert lines[i - 1] == ".child(resumeButton())" and "Files" in lines[i + 1]
+
+
+FAKE_SYNC = "\n".join([
+    "  syncPanel(space, panel, body, enabled) {",
+    "    const now = panel.hidden ? null : body?.active ?? null;",
+    "    if (space.id !== this.space) {",
+    "      this.space = space.id;",
+    "    }",
+    "  }",
+    "",
+])
+
+
+@pytest.mark.skipif(not NODE, reason="node 없음")
+def test_notes_stays_open_when_space_changes(tmp_path):
+    patched = apply_patches(FAKE_SYNC, tabs.NOTES_PATCHES[1:], "tabs")
+    script = "\n".join([
+        "class T {", patched, "}",
+        "const t = new T(); t.space = 'a';",
+        "let restored = 0; const orig = T.prototype.syncPanel;",
+        "t.syncPanel({id: 'b'}, {hidden: false}, {active: 'claude-notes'});",
+        "const keptNotes = t.space === 'b';",
+        "t.space = 'a'; t.syncPanel({id: 'c'}, {hidden: false}, {active: 'files'});",
+        "console.log(JSON.stringify({keptNotes, filesStillSwitches: t.space === 'c'}));",
+    ])
+    p = tmp_path / "sync.mjs"
+    p.write_text(script, encoding="utf-8")
+    r = subprocess.run([NODE, str(p)], capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == {"keptNotes": True, "filesStillSwitches": True}
+
+
+def test_notes_sync_anchor_in_real_tabs_if_present():
+    real = os.path.join(os.environ.get("HERDR_MOD_SRC", ""), "tabs", "main.js")
+    if not os.environ.get("HERDR_MOD_SRC") or not os.path.exists(real):
+        pytest.skip("HERDR_MOD_SRC 없음(앱 원본 mod 폴더)")
+    with open(real, encoding="utf-8") as f:
+        assert f.read().count(tabs.NOTES_SYNC) == 1
 
 
 def mod_pure_source():

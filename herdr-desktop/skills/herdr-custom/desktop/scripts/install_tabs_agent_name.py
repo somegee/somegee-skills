@@ -107,8 +107,13 @@ RESUME_PATCHES = [
 
 NOTES_MOD = "claude-notes"
 # 우상단 Files 왼쪽 Notes 버튼 → 오른쪽 패널의 claude-notes 칸을 펴고 접는다(Files·Changes 와 같은 panelButton).
+# 원본은 오른쪽 패널을 공간마다 기억해 다른 공간으로 가면 그 공간 것(대개 닫힘)으로 바꾼다. Notes 는 보고 있는 세션을
+# 따라가는 칸이라 공간과 상관없이 열린 채 두고, Notes 버튼으로만 접는다 — 열려 있으면 공간이 바뀌어도 되돌리지 않는다.
+NOTES_SYNC = "    if (space.id !== this.space) {"
 NOTES_PATCHES = [
     (FILES_BUTTON, '      .child(panelButton("%s", "Notes", "mods/%s/notes.svg"))' % (NOTES_MOD, NOTES_MOD) + NL + FILES_BUTTON),
+    (NOTES_SYNC, '    if (space.id !== this.space && now === "%s") { this.space = space.id; this.pending = null; }' % NOTES_MOD
+     + "  // [herdr-custom claude-notes] 공간이 바뀌어도 Notes 는 열린 채" + NL + NOTES_SYNC),
 ]
 
 

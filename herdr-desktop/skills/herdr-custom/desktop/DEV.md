@@ -84,6 +84,7 @@ my-agents 가 3초마다 `hc get` 으로 읽어 `shared("agent.msgs")` 로 내�
 ## 오른쪽 패널 Notes (claude-notes, 0.16.0)
 
 - 레이아웃의 오른쪽 패널은 `panel`(column) 안 stack `panel-body` 로, 원본 tabs 의 `panelButton(id, …)` 이 `layout.select {stack: "panel-body", child: id}` + `layout.show {id: "panel"}` 로 펴고, 같은 칸이 켜져 있으면 `layout.hide` 로 접는다. 그래서 칸 id 를 `claude-notes` 로 stack 맨 앞에 넣고 FILES_BUTTON 앞에 `panelButton("claude-notes", …)` 한 줄만 넣으면 Files·Changes 와 똑같이 동작한다(`enabled` 목록과 상관없이 늘 보임).
+- 원본 tabs 의 `syncPanel` 은 패널을 공간마다 기억해(localStorage `panels`) 공간이 바뀌면 그 공간 것으로 되돌리고, 되돌릴 값이 `enabled`(files·changes)에 없으면 닫는다 → Notes 가 다른 공간으로 가면 접혔다. `NOTES_SYNC` 패치가 `now === "claude-notes"` 면 공간이 바뀐 것만 받아들이고 되돌리지 않게 한다(0.16.1). Files·Changes 는 원래대로 공간마다.
 - **`herdr-app do mod.open {name}` 은 쓰지 않는다** — 레이아웃 맨 바깥에 그 mod 칸(320px)을 새로 넣고, 다시 불러도 그 칸은 안 빠진다(2026-11-25 실측, 팝업만 닫힘).
 - 팝업(dialog)은 옮길 수 없고 가운데 세션을 가려서 패널로 바꿨다. mod 는 `props().overlay` 가 있으면 팝업 모양(Esc 닫기·둥근 테두리)으로도 그린다.
 - 세션 찾기: `focused().terminal` → `terminals()` 의 `labels["claude.session"]`. 원격 주소는 `<기기>/tNN` 이라 `readTextFile(<홈 기준 상대 경로>, { on: 기기 })`, 이 PC 는 `appHome()` 의 `\.config\herdr-app` 앞을 홈으로 본다(HERDR_APP_HOME 을 바꾼 PC 는 못 찾음).
