@@ -68,6 +68,13 @@ _swarm_py="$(ls ~/.claude/plugins/cache/*/terminal-swarm/*/skills/terminal-swarm
 - `head -1` 사용 금지 — semver 정렬 시 1.10 < 1.9로 잘못 정렬됨
 - `tail -1`로 사전순 마지막(= 최신 버전) 선택
 
+## 새 mod 추가 시
+
+새 mod 플러그인을 만들거나, 기존 mod에 화면(창·패널)을 처음 붙일 때는 착수 전에 사용자에게 한 줄 묻는다:
+"herdr 데스크톱 앱에서도 보이게 herdr-desktop 쪽(보기 mod)도 같이 만들까요?"
+- 같이 만들면 claude-notes 방식을 따른다: 플러그인은 데이터를 `~/.claude/<이름>-data/` 같은 버전과 무관한 고정 자리에 쓰고, herdr-desktop 의 `skills/herdr-custom/desktop/assets/<이름>/main.js` 는 그 파일을 읽기만 한다. 설치는 `scripts/install_*.py`, 버튼은 my-tabs 패치(DEV.md 참고).
+- 데이터 자리를 `$.plugin.root` 아래나 버전별 폴더에 두지 않는다. 설정 폴더를 바꿔 써도(`CLAUDE_CONFIG_DIR=~/.claude-keyring` 등) 같은 자리여야 한다 — notes 0.22.3 사례(`notes/hooks/share-scope.ts` 의 `notesDataDir`).
+
 ## notes (mod) 규칙
 
 - 테스트: `claude plugin test notes`, 검증: `claude plugin validate notes` (저장소 루트에서 `claude plugin validate .` 도)
