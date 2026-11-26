@@ -335,21 +335,21 @@ test('막힘·대기 사유와 풀린 뒤 처리 내역이 그 단계 바로 아
   on('ui.open', () => ({ value: { isPlaced: true } }) as const)
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '막힘', items: ['배포', '확인'], add_results: ['커밋 abc123'] } as never)
   await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '막힘', item: 1, status: 'blocked', note: '권한 없음' } as never)
-  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '막힘', item: 2, status: 'waiting', note: '지윤님 확인' } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '막힘', item: 2, status: 'waiting', note: '사용자 확인' } as never)
 
   const ui = await $.ui.mount({ plugin: 'notes', surface: 'terminal', component: 'Pane', requestId: 'notes', props: PANE })
   expect(await ui.find({ type: 'Text', text: /⛔ 막힘: 권한 없음/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /⏳ 대기: 지윤님 확인/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /⏳ 대기: 사용자 확인/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^▾ 결과물$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^- 커밋 abc123$/ })).toBeDefined()
 
-  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '막힘', item: 1, status: 'clear', note: '지윤님이 권한 부여' } as never)
+  await $.tool.call({ tool: 'mcp__notes__notes_status', tab: '막힘', item: 1, status: 'clear', note: '사용자가 권한 부여' } as never)
   expect(await ui.find({ type: 'Text', text: /⛔ 막힘/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /↳ 해결: 지윤님이 권한 부여/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /↳ 해결: 사용자가 권한 부여/ })).toBeDefined()
 
   // 같은 문구로 단계를 다시 써도 막힘·처리 내역은 이어진다.
   await $.tool.call({ tool: 'mcp__notes__notes_write', tab: '막힘', items: ['배포', '확인', '마무리'] } as never)
-  expect(await ui.find({ type: 'Text', text: /⏳ 대기: 지윤님 확인/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /⏳ 대기: 사용자 확인/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^- 커밋 abc123$/ })).toBeDefined()
 })
 

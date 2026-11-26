@@ -76,7 +76,7 @@ claude -p \
 
 ### 파일 위치 (로컬 테스트용)
 ```
-C:\Users\김지윤\Desktop\projects\.claude\skills\claude-studio\
+C:\Users\<사용자>\Desktop\projects\.claude\skills\claude-studio\
 ├── SKILL.md
 └── scripts/
     ├── server.py      # aiohttp 기반 HTTP + WebSocket 서버
